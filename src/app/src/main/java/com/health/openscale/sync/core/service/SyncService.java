@@ -113,6 +113,6 @@ public class SyncService extends IntentService {
             insertIntent.putExtra("mode", "insert");
             insertIntent.putExtra("userId", scaleMeasurement.getUserId());
             insertIntent.putExtra("weight", scaleMeasurement.getWeight());
-            insertIntent.putExtra("date", scaleMeasurement.getDateTime());
+            insertIntent.putExtra("date", scaleMeasurement.getDateTime().getTime());
             ContextCompat.startForegroundService(context, insertIntent);
 */
