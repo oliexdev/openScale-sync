@@ -20,28 +20,44 @@ import com.google.android.gms.fitness.request.DataDeleteRequest;
 import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.request.DataUpdateRequest;
 import com.google.android.gms.fitness.result.DataReadResponse;
-import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.health.openscale.sync.gui.MainActivity;
 
-import java.text.DateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import androidx.annotation.NonNull;
 import timber.log.Timber;
 
 import static android.os.Looper.getMainLooper;
-import static java.text.DateFormat.getTimeInstance;
 
 public class GoogleFitSync {
     private Context context;
+    private ArrayList<GoogleFitMeasurement> googleFitMeasurements;
+
+    public class GoogleFitMeasurement {
+        public GoogleFitMeasurement(Date date, float weight) {
+            this.date = date;
+            this.weight = weight;
+        }
+
+        @Override
+        public String toString() {
+            return "date " + date + " weight " + weight;
+        }
+
+        public Date date;
+        public float weight;
+    }
 
     public GoogleFitSync(Context context) {
         this.context = context;
+        this.googleFitMeasurements = new ArrayList<>();
     }
 
     public static FitnessOptions getFitnessOptions() {
@@ -62,7 +78,8 @@ public class GoogleFitSync {
     }
 
     private boolean checkPermission() {
-        if (!GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(context), getFitnessOptions())) {
+        if (!(GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(context), getFitnessOptions())
+        && GoogleSignIn.getLastSignedInAccount(context) != null)) {
             Intent mainIntent = new Intent(context, MainActivity.class);
             mainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(mainIntent);
@@ -75,7 +92,7 @@ public class GoogleFitSync {
         return true;
     }
 
-    public void insertMeasurement(Date date, float weight) {
+    public void insertMeasurement(final Date date, float weight) {
         if (!checkPermission()) {
             return;
         }
@@ -94,20 +111,40 @@ public class GoogleFitSync {
         Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context)).insertData(dataSet);
     }
 
-    public void deleteMeasurement(Date date) {
+    public void deleteMeasurement(final Date date) {
         if (!checkPermission()) {
             return;
         }
 
-        DataDeleteRequest request = new DataDeleteRequest.Builder()
-                        .setTimeInterval(date.getTime(), date.getTime(), TimeUnit.MILLISECONDS)
-                        .addDataType(DataType.TYPE_WEIGHT)
-                        .build();
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(date);
+        long endTime = cal.getTimeInMillis() + 100;
+        cal.add(Calendar.MILLISECOND, -100);
+        long startTime = cal.getTimeInMillis();
 
-        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context)).deleteData(request);
+        DataDeleteRequest request = new DataDeleteRequest.Builder()
+                .deleteAllSessions()
+                .deleteAllData()
+                .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
+                .build();
+
+        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context)).
+                deleteData(request).
+                addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Timber.d("Successful deleted GoogleFit data " + date);
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Timber.e("Error on deletion of GoogleFit data " + e.getMessage());
+                    }
+                });
     }
 
-    public void updateMeasurement(Date date, float weight) {
+    public void updateMeasurement(final Date date, float weight) {
         if (!checkPermission()) {
             return;
         }
@@ -131,15 +168,15 @@ public class GoogleFitSync {
         Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context)).updateData(request);
     }
 
-    public void queryMeasurements() {
+    public Task<DataReadResponse> queryMeasurements() {
         if (!checkPermission()) {
-            return;
+            return null;
         }
 
         Calendar cal = Calendar.getInstance();
         cal.setTime(new Date());
         long endTime = cal.getTimeInMillis();
-        cal.add(Calendar.YEAR, -1);
+        cal.add(Calendar.YEAR, -5);
         long startTime = cal.getTimeInMillis();
 
         DataReadRequest readRequest = new DataReadRequest.Builder()
@@ -148,45 +185,23 @@ public class GoogleFitSync {
                 //.bucketByTime(1, TimeUnit.MINUTES)
                 .build();
 
-
-        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
+        return Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
                 .readData(readRequest)
                 .addOnSuccessListener(new OnSuccessListener<DataReadResponse>() {
                     @Override
                     public void onSuccess(DataReadResponse dataReadResponse) {
-                        Timber.d("onSuccess()");
+                        Timber.d("successful request GoogleFit measurements");
+
                         for (DataSet set : dataReadResponse.getDataSets()) {
-                            dumpDataSet(set);
+                            for (DataPoint dp : set.getDataPoints()) {
+                                googleFitMeasurements.add(new GoogleFitMeasurement(new Date(dp.getStartTime(TimeUnit.MILLISECONDS)), dp.getValue(Field.FIELD_WEIGHT).asFloat()));
+                            }
                         }
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Timber.e( "onFailure() " + e);
-                    }
-                })
-                .addOnCompleteListener(new OnCompleteListener<DataReadResponse>() {
-                    @Override
-                    public void onComplete(@NonNull Task<DataReadResponse> task) {
-                        Timber.d( "onComplete()");
                     }
                 });
     }
 
-    private void dumpDataSet(DataSet dataSet) {
-        Timber.d( "Data returned for Data type: " + dataSet.getDataType().getName());
-        Timber.d("Data Points size " + dataSet.getDataPoints().size());
-        DateFormat dateFormat = getTimeInstance();
-
-        for (DataPoint dp : dataSet.getDataPoints()) {
-            Timber.d( "Data point:");
-            Timber.d( "\tType: " + dp.getDataType().getName());
-            Timber.d( "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
-            Timber.d( "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
-            for (Field field : dp.getDataType().getFields()) {
-                Timber.d( "\tField: " + field.getName() + " Value: " + dp.getValue(field));
-            }
-        }
+    public List<GoogleFitMeasurement> getQueryMeasurementsResults() {
+        return googleFitMeasurements;
     }
 }

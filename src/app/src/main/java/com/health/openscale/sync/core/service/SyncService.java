@@ -9,7 +9,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
+import android.preference.PreferenceManager;
 
 import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.sync.GoogleFitSync;
@@ -27,6 +29,7 @@ public class SyncService extends IntentService {
     private static final int ID_SERVICE = 101;
 
     private GoogleFitSync syncProvider;
+    private SharedPreferences prefs;
 
     public SyncService() {
         super("openScale Sync Service");
@@ -35,11 +38,18 @@ public class SyncService extends IntentService {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         syncProvider = new GoogleFitSync(getApplicationContext());
+        prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
+
         return super.onStartCommand(intent, flags, startId);
     }
 
     @Override
     protected void onHandleIntent(@Nullable Intent intent) {
+        if (!prefs.getBoolean("enableGoogleFit", true)) {
+            Timber.d("Sync request received but GoogleFit sync is disabeld");
+            return;
+        }
+
         Timber.d("Sync request received");
 
         showNotification();

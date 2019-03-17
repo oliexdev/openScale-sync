@@ -19,11 +19,19 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.fitness.result.DataReadResponse;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.GoogleFitSync;
@@ -31,6 +39,7 @@ import com.health.openscale.sync.core.sync.GoogleFitSync;
 import java.util.ArrayList;
 import java.util.List;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import timber.log.Timber;
@@ -57,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView txtScaleUser;
     private Spinner spinScaleUer;
     private ArrayAdapter<String> spinScaleUserAdapter;
+    private ProgressBar progressBar;
 
     private SharedPreferences prefs;
 
@@ -90,6 +100,7 @@ public class MainActivity extends AppCompatActivity {
         txtOpenScaleConnection = findViewById(R.id.txtOpenScaleConnection);
         txtScaleUser = findViewById(R.id.txtScaleSyncUser);
         spinScaleUer = findViewById(R.id.spinScaleUser);
+        progressBar = findViewById(R.id.progressBar);
 
         spinScaleUserAdapter = new ArrayAdapter<>(this, R.layout.spinner_item, new ArrayList<String>());
         spinScaleUer.setAdapter(spinScaleUserAdapter);
@@ -97,11 +108,13 @@ public class MainActivity extends AppCompatActivity {
         spinScaleUer.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                OpenScaleProvider openScaleProvider = new OpenScaleProvider(getApplicationContext(), openScalePackageName);
+                if (checkOpenScaleConnection(openScalePackageName)) {
+                    OpenScaleProvider openScaleProvider = new OpenScaleProvider(getApplicationContext(), openScalePackageName);
 
-                int openScaleUserId = openScaleProvider.getUsers().get(position).userid;
+                    int openScaleUserId = openScaleProvider.getUsers().get(position).userid;
 
-                prefs.edit().putInt("openScaleUserId", openScaleUserId).commit();
+                    prefs.edit().putInt("openScaleUserId", openScaleUserId).commit();
+                }
             }
 
             @Override
@@ -147,10 +160,54 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        btnManualSync.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (checkIsEnabled()) {
+                    btnManualSync.setEnabled(false);
+                    progressBar.setVisibility(View.VISIBLE);
+
+                    final OpenScaleProvider openScaleProvider = new OpenScaleProvider(getApplicationContext(), openScalePackageName);
+                    final GoogleFitSync googleFitSync = new GoogleFitSync(getApplicationContext());
+
+                    final int openScaleUserId = prefs.getInt("openScaleUserId", 0);
+
+                    Timber.d("Manual sync with GoogleFit and openScale");
+
+                    for (OpenScaleProvider.OpenScaleMeasurement openScaleMeasurement : openScaleProvider.getMeasurements(openScaleUserId)) {
+                        Timber.d("openScale measurements " +  openScaleMeasurement);
+
+                        googleFitSync.insertMeasurement(openScaleMeasurement.date, openScaleMeasurement.weight);
+                    }
+
+                    Task<DataReadResponse>  googleFitReadRequest = googleFitSync.queryMeasurements();
+
+                    if (googleFitReadRequest != null) {
+                        googleFitReadRequest.addOnCompleteListener(new OnCompleteListener<DataReadResponse>() {
+                            @Override
+                            public void onComplete(@NonNull Task<DataReadResponse> task) {
+                                for (GoogleFitSync.GoogleFitMeasurement googleFitMeasurement : googleFitSync.getQueryMeasurementsResults()) {
+                                    Timber.d("GoogleFit measurement " + googleFitMeasurement);
+
+                                    openScaleProvider.insertMeasurement(googleFitMeasurement.date, googleFitMeasurement.weight, openScaleUserId);
+                                }
+                                progressBar.setVisibility(View.GONE);
+                                btnManualSync.setEnabled(true);
+                            }
+                        }).addOnFailureListener(new OnFailureListener() {
+                            @Override
+                            public void onFailure(@NonNull Exception e) {
+                                progressBar.setVisibility(View.GONE);
+                                btnManualSync.setEnabled(true);
+                                Timber.d("can't get GoogleFit measurements " + e.getMessage());
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
         checkIsEnabled();
-        checkGoogleFitConnection();
-        checkOpenScaleConnection(openScalePackageName);
-        checkOpenScaleUsers(openScalePackageName);
     }
 
     private boolean checkIsEnabled() {
@@ -167,6 +224,11 @@ public class MainActivity extends AppCompatActivity {
             txtOpenScaleConnection.setEnabled(true);
             txtScaleUser.setEnabled(true);
             spinScaleUer.setEnabled(true);
+
+            checkGoogleFitConnection();
+            if (checkOpenScaleConnection(openScalePackageName)) {
+                checkOpenScaleUsers(openScalePackageName);
+            }
             return true;
         } else {
             toggleGoogleSync.setChecked(false);
@@ -186,18 +248,30 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private boolean checkGoogleFitConnection() {
+    private void checkGoogleFitConnection() {
         if (GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(this), GoogleFitSync.getFitnessOptions())) {
-            imgGoogleSignIn.setImageResource(R.drawable.ic_status_check);
-            btnGoogleSignIn.setVisibility(View.GONE);
-            return true;
+            if (GoogleSignIn.getLastSignedInAccount(this).isExpired()) {
+                imgGoogleSignIn.setImageResource(R.drawable.ic_status_error);
+                btnGoogleSignIn.setVisibility(View.VISIBLE);
+
+                GoogleSignIn.getClient(this, GoogleSignInOptions.DEFAULT_SIGN_IN).
+                        silentSignIn().addOnSuccessListener(new OnSuccessListener<GoogleSignInAccount>() {
+                    @Override
+                    public void onSuccess(GoogleSignInAccount googleSignInAccount) {
+                        imgGoogleSignIn.setImageResource(R.drawable.ic_status_check);
+                        btnGoogleSignIn.setVisibility(View.GONE);
+                        Timber.d("GoogleFit successful logged in");
+                    }
+                });
+            } else {
+                imgGoogleSignIn.setImageResource(R.drawable.ic_status_check);
+                btnGoogleSignIn.setVisibility(View.GONE);
+                Timber.d("GoogleFit successful logged in");
+            }
         } else {
             imgGoogleSignIn.setImageResource(R.drawable.ic_status_error);
             btnGoogleSignIn.setVisibility(View.VISIBLE);
-            Timber.d("GoogleFit permission not granted");
         }
-
-        return false;
     }
 
     private boolean checkOpenScaleConnection(String packageName) {
@@ -210,13 +284,7 @@ public class MainActivity extends AppCompatActivity {
                 if (openScaleProvider.checkVersion()) {
                     Timber.d("openScale version is ok");
                     btnPermissionOpenScale.setVisibility(View.GONE);
-
                     imgOpenScaleConnection.setImageResource(R.drawable.ic_status_check);
-                    OpenScaleProvider.OpenScaleUser openScaleUser = openScaleProvider.getUsers().get(0);
-
-                    Timber.d("openScale users " + openScaleProvider.getUsers());
-                    Timber.d("openScale measurements " + openScaleProvider.getMeasurements(openScaleUser.userid));
-
                     return true;
                 } else {
                     Timber.d("openScale version is too old");
@@ -269,7 +337,7 @@ public class MainActivity extends AppCompatActivity {
         GoogleSignIn.requestPermissions(
                 this,
                 GOOGLE_FIT_PERMISSIONS_REQUEST_CODE,
-                GoogleSignIn.getLastSignedInAccount(getApplicationContext()),
+                GoogleSignIn.getLastSignedInAccount(this),
                 GoogleFitSync.getFitnessOptions());
     }
 

@@ -5,6 +5,7 @@ package com.health.openscale.sync.core.provider;
 
 import android.content.ContentResolver;
 import android.content.ContentUris;
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
@@ -151,5 +152,19 @@ public class OpenScaleProvider {
         }
 
         return openScaleMeasurements;
+    }
+
+    public void insertMeasurement(Date date, float weight, int userId) {
+        try {
+            ContentValues values = new ContentValues();
+
+            values.put("datetime", date.getTime());
+            values.put("weight", weight);
+            values.put("userId", userId);
+
+            context.getContentResolver().insert(measurementsUri, values);
+        } catch (Exception e) {
+            Timber.e("openScale content provider error: " + e.getMessage());
+        }
     }
 }

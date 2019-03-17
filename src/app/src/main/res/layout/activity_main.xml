@@ -129,13 +129,21 @@
         android:layout_weight="1"
         android:gravity="bottom"
         android:orientation="vertical">
-    <Button
-        android:id="@+id/btnManualSync"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_margin="10dp"
-        android:background="@drawable/flat_selector"
-        android:text="Manual Sync to GoogleFit" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnManualSync"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:layout_margin="10dp"
+            android:background="@drawable/flat_selector"
+            android:text="Manual Sync to GoogleFit" />
     </LinearLayout>
 </LinearLayout>
