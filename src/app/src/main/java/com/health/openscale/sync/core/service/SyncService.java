@@ -24,7 +24,7 @@ import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 import timber.log.Timber;
 
-import static androidx.core.app.NotificationCompat.PRIORITY_MIN;
+import static androidx.core.app.NotificationCompat.PRIORITY_LOW;
 
 public class SyncService extends Service {
     private static final int ID_SERVICE = 5;
@@ -65,6 +65,7 @@ public class SyncService extends Service {
     protected void onHandleIntent(@Nullable Intent intent) {
         if (!prefs.getBoolean("enableGoogleFit", true)) {
             Timber.d("Sync request received but GoogleFit sync is disabeld");
+            stopForeground(true);
             return;
         }
 
@@ -73,36 +74,31 @@ public class SyncService extends Service {
         String mode = intent.getExtras().getString("mode");
 
         if (mode.equals("insert")) {
-            Timber.d("Insert measurement");
-
             int userId = intent.getIntExtra("userId", 0);
             float weight = intent.getFloatExtra("weight", 0.0f);
             Date date = new Date(intent.getLongExtra("date", 0L));
 
-            Timber.d("user Id " + userId);
-            Timber.d("weight " + weight);
-            Timber.d("date " + date);
+            Timber.d("Sync insert measurement user Id: " + userId + " weight: " + weight + " date: " + date);
 
             syncProvider.insertMeasurement(date,weight);
         } else if (mode.equals("update")) {
-            Timber.d("Update measurement");
-
             int userId = intent.getIntExtra("userId", 0);
             float weight = intent.getFloatExtra("weight", 0.0f);
             Date date = new Date(intent.getLongExtra("date", 0L));
 
-            Timber.d("user Id " + userId);
-            Timber.d("weight " + weight);
+            Timber.d("Sync update measurement user Id: " + userId + " weight: " + weight + " date: " + date);
 
             syncProvider.updateMeasurement(date,weight);
         } else if (mode.equals("delete")) {
-            Timber.d("Delete measurement");
-
             Date date = new Date(intent.getLongExtra("date", 0L));
 
-            Timber.d("date " + date);
+            Timber.d("Sync delete measurement date: " + date);
 
             syncProvider.deleteMeasurement(date);
+        } else if (mode.equals("clear")) {
+            Timber.d("Sync clear measurements");
+
+            syncProvider.clearMeasurements();
         }
 
         stopForeground(true);
@@ -115,7 +111,7 @@ public class SyncService extends Service {
         Notification notification = notificationBuilder
                 .setOngoing(true)
                 .setSmallIcon(R.drawable.ic_launcher_openscale_sync)
-                .setPriority(PRIORITY_MIN)
+                .setPriority(PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build();
 

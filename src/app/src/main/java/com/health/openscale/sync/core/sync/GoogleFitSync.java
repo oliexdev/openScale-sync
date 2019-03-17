@@ -151,6 +151,38 @@ public class GoogleFitSync {
                 });
     }
 
+    public void clearMeasurements() {
+        if (!checkPermission()) {
+            return;
+        }
+
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(new Date());
+        long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.YEAR, -5);
+        long startTime = cal.getTimeInMillis();
+
+        DataDeleteRequest request = new DataDeleteRequest.Builder()
+                .addDataType(DataType.TYPE_WEIGHT)
+                .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
+                .build();
+
+        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
+                .deleteData(request)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Timber.d("Successful cleared GoogleFit data");
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Timber.e("Error on clearing of GoogleFit data " + e.getMessage());
+                    }
+                });
+    }
+
     public void updateMeasurement(final Date date, float weight) {
         if (!checkPermission()) {
             return;

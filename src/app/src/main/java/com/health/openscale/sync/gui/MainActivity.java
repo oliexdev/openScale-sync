@@ -129,9 +129,13 @@ public class MainActivity extends AppCompatActivity {
                 if (checkOpenScaleConnection(openScalePackageName)) {
                     OpenScaleProvider openScaleProvider = new OpenScaleProvider(getApplicationContext(), openScalePackageName);
 
-                    int openScaleUserId = openScaleProvider.getUsers().get(position).userid;
+                    List<OpenScaleProvider.OpenScaleUser> openScaleUsers = openScaleProvider.getUsers();
 
-                    prefs.edit().putInt("openScaleUserId", openScaleUserId).commit();
+                    if (!openScaleUsers.isEmpty()) {
+                        int openScaleUserId = openScaleUsers.get(position).userid;
+
+                        prefs.edit().putInt("openScaleUserId", openScaleUserId).commit();
+                    }
                 }
             }
 
@@ -190,13 +194,15 @@ public class MainActivity extends AppCompatActivity {
 
                     final int openScaleUserId = prefs.getInt("openScaleUserId", 0);
 
-                    Timber.d("Manual sync with GoogleFit and openScale");
+                    Timber.d("Manual sync openScale measurements -> GoogleFit");
 
                     for (OpenScaleProvider.OpenScaleMeasurement openScaleMeasurement : openScaleProvider.getMeasurements(openScaleUserId)) {
                         Timber.d("openScale measurement " +  openScaleMeasurement + " added to GoogleFit");
 
                         googleFitSync.insertMeasurement(openScaleMeasurement.date, openScaleMeasurement.weight);
                     }
+
+                    Timber.d("Manual sync GoogleFit measurements -> openScale");
 
                     Task<DataReadResponse>  googleFitReadRequest = googleFitSync.queryMeasurements();
 
