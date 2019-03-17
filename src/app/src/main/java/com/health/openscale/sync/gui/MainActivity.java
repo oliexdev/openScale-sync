@@ -50,6 +50,7 @@ import java.util.List;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import cat.ereza.customactivityoncrash.config.CaocConfig;
 import timber.log.Timber;
 
 public class MainActivity extends AppCompatActivity {
@@ -87,6 +88,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        CaocConfig.Builder.create()
+                .trackActivities(false)
+                .apply();
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         debugTree = new DebugTree();
