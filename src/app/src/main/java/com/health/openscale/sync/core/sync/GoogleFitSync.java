@@ -23,6 +23,7 @@ import com.google.android.gms.fitness.result.DataReadResponse;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.health.openscale.sync.BuildConfig;
 import com.health.openscale.sync.gui.MainActivity;
 
 import java.util.ArrayList;
@@ -98,17 +99,30 @@ public class GoogleFitSync {
         }
 
         DataSource dataSource = new DataSource.Builder()
-                        .setAppPackageName(context)
+                        .setAppPackageName(BuildConfig.APPLICATION_ID)
                         .setDataType(DataType.TYPE_WEIGHT)
                         .setType(DataSource.TYPE_RAW)
                         .build();
 
         DataSet dataSet = DataSet.create(dataSource);
-        DataPoint dataPoint = dataSet.createDataPoint().setTimeInterval(date.getTime(), date.getTime(), TimeUnit.MILLISECONDS);
+        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(date.getTime(), TimeUnit.MILLISECONDS);
         dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(weight);
         dataSet.add(dataPoint);
 
-        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context)).insertData(dataSet);
+        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
+                .insertData(dataSet)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Timber.d("Successful insert GoogleFit data " + date);
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Timber.e("Error on inserting of GoogleFit data " + e.getMessage());
+                    }
+                });
     }
 
     public void deleteMeasurement(final Date date) {
@@ -116,21 +130,14 @@ public class GoogleFitSync {
             return;
         }
 
-        Calendar cal = Calendar.getInstance();
-        cal.setTime(date);
-        long endTime = cal.getTimeInMillis() + 100;
-        cal.add(Calendar.MILLISECOND, -100);
-        long startTime = cal.getTimeInMillis();
-
         DataDeleteRequest request = new DataDeleteRequest.Builder()
-                .deleteAllSessions()
-                .deleteAllData()
-                .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
+                .addDataType(DataType.TYPE_WEIGHT)
+                .setTimeInterval(date.getTime() - 100, date.getTime()+100, TimeUnit.MILLISECONDS)
                 .build();
 
-        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context)).
-                deleteData(request).
-                addOnSuccessListener(new OnSuccessListener<Void>() {
+        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
+                .deleteData(request)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void aVoid) {
                         Timber.d("Successful deleted GoogleFit data " + date);
@@ -150,22 +157,35 @@ public class GoogleFitSync {
         }
 
         DataSource dataSource = new DataSource.Builder()
-                .setAppPackageName(context)
+                .setAppPackageName(BuildConfig.APPLICATION_ID)
                 .setDataType(DataType.TYPE_WEIGHT)
                 .setType(DataSource.TYPE_RAW)
                 .build();
 
         DataSet dataSet = DataSet.create(dataSource);
-        DataPoint dataPoint = dataSet.createDataPoint().setTimeInterval(date.getTime(), date.getTime(), TimeUnit.MILLISECONDS);
+        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(date.getTime(), TimeUnit.MILLISECONDS);
         dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(weight);
         dataSet.add(dataPoint);
 
         DataUpdateRequest request = new DataUpdateRequest.Builder()
                 .setDataSet(dataSet)
-                .setTimeInterval(date.getTime(), date.getTime(), TimeUnit.MILLISECONDS)
+                .setTimeInterval(date.getTime()-100, date.getTime()+100, TimeUnit.MILLISECONDS)
                 .build();
 
-        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context)).updateData(request);
+        Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
+                .updateData(request)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Timber.d("Successful updated GoogleFit data " + date);
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Timber.e("Error on updating of GoogleFit data " + e.getMessage());
+                    }
+                });
     }
 
     public Task<DataReadResponse> queryMeasurements() {

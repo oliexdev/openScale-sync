@@ -26,7 +26,7 @@ import timber.log.Timber;
 import static androidx.core.app.NotificationCompat.PRIORITY_MIN;
 
 public class SyncService extends IntentService {
-    private static final int ID_SERVICE = 101;
+    private static final int ID_SERVICE = 5;
 
     private GoogleFitSync syncProvider;
     private SharedPreferences prefs;
@@ -92,7 +92,7 @@ public class SyncService extends IntentService {
 
     private void showNotification() {
         NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        String channelId = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? createNotificationChannel(notificationManager) : "";
+        String channelId = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? createNotificationChannel(notificationManager) : "openScale Sync";
         NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, channelId);
         Notification notification = notificationBuilder
                 .setOngoing(true)

@@ -13,6 +13,8 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.text.SpannableString;
 import android.text.method.LinkMovementMethod;
@@ -29,6 +31,7 @@ import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
@@ -190,7 +193,7 @@ public class MainActivity extends AppCompatActivity {
                     Timber.d("Manual sync with GoogleFit and openScale");
 
                     for (OpenScaleProvider.OpenScaleMeasurement openScaleMeasurement : openScaleProvider.getMeasurements(openScaleUserId)) {
-                        Timber.d("openScale measurements " +  openScaleMeasurement);
+                        Timber.d("openScale measurement " +  openScaleMeasurement + " added to GoogleFit");
 
                         googleFitSync.insertMeasurement(openScaleMeasurement.date, openScaleMeasurement.weight);
                     }
@@ -202,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
                             @Override
                             public void onComplete(@NonNull Task<DataReadResponse> task) {
                                 for (GoogleFitSync.GoogleFitMeasurement googleFitMeasurement : googleFitSync.getQueryMeasurementsResults()) {
-                                    Timber.d("GoogleFit measurement " + googleFitMeasurement);
+                                    Timber.d("GoogleFit measurement " + googleFitMeasurement + " added to openScale");
 
                                     openScaleProvider.insertMeasurement(googleFitMeasurement.date, googleFitMeasurement.weight, openScaleUserId);
                                 }
@@ -275,13 +278,13 @@ public class MainActivity extends AppCompatActivity {
                     public void onSuccess(GoogleSignInAccount googleSignInAccount) {
                         imgGoogleSignIn.setImageResource(R.drawable.ic_status_check);
                         btnGoogleSignIn.setVisibility(View.GONE);
-                        Timber.d("GoogleFit successful logged in");
+                        Timber.d("GoogleFit successful silent sign in");
                     }
                 });
             } else {
                 imgGoogleSignIn.setImageResource(R.drawable.ic_status_check);
                 btnGoogleSignIn.setVisibility(View.GONE);
-                Timber.d("GoogleFit successful logged in");
+                Timber.d("GoogleFit successful sign in");
             }
         } else {
             imgGoogleSignIn.setImageResource(R.drawable.ic_status_error);
@@ -302,18 +305,18 @@ public class MainActivity extends AppCompatActivity {
                     imgOpenScaleConnection.setImageResource(R.drawable.ic_status_check);
                     return true;
                 } else {
-                    Timber.d("openScale version is too old");
+                    runUiToastMsg("openScale version is too old");
                     btnPermissionOpenScale.setVisibility(View.VISIBLE);
                 }
             } else {
                 imgOpenScaleConnection.setImageResource(R.drawable.ic_status_error);
                 btnPermissionOpenScale.setVisibility(View.VISIBLE);
-                Timber.d("openScale permission not granted");
+                runUiToastMsg("openScale permission not granted");
             }
         } else {
             imgOpenScaleConnection.setImageResource(R.drawable.ic_status_error);
             btnInstallOpenScale.setVisibility(View.VISIBLE);
-            Timber.d("openScale is not installed");
+            runUiToastMsg("openScale is not installed");
         }
 
         return false;
@@ -368,10 +371,10 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == GOOGLE_FIT_PERMISSIONS_REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK) {
                 checkGoogleFitConnection();
-                Timber.d("Successful login to Google");
+                Timber.d("GoogleFit permission granted");
             } else if (resultCode == Activity.RESULT_CANCELED) {
                 checkGoogleFitConnection();
-                Timber.d("Can't login to Google");
+                runUiToastMsg("GoogleFit permission denied");
             }
         }
 
@@ -390,7 +393,7 @@ public class MainActivity extends AppCompatActivity {
                 Timber.d("Successful connect to openScale");
             } else {
                 checkOpenScaleConnection(openScalePackageName);
-                Timber.d("Can't connect to openScale");
+                runUiToastMsg("Can't connect to openScale");
             }
         }
     }
@@ -450,5 +453,17 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    private void runUiToastMsg(final String text) {
+        Timber.d(text);
+
+        Handler handler = new Handler(Looper.getMainLooper());
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(getApplicationContext(), text, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }

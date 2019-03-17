@@ -8,7 +8,6 @@
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.pro.READ_WRITE_DATA" />
 
-
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher_openscale_sync"
