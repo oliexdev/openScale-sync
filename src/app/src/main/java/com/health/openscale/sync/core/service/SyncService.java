@@ -3,14 +3,15 @@
  */
 package com.health.openscale.sync.core.service;
 
-import android.app.IntentService;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.IBinder;
 import android.preference.PreferenceManager;
 
 import com.health.openscale.sync.R;
@@ -25,25 +26,42 @@ import timber.log.Timber;
 
 import static androidx.core.app.NotificationCompat.PRIORITY_MIN;
 
-public class SyncService extends IntentService {
+public class SyncService extends Service {
     private static final int ID_SERVICE = 5;
 
     private GoogleFitSync syncProvider;
     private SharedPreferences prefs;
 
-    public SyncService() {
-        super("openScale Sync Service");
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+
         syncProvider = new GoogleFitSync(getApplicationContext());
         prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
 
-        return super.onStartCommand(intent, flags, startId);
+        onHandleIntent(intent);
+
+        return START_STICKY;
     }
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+
+        if (Timber.forest().isEmpty()) {
+            Timber.plant(new Timber.DebugTree());
+        }
+
+        showNotification();
+    }
+
+   // @Override
     protected void onHandleIntent(@Nullable Intent intent) {
         if (!prefs.getBoolean("enableGoogleFit", true)) {
             Timber.d("Sync request received but GoogleFit sync is disabeld");
@@ -51,8 +69,6 @@ public class SyncService extends IntentService {
         }
 
         Timber.d("Sync request received");
-
-        showNotification();
 
         String mode = intent.getExtras().getString("mode");
 
@@ -88,11 +104,13 @@ public class SyncService extends IntentService {
 
             syncProvider.deleteMeasurement(date);
         }
+
+        stopForeground(true);
     }
 
     private void showNotification() {
         NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        String channelId = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? createNotificationChannel(notificationManager) : "openScale Sync";
+        String channelId = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? createNotificationChannel(notificationManager) : "";
         NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, channelId);
         Notification notification = notificationBuilder
                 .setOngoing(true)
