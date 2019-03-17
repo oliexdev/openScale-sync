@@ -3,6 +3,7 @@
     package="com.health.openscale.sync">
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="com.health.openscale.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.pro.READ_WRITE_DATA" />

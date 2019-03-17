@@ -4,6 +4,7 @@
 package com.health.openscale.sync.gui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -13,6 +14,11 @@ import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.text.SpannableString;
+import android.text.method.LinkMovementMethod;
+import android.text.util.Linkify;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -32,9 +38,11 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.health.openscale.sync.BuildConfig;
 import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.GoogleFitSync;
+import com.health.openscale.sync.gui.utils.DebugTree;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +60,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final int GOOGLE_FIT_PERMISSIONS_REQUEST_CODE = 100;
     private final int OPENSCALE_PERMISSIONS_REQUEST_CODE = 101;
+    private final int DEBUG_WRITE_PERMISSIONS_REQUEST_CODE = 102;
 
     private Switch toggleGoogleSync;
     private Button btnGoogleSignIn;
@@ -69,6 +78,8 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progressBar;
 
     private SharedPreferences prefs;
+    private DebugTree debugTree;
+    private Menu actionMenu;
 
     private String openScalePackageName;
 
@@ -78,10 +89,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        debugTree = new DebugTree();
 
         openScalePackageName = "com.health.openscale";
-
-        Timber.plant(new Timber.DebugTree());
 
         getSupportActionBar().setDisplayShowHomeEnabled(true);
         getSupportActionBar().setTitle("  openScale Sync");
@@ -359,6 +369,12 @@ public class MainActivity extends AppCompatActivity {
                 Timber.d("Can't login to Google");
             }
         }
+
+        if (requestCode == DEBUG_WRITE_PERMISSIONS_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
+            debugTree.startLogTo(this, data.getData());
+            MenuItem actionDebug = actionMenu.findItem(R.id.actionDebug);
+            actionDebug.setChecked(true);
+        }
     }
 
     @Override
@@ -385,5 +401,49 @@ public class MainActivity extends AppCompatActivity {
         List<ResolveInfo> list = getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
 
         return !list.isEmpty();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.action_menu, menu);
+
+        actionMenu = menu;
+
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+
+        switch (item.getItemId()) {
+            case R.id.actionAbout:
+                final SpannableString abouotMsg = new SpannableString("Copyright (C) 2019 All Rights Reserved\nby olie.xdev@googlemail.com\n\nWebsite https://github.com/oliexdev/openScale");
+                Linkify.addLinks(abouotMsg, Linkify.ALL);
+
+                AlertDialog dialog = new AlertDialog.Builder(this)
+                        .setTitle("openScale Sync " + String.format("v%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
+                        .setMessage(abouotMsg)
+                        .setIcon(R.drawable.ic_launcher_openscale_sync)
+                        .setPositiveButton("Ok", null)
+                        .create();
+
+                dialog.show();
+
+                ((TextView)dialog.findViewById(android.R.id.message)).setMovementMethod(LinkMovementMethod.getInstance());
+                break;
+            case R.id.actionDebug:
+                if (item.isChecked()) {
+                    debugTree.close();
+                    item.setChecked(false);
+                } else {
+                    startActivityForResult(debugTree.requestDebugIntent(), DEBUG_WRITE_PERMISSIONS_REQUEST_CODE);
+                }
+                break;
+            default:
+                Timber.e("no action item found");
+                break;
+        }
+
+        return super.onOptionsItemSelected(item);
     }
 }
