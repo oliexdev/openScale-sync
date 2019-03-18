@@ -13,8 +13,6 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.text.SpannableString;
 import android.text.method.LinkMovementMethod;
@@ -31,7 +29,6 @@ import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
@@ -97,7 +94,19 @@ public class MainActivity extends AppCompatActivity {
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         debugTree = new DebugTree();
 
-        openScalePackageName = "com.health.openscale";
+        openScalePackageName = "com.health.openscale.pro";
+
+        if (!isPackageInstalled(openScalePackageName)) {
+            openScalePackageName = "com.health.openscale";
+
+            if (!isPackageInstalled(openScalePackageName)) {
+                openScalePackageName = "com.health.openscale.light";
+
+                if (!isPackageInstalled(openScalePackageName)) {
+                    Timber.d("no openScale version found on startup");
+                }
+            }
+        }
 
         getSupportActionBar().setDisplayShowHomeEnabled(true);
         getSupportActionBar().setTitle("  openScale Sync");
@@ -109,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
         btnManualSync = findViewById(R.id.btnManualSync);
         progressBar = findViewById(R.id.progressBar);
 
-        statusGoogleSignIn = new StatusView(this, "Google Sign In");
+        statusGoogleSignIn = new StatusView(this, "Google sign In");
         btnGoogleSignIn = statusGoogleSignIn.addButton("Google sign in");
 
         statusOpenScaleConnection = new StatusView(this, "openScale connection");
@@ -295,10 +304,10 @@ public class MainActivity extends AppCompatActivity {
                 OpenScaleProvider openScaleProvider = new OpenScaleProvider(this, packageName);
 
                 if (openScaleProvider.checkVersion()) {
-                    statusOpenScaleConnection.setCheck(true, "openScale version is ok");
+                    statusOpenScaleConnection.setCheck(true, "openScale version " + openScalePackageName + " is ok");
                     return true;
                 } else {
-                    statusOpenScaleConnection.setCheck(false, "openScale version is too old");
+                    statusOpenScaleConnection.setCheck(false, "openScale version " + openScalePackageName + " is too old");
                 }
             } else {
                 statusOpenScaleConnection.setCheck(false, "openScale permission not granted");
@@ -356,11 +365,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == GOOGLE_FIT_PERMISSIONS_REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK) {
-                checkGoogleFitConnection();
-                Timber.d("GoogleFit permission granted");
+                statusGoogleSignIn.setCheck(true, "GoogleFit permission granted");
             } else if (resultCode == Activity.RESULT_CANCELED) {
-                checkGoogleFitConnection();
-                runUiToastMsg("GoogleFit permission denied");
+                statusGoogleSignIn.setCheck(false, "GoogleFit permission denied");
             }
         }
 
@@ -375,11 +382,9 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == OPENSCALE_PERMISSIONS_REQUEST_CODE) {
             if(grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                checkOpenScaleConnection(openScalePackageName);
-                Timber.d("Successful connect to openScale");
+                statusOpenScaleConnection.setCheck(true, "Successful connect to openScale");
             } else {
-                checkOpenScaleConnection(openScalePackageName);
-                runUiToastMsg("Can't connect to openScale");
+                statusOpenScaleConnection.setCheck(false, "Can't connect to openScale");
             }
         }
     }
@@ -439,17 +444,5 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return super.onOptionsItemSelected(item);
-    }
-
-    private void runUiToastMsg(final String text) {
-        Timber.d(text);
-
-        Handler handler = new Handler(Looper.getMainLooper());
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(getApplicationContext(), text, Toast.LENGTH_SHORT).show();
-            }
-        });
     }
 }
