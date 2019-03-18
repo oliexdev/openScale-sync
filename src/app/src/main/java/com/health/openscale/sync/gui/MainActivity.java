@@ -26,7 +26,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CompoundButton;
-import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.Switch;
@@ -46,6 +46,7 @@ import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.GoogleFitSync;
 import com.health.openscale.sync.gui.utils.DebugTree;
+import com.health.openscale.sync.gui.view.StatusView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,7 +58,6 @@ import cat.ereza.customactivityoncrash.config.CaocConfig;
 import timber.log.Timber;
 
 public class MainActivity extends AppCompatActivity {
-    public static final int COLOR_RED = Color.parseColor("#FF4444");
     public static final int COLOR_GREEN = Color.parseColor("#99CC00");
     public static final int COLOR_BLUE = Color.parseColor("#33B5E5");
     public static final int COLOR_GRAY = Color.parseColor("#d3d3d3");
@@ -66,17 +66,15 @@ public class MainActivity extends AppCompatActivity {
     private final int OPENSCALE_PERMISSIONS_REQUEST_CODE = 101;
     private final int DEBUG_WRITE_PERMISSIONS_REQUEST_CODE = 102;
 
+    private LinearLayout statusMainLayout;
+    private StatusView statusGoogleSignIn;
+    private StatusView statusOpenScaleConnection;
+    private StatusView statusOpenScaleUser;
     private Switch toggleGoogleSync;
     private Button btnGoogleSignIn;
     private Button btnInstallOpenScale;
     private Button btnPermissionOpenScale;
     private Button btnManualSync;
-    private ImageView imgGoogleSignIn;
-    private ImageView imgOpenScaleConnection;
-    private ImageView imgScaleUser;
-    private TextView txtGoogleSignIn;
-    private TextView txtOpenScaleConnection;
-    private TextView txtScaleUser;
     private Spinner spinScaleUer;
     private ArrayAdapter<String> spinScaleUserAdapter;
     private ProgressBar progressBar;
@@ -106,19 +104,24 @@ public class MainActivity extends AppCompatActivity {
         getSupportActionBar().setIcon(R.drawable.ic_launcher_openscale_sync);
         getSupportActionBar().setBackgroundDrawable(new ColorDrawable(Color.parseColor("#000000")));
 
+        statusMainLayout = findViewById(R.id.statusMainLayout);
         toggleGoogleSync = findViewById(R.id.toggleGoogleFit);
-        btnGoogleSignIn = findViewById(R.id.btnGoogleSignIn);
-        btnInstallOpenScale = findViewById(R.id.btnInstallOpenScale);
-        btnPermissionOpenScale= findViewById(R.id.btnOpenScalePermission);
         btnManualSync = findViewById(R.id.btnManualSync);
-        imgOpenScaleConnection = findViewById(R.id.imgOpenScaleConnection);
-        imgGoogleSignIn = findViewById(R.id.imgGoogleSignIn);
-        imgScaleUser = findViewById(R.id.imgScaleUser);
-        txtGoogleSignIn = findViewById(R.id.txtGoogleSignIn);
-        txtOpenScaleConnection = findViewById(R.id.txtOpenScaleConnection);
-        txtScaleUser = findViewById(R.id.txtScaleSyncUser);
-        spinScaleUer = findViewById(R.id.spinScaleUser);
         progressBar = findViewById(R.id.progressBar);
+
+        statusGoogleSignIn = new StatusView(this, "Google Sign In");
+        btnGoogleSignIn = statusGoogleSignIn.addButton("Google sign in");
+
+        statusOpenScaleConnection = new StatusView(this, "openScale connection");
+        btnInstallOpenScale = statusOpenScaleConnection.addButton("Install openScale");
+        btnPermissionOpenScale = statusOpenScaleConnection.addButton("Request openScale permission");
+
+        statusOpenScaleUser = new StatusView(this,"openScale user");
+        spinScaleUer = statusOpenScaleUser.addSpinner();
+
+        statusMainLayout.addView(statusGoogleSignIn);
+        statusMainLayout.addView(statusOpenScaleConnection);
+        statusMainLayout.addView(statusOpenScaleUser);
 
         spinScaleUserAdapter = new ArrayAdapter<>(this, R.layout.spinner_item, new ArrayList<String>());
         spinScaleUer.setAdapter(spinScaleUserAdapter);
@@ -237,17 +240,11 @@ public class MainActivity extends AppCompatActivity {
     private boolean checkIsEnabled() {
         if (prefs.getBoolean("enableGoogleFit", true)) {
             toggleGoogleSync.setChecked(true);
-            btnGoogleSignIn.setEnabled(true);
-            btnInstallOpenScale.setEnabled(true);
-            btnPermissionOpenScale.setEnabled(true);
             btnManualSync.setEnabled(true);
-            imgGoogleSignIn.setEnabled(true);
-            imgOpenScaleConnection.setEnabled(true);
-            imgScaleUser.setEnabled(true);
-            txtGoogleSignIn.setEnabled(true);
-            txtOpenScaleConnection.setEnabled(true);
-            txtScaleUser.setEnabled(true);
-            spinScaleUer.setEnabled(true);
+
+            statusGoogleSignIn.setEnable(true);
+            statusOpenScaleConnection.setEnable(true);
+            statusOpenScaleUser.setEnable(true);
 
             checkGoogleFitConnection();
             if (checkOpenScaleConnection(openScalePackageName)) {
@@ -256,17 +253,11 @@ public class MainActivity extends AppCompatActivity {
             return true;
         } else {
             toggleGoogleSync.setChecked(false);
-            btnGoogleSignIn.setEnabled(false);
-            btnInstallOpenScale.setEnabled(false);
-            btnPermissionOpenScale.setEnabled(false);
             btnManualSync.setEnabled(false);
-            imgGoogleSignIn.setEnabled(false);
-            imgOpenScaleConnection.setEnabled(false);
-            imgScaleUser.setEnabled(false);
-            txtGoogleSignIn.setEnabled(false);
-            txtOpenScaleConnection.setEnabled(false);
-            txtScaleUser.setEnabled(false);
-            spinScaleUer.setEnabled(false);
+
+            statusGoogleSignIn.setEnable(false);
+            statusOpenScaleConnection.setEnable(false);
+            statusOpenScaleUser.setEnable(false);
         }
 
         return false;
@@ -275,54 +266,45 @@ public class MainActivity extends AppCompatActivity {
     private void checkGoogleFitConnection() {
         if (GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(this), GoogleFitSync.getFitnessOptions())) {
             if (GoogleSignIn.getLastSignedInAccount(this).isExpired()) {
-                imgGoogleSignIn.setImageResource(R.drawable.ic_status_error);
-                btnGoogleSignIn.setVisibility(View.VISIBLE);
+                statusGoogleSignIn.setCheck(false, "Google sign in expired");
 
                 GoogleSignIn.getClient(this, GoogleSignInOptions.DEFAULT_SIGN_IN).
                         silentSignIn().addOnSuccessListener(new OnSuccessListener<GoogleSignInAccount>() {
                     @Override
                     public void onSuccess(GoogleSignInAccount googleSignInAccount) {
-                        imgGoogleSignIn.setImageResource(R.drawable.ic_status_check);
-                        btnGoogleSignIn.setVisibility(View.GONE);
-                        Timber.d("GoogleFit successful silent sign in");
+                        statusGoogleSignIn.setCheck(true, "GoogleFit successful silent sign in");
+                    }
+                }).addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        statusGoogleSignIn.setCheck(false, "GoogleFit failure silent sign in");
                     }
                 });
+
             } else {
-                imgGoogleSignIn.setImageResource(R.drawable.ic_status_check);
-                btnGoogleSignIn.setVisibility(View.GONE);
-                Timber.d("GoogleFit successful sign in");
+                statusGoogleSignIn.setCheck(true, "GoogleFit successful sign in");
             }
         } else {
-            imgGoogleSignIn.setImageResource(R.drawable.ic_status_error);
-            btnGoogleSignIn.setVisibility(View.VISIBLE);
+            statusGoogleSignIn.setCheck(false, "Google permission not granted");
         }
     }
 
     private boolean checkOpenScaleConnection(String packageName) {
         if (isPackageInstalled(packageName)) {
-            btnInstallOpenScale.setVisibility(View.GONE);
-
             if (ActivityCompat.checkSelfPermission(this, packageName + ".READ_WRITE_DATA") == PackageManager.PERMISSION_GRANTED) {
                 OpenScaleProvider openScaleProvider = new OpenScaleProvider(this, packageName);
 
                 if (openScaleProvider.checkVersion()) {
-                    Timber.d("openScale version is ok");
-                    btnPermissionOpenScale.setVisibility(View.GONE);
-                    imgOpenScaleConnection.setImageResource(R.drawable.ic_status_check);
+                    statusOpenScaleConnection.setCheck(true, "openScale version is ok");
                     return true;
                 } else {
-                    runUiToastMsg("openScale version is too old");
-                    btnPermissionOpenScale.setVisibility(View.VISIBLE);
+                    statusOpenScaleConnection.setCheck(false, "openScale version is too old");
                 }
             } else {
-                imgOpenScaleConnection.setImageResource(R.drawable.ic_status_error);
-                btnPermissionOpenScale.setVisibility(View.VISIBLE);
-                runUiToastMsg("openScale permission not granted");
+                statusOpenScaleConnection.setCheck(false, "openScale permission not granted");
             }
         } else {
-            imgOpenScaleConnection.setImageResource(R.drawable.ic_status_error);
-            btnInstallOpenScale.setVisibility(View.VISIBLE);
-            runUiToastMsg("openScale is not installed");
+            statusOpenScaleConnection.setCheck(false, "openScale is not installed");
         }
 
         return false;
@@ -332,11 +314,8 @@ public class MainActivity extends AppCompatActivity {
         OpenScaleProvider openScaleProvider = new OpenScaleProvider(this, packageName);
 
         if (openScaleProvider.getUsers().isEmpty()) {
-            imgScaleUser.setImageResource(R.drawable.ic_status_error);
-            spinScaleUserAdapter.add("error no openScale exist");
+            statusOpenScaleUser.setCheck(false, "no openScale exist");
         } else {
-            imgScaleUser.setImageResource(R.drawable.ic_status_check);
-
             int scaleUserId = prefs.getInt("openScaleUserId", 0);
 
             spinScaleUserAdapter.clear();
@@ -352,6 +331,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             spinScaleUer.setSelection(spinPos);
+            statusOpenScaleUser.setCheck(true, "openScale user exist " + spinScaleUer.getSelectedItem());
         }
 
         return true;

@@ -1,3 +1,6 @@
+/**
+ * Copyright (C) 2019 by olie.xdev@googlemail.com All Rights Reserved
+ */
 package com.health.openscale.sync.gui.utils;
 
 import android.content.Context;
@@ -21,7 +24,9 @@ import timber.log.Timber;
 public class DebugTree {
 
     public DebugTree() {
-        Timber.plant(new Timber.DebugTree());
+        if (Timber.forest().isEmpty()) {
+            Timber.plant(new Timber.DebugTree());
+        }
     }
 
     public Intent requestDebugIntent() {
