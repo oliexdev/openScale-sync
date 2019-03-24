@@ -108,10 +108,12 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        getSupportActionBar().setDisplayShowHomeEnabled(true);
-        getSupportActionBar().setTitle("  " + getResources().getString(R.string.app_name));
-        getSupportActionBar().setIcon(R.drawable.ic_launcher_openscale_sync);
-        getSupportActionBar().setBackgroundDrawable(new ColorDrawable(Color.parseColor("#000000")));
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayShowHomeEnabled(true);
+            getSupportActionBar().setTitle("  " + getResources().getString(R.string.app_name));
+            getSupportActionBar().setIcon(R.drawable.ic_launcher_openscale_sync);
+            getSupportActionBar().setBackgroundDrawable(new ColorDrawable(Color.parseColor("#000000")));
+        }
 
         statusMainLayout = findViewById(R.id.statusMainLayout);
         toggleGoogleSync = findViewById(R.id.toggleGoogleFit);
@@ -417,7 +419,7 @@ public class MainActivity extends AppCompatActivity {
         switch (item.getItemId()) {
             case R.id.actionAbout:
                 final SpannableString abouotMsg = new SpannableString(getResources().getString(R.string.txt_about_info));
-                Linkify.addLinks(abouotMsg, Linkify.ALL);
+                Linkify.addLinks(abouotMsg, Linkify.WEB_URLS);
 
                 AlertDialog dialog = new AlertDialog.Builder(this)
                         .setTitle(getResources().getString(R.string.app_name) + " " + String.format("v%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
