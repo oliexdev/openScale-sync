@@ -133,6 +133,7 @@ public class StatusView extends LinearLayout {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
         lp.setMargins(15, 30, 15, 30);
         btnStatus.setLayoutParams(lp);
+        btnStatus.setAllCaps(false);
 
         btnStatus.setText(name);
         btnStatus.setBackgroundResource(R.drawable.flat_selector);

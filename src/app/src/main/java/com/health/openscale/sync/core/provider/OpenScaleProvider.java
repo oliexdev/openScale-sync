@@ -89,7 +89,7 @@ public class OpenScaleProvider {
 
                     Timber.d("openScale version " + versionCode + " with content provider API version " + apiVersion);
 
-                    if (versionCode >= 42) {
+                    if (versionCode >= 43) {
                         return true;
                     }
                 }

@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         getSupportActionBar().setDisplayShowHomeEnabled(true);
-        getSupportActionBar().setTitle("  openScale Sync");
+        getSupportActionBar().setTitle("  openScale sync");
         getSupportActionBar().setIcon(R.drawable.ic_launcher_openscale_sync);
         getSupportActionBar().setBackgroundDrawable(new ColorDrawable(Color.parseColor("#000000")));
 
@@ -416,11 +416,11 @@ public class MainActivity extends AppCompatActivity {
 
         switch (item.getItemId()) {
             case R.id.actionAbout:
-                final SpannableString abouotMsg = new SpannableString("Copyright (C) 2019 All Rights Reserved\nby olie.xdev@googlemail.com\n\nWebsite https://github.com/oliexdev/openScale");
+                final SpannableString abouotMsg = new SpannableString("Copyright (C) 2019 All Rights Reserved\nby olie.xdev@googlemail.com\n\nWebsite https://github.com/oliexdev/openScale/wiki/openScale-sync");
                 Linkify.addLinks(abouotMsg, Linkify.ALL);
 
                 AlertDialog dialog = new AlertDialog.Builder(this)
-                        .setTitle("openScale Sync " + String.format("v%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
+                        .setTitle("openScale sync " + String.format("v%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
                         .setMessage(abouotMsg)
                         .setIcon(R.drawable.ic_launcher_openscale_sync)
                         .setPositiveButton("Ok", null)

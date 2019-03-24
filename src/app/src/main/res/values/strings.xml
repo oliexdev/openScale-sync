@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">openScale Sync</string>
+    <string name="app_name">openScale sync</string>
 
     <string name="customactivityoncrash_error_activity_error_occurred_explanation">An unexpected error occurred.\n\nPlease create a new issue including the error details on\nhttps://github.com/oliexdev/openScale/issues</string>
     <string name="customactivityoncrash_error_activity_restart_app">Restart app</string>

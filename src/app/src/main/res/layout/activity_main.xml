@@ -8,7 +8,7 @@
         android:id="@+id/toggleGoogleFit"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="GoogleFit Sync"
+        android:text="GoogleFit sync"
         android:checked="true"
         android:textOff="off"
         android:textOn="on"/>
@@ -42,6 +42,7 @@
             android:layout_gravity="bottom"
             android:layout_margin="10dp"
             android:background="@drawable/flat_selector"
-            android:text="Manual Sync to GoogleFit" />
+            android:textAllCaps="false"
+            android:text="Manual sync data" />
     </LinearLayout>
 </LinearLayout>
