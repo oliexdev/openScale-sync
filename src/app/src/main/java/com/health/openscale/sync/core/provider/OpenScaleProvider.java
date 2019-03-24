@@ -11,6 +11,8 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.BaseColumns;
 
+import com.health.openscale.sync.R;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -97,7 +99,7 @@ public class OpenScaleProvider {
                 cursor.close();
             }
         } catch (Exception e) {
-            Timber.e("openScale content provider error: " + e.getMessage());
+            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
         }
 
         return false;
@@ -122,7 +124,7 @@ public class OpenScaleProvider {
             }
         }
         catch (Exception e) {
-            Timber.e("openScale content provider error: " + e.getMessage());
+            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
         }
 
         return openScaleUsers;
@@ -148,7 +150,7 @@ public class OpenScaleProvider {
             }
         }
         catch (Exception e) {
-            Timber.e("openScale content provider error: " + e.getMessage());
+            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
         }
 
         return openScaleMeasurements;
@@ -164,7 +166,7 @@ public class OpenScaleProvider {
 
             context.getContentResolver().insert(measurementsUri, values);
         } catch (Exception e) {
-            Timber.e("openScale content provider error: " + e.getMessage());
+            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
         }
     }
 }

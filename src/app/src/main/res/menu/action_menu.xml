@@ -3,13 +3,13 @@
 
     <item
         android:id="@+id/actionDebug"
-        android:title="Enable debug mode"
+        android:title="@string/txt_enable_debug_mode"
         android:checkable="true"
         app:showAsAction="never"/>
 
     <item
         android:id="@+id/actionAbout"
-        android:title="About"
+        android:title="@string/txt_about"
         app:showAsAction="never"/>
 
 </menu>

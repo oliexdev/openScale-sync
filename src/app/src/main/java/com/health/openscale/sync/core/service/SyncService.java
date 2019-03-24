@@ -64,12 +64,12 @@ public class SyncService extends Service {
    // @Override
     protected void onHandleIntent(@Nullable Intent intent) {
         if (!prefs.getBoolean("enableGoogleFit", true)) {
-            Timber.d("Sync request received but GoogleFit sync is disabeld");
+            Timber.d(getResources().getString(R.string.txt_sign_request_received_but_disabled));
             stopForeground(true);
             return;
         }
 
-        Timber.d("Sync request received");
+        Timber.d(getResources().getString(R.string.txt_sign_request_received));
 
         String mode = intent.getExtras().getString("mode");
 
@@ -78,7 +78,7 @@ public class SyncService extends Service {
             float weight = intent.getFloatExtra("weight", 0.0f);
             Date date = new Date(intent.getLongExtra("date", 0L));
 
-            Timber.d("Sync insert measurement user Id: " + userId + " weight: " + weight + " date: " + date);
+            Timber.d( getResources().getString(R.string.txt_sync_insert)+ " user Id: " + userId + " weight: " + weight + " date: " + date);
 
             syncProvider.insertMeasurement(date,weight);
         } else if (mode.equals("update")) {
@@ -86,17 +86,17 @@ public class SyncService extends Service {
             float weight = intent.getFloatExtra("weight", 0.0f);
             Date date = new Date(intent.getLongExtra("date", 0L));
 
-            Timber.d("Sync update measurement user Id: " + userId + " weight: " + weight + " date: " + date);
+            Timber.d(getResources().getString(R.string.txt_sync_update) + " userId: " + userId + " weight: " + weight + " date: " + date);
 
             syncProvider.updateMeasurement(date,weight);
         } else if (mode.equals("delete")) {
             Date date = new Date(intent.getLongExtra("date", 0L));
 
-            Timber.d("Sync delete measurement date: " + date);
+            Timber.d(getResources().getString(R.string.txt_sync_delete) + " date: " + date);
 
             syncProvider.deleteMeasurement(date);
         } else if (mode.equals("clear")) {
-            Timber.d("Sync clear measurements");
+            Timber.d(getResources().getString(R.string.txt_sync_clear));
 
             syncProvider.clearMeasurements();
         }
@@ -120,9 +120,9 @@ public class SyncService extends Service {
 
     @RequiresApi(Build.VERSION_CODES.O)
     private String createNotificationChannel(NotificationManager notificationManager){
-        String channelId = "openScale Sync";
+        String channelId = getResources().getString(R.string.app_name);
 
-        NotificationChannel channel = new NotificationChannel(channelId, "openScale Sync Service", NotificationManager.IMPORTANCE_DEFAULT);
+        NotificationChannel channel = new NotificationChannel(channelId, getResources().getString(R.string.app_name) + " service", NotificationManager.IMPORTANCE_DEFAULT);
         channel.setImportance(NotificationManager.IMPORTANCE_DEFAULT);
         channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
         notificationManager.createNotificationChannel(channel);

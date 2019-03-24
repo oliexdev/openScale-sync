@@ -24,6 +24,7 @@ import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.health.openscale.sync.BuildConfig;
+import com.health.openscale.sync.R;
 import com.health.openscale.sync.gui.MainActivity;
 
 import java.util.ArrayList;
@@ -85,7 +86,7 @@ public class GoogleFitSync {
             mainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(mainIntent);
 
-            showToast("Can't sync to GoogleFit. Please login into a Google Account");
+            showToast(context.getResources().getString(R.string.txt_error_cannot_sign_in_to_googleFit));
 
             return false;
         }
@@ -114,13 +115,13 @@ public class GoogleFitSync {
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void aVoid) {
-                        Timber.d("Successful insert GoogleFit data " + date);
+                        Timber.d(context.getResources().getString(R.string.txt_successful_insert_googleFit_data) + " " + date);
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                        Timber.e("Error on inserting of GoogleFit data " + e.getMessage());
+                        Timber.e(context.getResources().getString(R.string.txt_error_insert_googleFit_data) + " " + e.getMessage());
                     }
                 });
     }
@@ -140,13 +141,13 @@ public class GoogleFitSync {
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void aVoid) {
-                        Timber.d("Successful deleted GoogleFit data " + date);
+                        Timber.d(context.getResources().getString(R.string.txt_successful_delete_googleFit_data) + " " + date);
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                        Timber.e("Error on deletion of GoogleFit data " + e.getMessage());
+                        Timber.e(context.getResources().getString(R.string.txt_error_deletion_googleFit_data) + " " + e.getMessage());
                     }
                 });
     }
@@ -172,13 +173,13 @@ public class GoogleFitSync {
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void aVoid) {
-                        Timber.d("Successful cleared GoogleFit data");
+                        Timber.d(context.getResources().getString(R.string.txt_successful_cleared_googleFit_data));
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                        Timber.e("Error on clearing of GoogleFit data " + e.getMessage());
+                        Timber.e(context.getResources().getString(R.string.txt_error_clearing_googleFit_data) + " " + e.getMessage());
                     }
                 });
     }
@@ -209,13 +210,13 @@ public class GoogleFitSync {
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void aVoid) {
-                        Timber.d("Successful updated GoogleFit data " + date);
+                        Timber.d(context.getResources().getString(R.string.txt_successful_updated_googleFit_data) + " " + date);
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                        Timber.e("Error on updating of GoogleFit data " + e.getMessage());
+                        Timber.e(context.getResources().getString(R.string.txt_error_updating_googleFit_data) + " " + e.getMessage());
                     }
                 });
     }
@@ -242,7 +243,7 @@ public class GoogleFitSync {
                 .addOnSuccessListener(new OnSuccessListener<DataReadResponse>() {
                     @Override
                     public void onSuccess(DataReadResponse dataReadResponse) {
-                        Timber.d("successful request GoogleFit measurements");
+                        Timber.d(context.getResources().getString(R.string.txt_successful_request_googleFit_measurements));
 
                         for (DataSet set : dataReadResponse.getDataSets()) {
                             for (DataPoint dp : set.getDataPoints()) {
