@@ -25,6 +25,7 @@
     <string name="txt_openScale_user_not_found">openScale user not found</string>
     <string name="txt_googleFit_permission_not_granted">"GoogleFit permission denied"</string>
     <string name="txt_openScale_connection_failed">openScale connection failed</string>
+    <string name="txt_openScale_userid_missmatch">openScale user id missmatched with openScale sync user id</string>
 
     <string name="txt_openScale_connection_successful">openScale connection successful</string>
     <string name="txt_googleFit_permission_granted">"GoogleFit permission granted"</string>

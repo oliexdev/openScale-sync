@@ -72,6 +72,7 @@ public class SyncService extends Service {
         Timber.d(getResources().getString(R.string.txt_sign_request_received));
 
         String mode = intent.getExtras().getString("mode");
+        int openScaleUserId = prefs.getInt("openScaleUserId", 0);
 
         if (mode.equals("insert")) {
             int userId = intent.getIntExtra("userId", 0);
@@ -80,7 +81,11 @@ public class SyncService extends Service {
 
             Timber.d( getResources().getString(R.string.txt_sync_insert)+ " user Id: " + userId + " weight: " + weight + " date: " + date);
 
-            syncProvider.insertMeasurement(date,weight);
+            if (userId == openScaleUserId) {
+                syncProvider.insertMeasurement(date, weight);
+            } else {
+                Timber.d(getResources().getString(R.string.txt_openScale_userid_missmatch));
+            }
         } else if (mode.equals("update")) {
             int userId = intent.getIntExtra("userId", 0);
             float weight = intent.getFloatExtra("weight", 0.0f);
@@ -88,7 +93,12 @@ public class SyncService extends Service {
 
             Timber.d(getResources().getString(R.string.txt_sync_update) + " userId: " + userId + " weight: " + weight + " date: " + date);
 
-            syncProvider.updateMeasurement(date,weight);
+            if (userId == openScaleUserId) {
+                syncProvider.updateMeasurement(date, weight);
+            }
+            else {
+                Timber.d(getResources().getString(R.string.txt_openScale_userid_missmatch));
+            }
         } else if (mode.equals("delete")) {
             Date date = new Date(intent.getLongExtra("date", 0L));
 
