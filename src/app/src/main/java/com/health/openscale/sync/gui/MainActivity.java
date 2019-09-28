@@ -30,6 +30,10 @@ import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
@@ -48,9 +52,6 @@ import com.health.openscale.sync.gui.view.StatusView;
 import java.util.ArrayList;
 import java.util.List;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 import cat.ereza.customactivityoncrash.config.CaocConfig;
 import timber.log.Timber;
 
@@ -182,7 +183,7 @@ public class MainActivity extends AppCompatActivity {
                 Timber.d(getResources().getString(R.string.txt_install_button_clicked));
 
                 Intent goToMarket = new Intent(Intent.ACTION_VIEW)
-                        .setData(Uri.parse("market://details?id=com.health.openscale"));
+                        .setData(Uri.parse("market://details?id=com.health.openscale.pro"));
                 startActivity(goToMarket);
             }
         });
