@@ -67,4 +67,7 @@
     <string name="txt_sync_insert">Sync insert measurement</string>
 
     <string name="txt_openScale_provider_error">openScale content provider error</string>
+
+    <string name="drawer_open">Open navigation drawer</string>
+    <string name="drawer_close">Close navigation drawer</string>
 </resources>

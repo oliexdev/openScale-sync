@@ -1,0 +1,20 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_overview_fragment"
+            android:icon="@drawable/ic_overview"
+            android:title="Overview" />
+
+        <item
+            android:id="@+id/nav_googlefit_fragment"
+            android:icon="@drawable/ic_googlefit"
+            android:title="GoogleFit" />
+
+        <item
+            android:id="@+id/nav_mqtt_fragment"
+            android:icon="@drawable/ic_mqtt"
+            android:title="MQTT" />
+    </group>
+
+</menu>
