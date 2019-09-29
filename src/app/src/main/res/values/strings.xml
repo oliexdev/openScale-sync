@@ -12,7 +12,7 @@
     <string name="customactivityoncrash_error_activity_error_details_clipboard_label">Error info</string>
 
     <string name="txt_google_sign_in">Google sign in</string>
-    <string name="txt_openScale_connection">openScale connection</string>
+    <string name="txt_openScale_status">openScale status</string>
     <string name="txt_install_openScale">Install openScale</string>
     <string name="txt_request_openScale_permission">Request openScale permission</string>
     <string name="txt_openScale_user">openScale user</string>

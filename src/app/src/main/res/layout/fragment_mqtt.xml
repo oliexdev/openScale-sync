@@ -30,10 +30,11 @@
 
         <EditText
             android:id="@+id/txtServer"
-            android:layout_weight="0.7"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:text="none"/>
+            android:layout_weight="0.7"
+            android:singleLine="true"
+            android:text="none" />
 
     </LinearLayout>
 
@@ -52,10 +53,11 @@
 
         <EditText
             android:id="@+id/txtUsername"
-            android:layout_weight="0.7"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:text="none"/>
+            android:layout_weight="0.7"
+            android:singleLine="true"
+            android:text="none" />
 
     </LinearLayout>
 
@@ -74,10 +76,11 @@
 
         <EditText
             android:id="@+id/txtPassword"
-            android:layout_weight="0.7"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:text="none"/>
+            android:layout_weight="0.7"
+            android:singleLine="true"
+            android:text="none" />
 
     </LinearLayout>
 

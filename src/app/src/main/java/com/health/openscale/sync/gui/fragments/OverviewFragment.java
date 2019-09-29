@@ -50,7 +50,7 @@ public class OverviewFragment extends Fragment {
     private Switch chkDebugLog;
     private StatusView statusViewGoogleFitSync;
     private StatusView statusViewMQTTSync;
-    private StatusView statusOpenScaleConnection;
+    private StatusView statusViewOpenScale;
     private StatusView statusOpenScaleUser;
     private Button btnInstallOpenScale;
     private Button btnPermissionOpenScale;
@@ -106,9 +106,9 @@ public class OverviewFragment extends Fragment {
 
         overviewMainLayout = fragment.findViewById(R.id.overviewMainLayout);
 
-        statusOpenScaleConnection = new StatusView(getContext(), getResources().getString(R.string.txt_openScale_connection));
-        btnInstallOpenScale = statusOpenScaleConnection.addButton(getResources().getString(R.string.txt_install_openScale));
-        btnPermissionOpenScale = statusOpenScaleConnection.addButton(getResources().getString(R.string.txt_request_openScale_permission));
+        statusViewOpenScale = new StatusView(getContext(), getResources().getString(R.string.txt_openScale_status));
+        btnInstallOpenScale = statusViewOpenScale.addButton(getResources().getString(R.string.txt_install_openScale));
+        btnPermissionOpenScale = statusViewOpenScale.addButton(getResources().getString(R.string.txt_request_openScale_permission));
 
         statusOpenScaleUser = new StatusView(getContext(),getResources().getString(R.string.txt_openScale_user));
         spinScaleUer = statusOpenScaleUser.addSpinner();
@@ -118,7 +118,7 @@ public class OverviewFragment extends Fragment {
 
         overviewMainLayout.addView(statusViewGoogleFitSync);
         overviewMainLayout.addView(statusViewMQTTSync);
-        overviewMainLayout.addView(statusOpenScaleConnection);
+        overviewMainLayout.addView(statusViewOpenScale);
         overviewMainLayout.addView(statusOpenScaleUser);
 
         spinScaleUserAdapter = new ArrayAdapter<>(getContext(), R.layout.spinner_item, new ArrayList<String>());
@@ -188,16 +188,16 @@ public class OverviewFragment extends Fragment {
                 OpenScaleProvider openScaleProvider = new OpenScaleProvider(getContext());
 
                 if (openScaleProvider.checkVersion()) {
-                    statusOpenScaleConnection.setCheck(true, getResources().getString(R.string.txt_openScale_version_is_ok) + "(" + packageName + ")");
+                    statusViewOpenScale.setCheck(true, getResources().getString(R.string.txt_openScale_version_is_ok) + "(" + packageName + ")");
                     return true;
                 } else {
-                    statusOpenScaleConnection.setCheck(false, getResources().getString(R.string.txt_openScale_version_too_old));
+                    statusViewOpenScale.setCheck(false, getResources().getString(R.string.txt_openScale_version_too_old));
                 }
             } else {
-                statusOpenScaleConnection.setCheck(false, getResources().getString(R.string.txt_openScale_permission_not_granted));
+                statusViewOpenScale.setCheck(false, getResources().getString(R.string.txt_openScale_permission_not_granted));
             }
         } else {
-            statusOpenScaleConnection.setCheck(false, getResources().getString(R.string.txt_openScale_is_not_installed));
+            statusViewOpenScale.setCheck(false, getResources().getString(R.string.txt_openScale_is_not_installed));
         }
 
         return false;
@@ -263,10 +263,10 @@ public class OverviewFragment extends Fragment {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == OPENSCALE_PERMISSIONS_REQUEST_CODE) {
             if(grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                statusOpenScaleConnection.setCheck(true, getResources().getString(R.string.txt_openScale_connection_successful));
+                statusViewOpenScale.setCheck(true, getResources().getString(R.string.txt_openScale_connection_successful));
                 checkOpenScaleUsers();
             } else {
-                statusOpenScaleConnection.setCheck(false, getResources().getString(R.string.txt_openScale_connection_failed));
+                statusViewOpenScale.setCheck(false, getResources().getString(R.string.txt_openScale_connection_failed));
             }
         }
     }
