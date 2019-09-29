@@ -37,13 +37,13 @@
             android:visibility="gone" />
 
         <Button
-            android:id="@+id/btnManualSync"
+            android:id="@+id/btnGoogleFitSync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
             android:layout_margin="10dp"
             android:background="@drawable/flat_selector"
             android:textAllCaps="false"
-            android:text="@string/txt_manual_sync_data" />
+            android:text="@string/txt_manual_full_sync" />
     </LinearLayout>
 </LinearLayout>

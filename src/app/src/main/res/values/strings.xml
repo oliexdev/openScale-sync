@@ -43,7 +43,7 @@
     <string name="txt_enable_debug_mode">Enable debug mode</string>
     <string name="txt_about">About</string>
     <string name="txt_googleFit_sync">GoogleFit sync</string>
-    <string name="txt_manual_sync_data">Manual sync data</string>
+    <string name="txt_manual_full_sync">Manual full sync</string>
 
     <string name="txt_btn_ok">Ok</string>
     <string name="txt_about_info">Copyright (C) 2019 All Rights Reserved\nby olie.xdev@googlemail.com</string>
@@ -73,7 +73,6 @@
 
     <string name="txt_mqtt_sync">MQTT sync</string>
     <string name="txt_mqtt_status_connection">MQTT status</string>
-    <string name="txt_test_connection_mqtt">Send MQTT test topic</string>
     <string name="txt_mqtt_connection_sucessful">MQTT connection successful</string>
 
     <string name="txt_mqtt_status">MQTT status</string>

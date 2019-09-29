@@ -46,7 +46,7 @@ public class GoogleFitFragment extends Fragment {
     private Switch toggleGoogleSync;
     private Button btnGoogleSignIn;
 
-    private Button btnManualSync;
+    private Button btnGoogleFitSync;
     private ProgressBar progressBar;
 
 
@@ -64,7 +64,7 @@ public class GoogleFitFragment extends Fragment {
 
         googleFitMainLayout = fragment.findViewById(R.id.googleFitMainLayout);
         toggleGoogleSync = fragment.findViewById(R.id.toggleGoogleFit);
-        btnManualSync = fragment.findViewById(R.id.btnManualSync);
+        btnGoogleFitSync = fragment.findViewById(R.id.btnGoogleFitSync);
         progressBar = fragment.findViewById(R.id.progressBar);
 
         statusGoogleSignIn = new StatusView(getContext(), getResources().getString(R.string.txt_google_sign_in));
@@ -89,64 +89,67 @@ public class GoogleFitFragment extends Fragment {
             }
         });
 
-        btnManualSync.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (checkStatusGoogleFit()) {
-                    btnManualSync.setEnabled(false);
-                    progressBar.setVisibility(View.VISIBLE);
-
-                    final OpenScaleProvider openScaleProvider = new OpenScaleProvider(getContext());
-                    final GoogleFitSync googleFitSync = new GoogleFitSync(getContext());
-
-                    final int openScaleUserId = prefs.getInt("openScaleUserId", 0);
-
-                    Timber.d(getResources().getString(R.string.txt_manual_sync_openScale_googleFit));
-
-                    for (ScaleMeasurement openScaleMeasurement : openScaleProvider.getMeasurements(openScaleUserId)) {
-                        Timber.d("openScale measurement " +  openScaleMeasurement + " added to GoogleFit");
-
-                        googleFitSync.insert(openScaleMeasurement);
-                    }
-
-                    Timber.d(getResources().getString(R.string.txt_manual_sync_googleFit_openScale));
-
-                    Task<DataReadResponse> googleFitReadRequest = googleFitSync.queryMeasurements();
-
-                    if (googleFitReadRequest != null) {
-                        googleFitReadRequest.addOnCompleteListener(new OnCompleteListener<DataReadResponse>() {
-                            @Override
-                            public void onComplete(@NonNull Task<DataReadResponse> task) {
-                                for (ScaleMeasurement googleFitMeasurement : googleFitSync.getQueryMeasurementsResults()) {
-                                    Timber.d("GoogleFit measurement " + googleFitMeasurement + " added to openScale");
-
-                                    openScaleProvider.insertMeasurement(googleFitMeasurement.getDate(), googleFitMeasurement.getWeight(), openScaleUserId);
-                                }
-                                progressBar.setVisibility(View.GONE);
-                                btnManualSync.setEnabled(true);
-                            }
-                        }).addOnFailureListener(new OnFailureListener() {
-                            @Override
-                            public void onFailure(@NonNull Exception e) {
-                                progressBar.setVisibility(View.GONE);
-                                btnManualSync.setEnabled(true);
-                                Timber.d("can't get GoogleFit measurements " + e.getMessage());
-                            }
-                        });
-                    }
-                }
-            }
-        });
+        btnGoogleFitSync.setOnClickListener(new onFullSyncClick());
 
         checkStatusGoogleFit();
 
         return fragment;
     }
 
+    private class onFullSyncClick implements View.OnClickListener {
+
+        @Override
+        public void onClick(View v) {
+            if (checkStatusGoogleFit()) {
+                btnGoogleFitSync.setEnabled(false);
+                progressBar.setVisibility(View.VISIBLE);
+
+                final OpenScaleProvider openScaleProvider = new OpenScaleProvider(getContext());
+                final GoogleFitSync googleFitSync = new GoogleFitSync(getContext());
+
+                final int openScaleUserId = prefs.getInt("openScaleUserId", 0);
+
+                Timber.d(getResources().getString(R.string.txt_manual_sync_openScale_googleFit));
+
+                for (ScaleMeasurement openScaleMeasurement : openScaleProvider.getMeasurements(openScaleUserId)) {
+                    Timber.d("openScale measurement " +  openScaleMeasurement + " added to GoogleFit");
+
+                    googleFitSync.insert(openScaleMeasurement);
+                }
+
+                Timber.d(getResources().getString(R.string.txt_manual_sync_googleFit_openScale));
+
+                Task<DataReadResponse> googleFitReadRequest = googleFitSync.queryMeasurements();
+
+                if (googleFitReadRequest != null) {
+                    googleFitReadRequest.addOnCompleteListener(new OnCompleteListener<DataReadResponse>() {
+                        @Override
+                        public void onComplete(@NonNull Task<DataReadResponse> task) {
+                            for (ScaleMeasurement googleFitMeasurement : googleFitSync.getQueryMeasurementsResults()) {
+                                Timber.d("GoogleFit measurement " + googleFitMeasurement + " added to openScale");
+
+                                openScaleProvider.insertMeasurement(googleFitMeasurement.getDate(), googleFitMeasurement.getWeight(), openScaleUserId);
+                            }
+                            progressBar.setVisibility(View.GONE);
+                            btnGoogleFitSync.setEnabled(true);
+                        }
+                    }).addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            progressBar.setVisibility(View.GONE);
+                            btnGoogleFitSync.setEnabled(true);
+                            Timber.d("can't get GoogleFit measurements " + e.getMessage());
+                        }
+                    });
+                }
+            }
+        }
+    }
+
     private boolean checkStatusGoogleFit() {
         if (prefs.getBoolean("enableGoogleFit", true)) {
             toggleGoogleSync.setChecked(true);
-            btnManualSync.setEnabled(true);
+            btnGoogleFitSync.setEnabled(true);
 
             statusGoogleSignIn.setEnable(true);
 
@@ -154,7 +157,7 @@ public class GoogleFitFragment extends Fragment {
             return true;
         } else {
             toggleGoogleSync.setChecked(false);
-            btnManualSync.setEnabled(false);
+            btnGoogleFitSync.setEnabled(false);
 
             statusGoogleSignIn.setEnable(false);
         }

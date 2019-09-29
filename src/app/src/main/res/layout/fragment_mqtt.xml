@@ -95,14 +95,21 @@
         android:gravity="bottom"
         android:orientation="vertical">
 
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+
         <Button
-            android:id="@+id/btnMQTT"
+            android:id="@+id/btnMQTTSync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
             android:layout_margin="10dp"
             android:background="@drawable/flat_selector"
             android:textAllCaps="false"
-            android:text="@string/txt_test_connection_mqtt" />
+            android:text="@string/txt_manual_full_sync" />
     </LinearLayout>
 </LinearLayout>

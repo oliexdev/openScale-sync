@@ -4,6 +4,7 @@
 package com.health.openscale.sync.gui.fragments;
 
 import android.content.SharedPreferences;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.text.Editable;
@@ -15,11 +16,15 @@ import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Switch;
 
 import androidx.fragment.app.Fragment;
 
+import com.google.gson.Gson;
 import com.health.openscale.sync.R;
+import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
+import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.gui.view.StatusView;
 
 import org.eclipse.paho.android.service.MqttAndroidClient;
@@ -27,6 +32,7 @@ import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import timber.log.Timber;
 
@@ -42,8 +48,10 @@ public class MQTTFragment extends Fragment {
     private EditText txtServer;
     private EditText txtUsername;
     private EditText txtPassword;
-    private Button btnMQTT;
+    private Button btnMQTTSync;
+    private ProgressBar progressBar;
     private StatusView statusMQTT;
+    private MqttAndroidClient mqttAndroidClient;
 
     private final String clientId = "openScaleSync";
 
@@ -64,12 +72,13 @@ public class MQTTFragment extends Fragment {
         txtServer = fragment.findViewById(R.id.txtServer);
         txtUsername = fragment.findViewById(R.id.txtUsername);
         txtPassword = fragment.findViewById(R.id.txtPassword);
-        btnMQTT = fragment.findViewById(R.id.btnMQTT);
+        btnMQTTSync = fragment.findViewById(R.id.btnMQTTSync);
+        progressBar = fragment.findViewById(R.id.progressBar);
         statusMQTT = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status_connection));
 
         mqttMainLayout.addView(statusMQTT);
 
-        btnMQTT.setOnClickListener(new onFullScanClick());
+        btnMQTTSync.setOnClickListener(new onFullSyncClick());
 
         toggleMQTTSync.setOnCheckedChangeListener(new onToggleListener());
 
@@ -97,10 +106,56 @@ public class MQTTFragment extends Fragment {
         }
     }
 
-    private class onFullScanClick implements View.OnClickListener {
+    private class onFullSyncClick implements View.OnClickListener {
 
         @Override
         public void onClick(View v) {
+            Timber.d("Manual full sync to MQTT");
+
+            if (!mqttAndroidClient.isConnected()) {
+                Timber.e("MQTT is not connected");
+                return;
+            }
+
+            btnMQTTSync.setEnabled(false);
+            progressBar.setVisibility(View.VISIBLE);
+
+            final OpenScaleProvider openScaleProvider = new OpenScaleProvider(getContext());
+
+            final int openScaleUserId = prefs.getInt("openScaleUserId", 0);
+
+            AsyncTask.execute(new Runnable() {
+                @Override
+                public void run() {
+                    for (ScaleMeasurement openScaleMeasurement : openScaleProvider.getMeasurements(openScaleUserId)) {
+                        Timber.d("openScale measurement " +  openScaleMeasurement + " added to MQTT");
+
+                        Gson gson = new Gson();
+                        String jsonMeasurement = gson.toJson(openScaleMeasurement);
+
+                        MqttMessage msg = new MqttMessage();
+                        msg.setPayload(jsonMeasurement.getBytes());
+                        msg.setQos(2);
+
+                        try {
+                            mqttAndroidClient.publish("openScaleSync/measurements/insert", msg);
+                            Thread.sleep(10);
+                        } catch (MqttException e) {
+                            Timber.e(e.getMessage());
+                        } catch (InterruptedException e) {
+                            Timber.e(e.getMessage());
+                        }
+                    }
+
+                    getActivity().runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressBar.setVisibility(View.GONE);
+                            btnMQTTSync.setEnabled(true);
+                        }
+                    });
+                }
+            });
         }
     }
 
@@ -134,7 +189,7 @@ public class MQTTFragment extends Fragment {
             txtServer.setEnabled(true);
             txtUsername.setEnabled(true);
             txtPassword.setEnabled(true);
-            btnMQTT.setEnabled(true);
+            btnMQTTSync.setEnabled(true);
 
             checkMQTTConnection();
             return true;
@@ -143,7 +198,7 @@ public class MQTTFragment extends Fragment {
             txtServer.setEnabled(false);
             txtUsername.setEnabled(false);
             txtPassword.setEnabled(false);
-            btnMQTT.setEnabled(false);
+            btnMQTTSync.setEnabled(false);
         }
 
         return false;
@@ -153,7 +208,7 @@ public class MQTTFragment extends Fragment {
         Timber.d("Check MQTT Connection");
         final String mqttServer = txtServer.getText().toString();
 
-        final MqttAndroidClient mqttAndroidClient = new MqttAndroidClient(getContext(), mqttServer, clientId);
+        mqttAndroidClient = new MqttAndroidClient(getContext(), mqttServer, clientId);
 
             try {
                 mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
@@ -177,7 +232,7 @@ public class MQTTFragment extends Fragment {
         final String mqttPassword = txtPassword.getText().toString();
 
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
-        mqttConnectOptions.setAutomaticReconnect(false);
+        mqttConnectOptions.setAutomaticReconnect(true);
         mqttConnectOptions.setCleanSession(true);
         mqttConnectOptions.setUserName(mqttUsername);
         mqttConnectOptions.setPassword(mqttPassword.toCharArray());

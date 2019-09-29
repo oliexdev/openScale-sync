@@ -44,19 +44,16 @@ public class MQTTSync extends ScaleMeasurementSync {
         Gson gson = new Gson();
         String jsonMeasurement = gson.toJson(measurement);
 
-        Timber.d("MQTT insert " + jsonMeasurement);
         sendMessageToMQTT("measurements/insert", jsonMeasurement);
     }
 
     @Override
     public void delete(final Date date) {
-        Timber.d("MQTT delete " + "{\"date\":\"" + date.getTime() + "\"}");
-        sendMessageToMQTT("measurements/delete", "{\"date\":\"" + date.getTime() + "\"}");
+        sendMessageToMQTT("measurements/delete", "{\"date\":" + date.getTime() + "}");
     }
 
     @Override
     public void clear() {
-        Timber.d("MQTT clear");
         sendMessageToMQTT("measurements/clear", "true");
     }
 
@@ -65,7 +62,6 @@ public class MQTTSync extends ScaleMeasurementSync {
         Gson gson = new Gson();
         String jsonMeasurement = gson.toJson(measurement);
 
-        Timber.d("MQTT update " + jsonMeasurement);
         sendMessageToMQTT("measurements/update", jsonMeasurement);
     }
 
@@ -76,9 +72,10 @@ public class MQTTSync extends ScaleMeasurementSync {
                 public void onSuccess(IMqttToken asyncActionToken) {
                     MqttMessage msg = new MqttMessage();
                     msg.setPayload(payload.getBytes());
-                    msg.setRetained(false);
+                    msg.setQos(2);
 
                     try {
+                        Timber.d("Succesful published on " + topic + " with message " + msg);
                         mqttAndroidClient.publish("openScaleSync/" + topic, msg);
                         mqttAndroidClient.disconnect();
                     } catch (MqttException ex) {
