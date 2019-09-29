@@ -74,13 +74,21 @@ public class MQTTFragment extends Fragment {
         txtPassword = fragment.findViewById(R.id.txtPassword);
         btnMQTTSync = fragment.findViewById(R.id.btnMQTTSync);
         progressBar = fragment.findViewById(R.id.progressBar);
-        statusMQTT = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status_connection));
+        statusMQTT = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status));
 
         mqttMainLayout.addView(statusMQTT);
 
         btnMQTTSync.setOnClickListener(new onFullSyncClick());
 
-        toggleMQTTSync.setOnCheckedChangeListener(new onToggleListener());
+        toggleMQTTSync.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (buttonView.isPressed()) {
+                    prefs.edit().putBoolean("enableMQTT", isChecked).commit();
+                    checkStatusMQTT();
+                }
+            }
+        });
 
         txtServer.setText(prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199"));
         txtUsername.setText(prefs.getString("mqttUsername", "ztntplvc"));
@@ -93,17 +101,6 @@ public class MQTTFragment extends Fragment {
         checkStatusMQTT();
 
         return fragment;
-    }
-
-    private class onToggleListener implements CompoundButton.OnCheckedChangeListener {
-        @Override
-        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-            prefs.edit().putBoolean("enableMQTT", isChecked).commit();
-
-            if (buttonView.isPressed()) {
-                checkStatusMQTT();
-            }
-        }
     }
 
     private class onFullSyncClick implements View.OnClickListener {

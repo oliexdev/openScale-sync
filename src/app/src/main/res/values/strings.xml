@@ -16,6 +16,7 @@
     <string name="txt_install_openScale">Install openScale</string>
     <string name="txt_request_openScale_permission">Request openScale permission</string>
     <string name="txt_openScale_user">openScale user</string>
+    <string name="txt_googlefit_status">GoogleFit status</string>
     <string name="txt_google_sign_in_expired">Google sign in expired</string>
     <string name="txt_google_sign_in_failed">"GoogleFit sign in failed"</string>
     <string name="txt_google_permission_not_granted">Google permission not granted</string>
@@ -72,9 +73,6 @@
     <string name="drawer_close">Close navigation drawer</string>
 
     <string name="txt_mqtt_sync">MQTT sync</string>
-    <string name="txt_mqtt_status_connection">MQTT status</string>
     <string name="txt_mqtt_connection_sucessful">MQTT connection successful</string>
-
     <string name="txt_mqtt_status">MQTT status</string>
-    <string name="txt_googlefit_status">GoogleFit status</string>
 </resources>

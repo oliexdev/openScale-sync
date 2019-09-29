@@ -67,7 +67,7 @@ public class GoogleFitFragment extends Fragment {
         btnGoogleFitSync = fragment.findViewById(R.id.btnGoogleFitSync);
         progressBar = fragment.findViewById(R.id.progressBar);
 
-        statusGoogleSignIn = new StatusView(getContext(), getResources().getString(R.string.txt_google_sign_in));
+        statusGoogleSignIn = new StatusView(getContext(), getResources().getString(R.string.txt_googlefit_status));
         btnGoogleSignIn = statusGoogleSignIn.addButton(getResources().getString(R.string.txt_google_sign_in));
 
         googleFitMainLayout.addView(statusGoogleSignIn);
@@ -75,8 +75,10 @@ public class GoogleFitFragment extends Fragment {
         toggleGoogleSync.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                prefs.edit().putBoolean("enableGoogleFit", isChecked).commit();
-                checkStatusGoogleFit();
+                if (buttonView.isPressed()) {
+                    prefs.edit().putBoolean("enableGoogleFit", isChecked).commit();
+                    checkStatusGoogleFit();
+                }
             }
         });
 

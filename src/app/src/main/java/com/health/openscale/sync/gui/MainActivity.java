@@ -109,11 +109,10 @@ public class MainActivity extends AppCompatActivity {
         try {
             fragment = (Fragment) fragmentClass.newInstance();
         } catch (Exception e) {
-            e.printStackTrace();
+            Timber.e(e.getMessage());
         }
 
         // Insert the fragment by replacing any existing fragment
-
         FragmentManager fragmentManager = getSupportFragmentManager();
         fragmentManager.beginTransaction().replace(R.id.flContent, fragment).commit();
 
