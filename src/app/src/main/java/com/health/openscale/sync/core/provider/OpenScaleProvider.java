@@ -7,11 +7,15 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
+import android.preference.PreferenceManager;
 import android.provider.BaseColumns;
 
 import com.health.openscale.sync.R;
+import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
+import com.health.openscale.sync.core.datatypes.ScaleUser;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -21,12 +25,19 @@ import timber.log.Timber;
 
 public class OpenScaleProvider {
     private Context context;
+
+    private SharedPreferences prefs;
+
     private Uri metaUri;
     private Uri usersUri;
     private Uri measurementsUri;
 
-    public OpenScaleProvider(Context context, String packageName) {
+    public OpenScaleProvider(Context context) {
         this.context = context;
+
+        prefs = PreferenceManager.getDefaultSharedPreferences(context);
+
+        String packageName = prefs.getString("openScalePackageName", "com.health.openscale.pro");
 
         metaUri = new Uri.Builder()
                 .scheme(ContentResolver.SCHEME_CONTENT)
@@ -45,38 +56,6 @@ public class OpenScaleProvider {
                 .authority(packageName + ".provider")
                 .path("measurements")
                 .build();
-    }
-
-
-
-    public class OpenScaleUser {
-        public OpenScaleUser(int userid, String name) {
-            this.userid = userid;
-            this.name = name;
-        }
-
-        @Override
-        public String toString() {
-            return "userId " + userid + " name " + name;
-        }
-
-        public int userid;
-        public String name;
-    }
-
-    public class OpenScaleMeasurement {
-        public OpenScaleMeasurement(Date date, float weight) {
-            this.date = date;
-            this.weight = weight;
-        }
-
-        @Override
-        public String toString() {
-            return "date " + date + " weight " + weight;
-        }
-
-        public Date date;
-        public float weight;
     }
 
     public boolean checkVersion() {
@@ -105,8 +84,8 @@ public class OpenScaleProvider {
         return false;
     }
 
-    public List<OpenScaleUser> getUsers() {
-        ArrayList<OpenScaleUser> openScaleUsers = new ArrayList<>();
+    public List<ScaleUser> getUsers() {
+        ArrayList<ScaleUser> openScaleUsers = new ArrayList<>();
 
         try {
             Cursor cursor = context.getContentResolver().query(
@@ -117,7 +96,7 @@ public class OpenScaleProvider {
                     long userId = cursor.getLong(cursor.getColumnIndex(BaseColumns._ID));
                     String name = cursor.getString(cursor.getColumnIndex("username"));
 
-                    openScaleUsers.add(new OpenScaleUser((int)userId, name));
+                    openScaleUsers.add(new ScaleUser((int)userId, name));
                 }
             } finally {
                 cursor.close();
@@ -130,8 +109,8 @@ public class OpenScaleProvider {
         return openScaleUsers;
     }
 
-    public List<OpenScaleMeasurement> getMeasurements(int userId) {
-        ArrayList<OpenScaleMeasurement> openScaleMeasurements = new ArrayList<>();
+    public List<ScaleMeasurement> getMeasurements(int userId) {
+        ArrayList<ScaleMeasurement> openScaleMeasurements = new ArrayList<>();
 
         try {
             Cursor cursor = context.getContentResolver().query(
@@ -143,7 +122,7 @@ public class OpenScaleProvider {
                     long datetime = cursor.getLong(cursor.getColumnIndex("datetime"));
                     float weight = cursor.getFloat(cursor.getColumnIndex("weight"));
 
-                    openScaleMeasurements.add(new OpenScaleMeasurement(new Date(datetime), weight));
+                    openScaleMeasurements.add(new ScaleMeasurement(new Date(datetime), weight));
                 }
             } finally {
                 cursor.close();

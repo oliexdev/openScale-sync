@@ -1,13 +1,108 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:layout_margin="15dp"
     tools:context=".gui.fragments.MQTTFragment">
 
-    <TextView
+    <Switch
+        android:id="@+id/toggleMQTT"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:text="MQTT" />
+        android:layout_height="wrap_content"
+        android:text="@string/txt_mqtt_sync"
+        android:checked="false"
+        android:textColor="@android:color/tertiary_text_light" />
 
-</FrameLayout>
+    <LinearLayout
+        android:weightSum="1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.3"
+            android:gravity="center_vertical"
+            android:text="Server" />
+
+        <EditText
+            android:id="@+id/txtServer"
+            android:layout_weight="0.7"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:text="none"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:weightSum="1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.3"
+            android:gravity="center_vertical"
+            android:text="Username" />
+
+        <EditText
+            android:id="@+id/txtUsername"
+            android:layout_weight="0.7"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:text="none"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:weightSum="1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.3"
+            android:gravity="center_vertical"
+            android:text="Password" />
+
+        <EditText
+            android:id="@+id/txtPassword"
+            android:layout_weight="0.7"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:text="none"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/mqttMainLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="bottom"
+        android:orientation="vertical">
+
+        <Button
+            android:id="@+id/btnMQTT"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:layout_margin="10dp"
+            android:background="@drawable/flat_selector"
+            android:textAllCaps="false"
+            android:text="@string/txt_test_connection_mqtt" />
+    </LinearLayout>
+</LinearLayout>

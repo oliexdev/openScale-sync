@@ -4,13 +4,11 @@
 package com.health.openscale.sync.gui;
 
 import android.app.AlertDialog;
-import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.method.LinkMovementMethod;
 import android.text.util.Linkify;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
 
@@ -28,7 +26,6 @@ import com.health.openscale.sync.R;
 import com.health.openscale.sync.gui.fragments.GoogleFitFragment;
 import com.health.openscale.sync.gui.fragments.MQTTFragment;
 import com.health.openscale.sync.gui.fragments.OverviewFragment;
-import com.health.openscale.sync.gui.utils.DebugTree;
 
 import cat.ereza.customactivityoncrash.config.CaocConfig;
 import timber.log.Timber;
@@ -37,11 +34,6 @@ public class MainActivity extends AppCompatActivity {
     public static final int COLOR_GREEN = Color.parseColor("#99CC00");
     public static final int COLOR_BLUE = Color.parseColor("#33B5E5");
     public static final int COLOR_GRAY = Color.parseColor("#d3d3d3");
-
-    private final int DEBUG_WRITE_PERMISSIONS_REQUEST_CODE = 102;
-
-    private DebugTree debugTree;
-    private Menu actionMenu;
 
     private DrawerLayout mDrawer;
     private Toolbar toolbar;
@@ -56,8 +48,6 @@ public class MainActivity extends AppCompatActivity {
         CaocConfig.Builder.create()
                 .trackActivities(false)
                 .apply();
-
-        debugTree = new DebugTree();
 
         // Set a Toolbar to replace the ActionBar.
 
@@ -95,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
     public void selectDrawerItem(MenuItem menuItem) {
         // Create a new fragment and specify the fragment to show based on nav item clicked
         Fragment fragment = null;
-        Class fragmentClass;
+        Class fragmentClass = OverviewFragment.class;
 
         switch (menuItem.getItemId()) {
             case R.id.nav_overview_fragment:
@@ -106,6 +96,9 @@ public class MainActivity extends AppCompatActivity {
                 break;
             case R.id.nav_mqtt_fragment:
                 fragmentClass = MQTTFragment.class;
+                break;
+            case R.id.nav_about:
+                showAboutDialog();
                 break;
             default:
                 fragmentClass = OverviewFragment.class;
@@ -132,61 +125,33 @@ public class MainActivity extends AppCompatActivity {
         mDrawer.closeDrawers();
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.action_menu, menu);
+    private void showAboutDialog() {
+        final SpannableString abouotMsg = new SpannableString(getResources().getString(R.string.txt_about_info));
+        Linkify.addLinks(abouotMsg, Linkify.WEB_URLS);
 
-        actionMenu = menu;
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getResources().getString(R.string.app_name) + " " + String.format("v%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
+                .setMessage(abouotMsg)
+                .setIcon(R.drawable.ic_launcher_openscale_sync)
+                .setPositiveButton(getResources().getString(R.string.txt_btn_ok), null)
+                .create();
 
-        return true;
+        dialog.show();
+
+        ((TextView)dialog.findViewById(android.R.id.message)).setMovementMethod(LinkMovementMethod.getInstance());
     }
-
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
 
         switch (item.getItemId()) {
-            case android.R.id.home:
+            case R.id.home:
                 mDrawer.openDrawer(GravityCompat.START);
                 return true;
-            case R.id.actionAbout:
-                final SpannableString abouotMsg = new SpannableString(getResources().getString(R.string.txt_about_info));
-                Linkify.addLinks(abouotMsg, Linkify.WEB_URLS);
-
-                AlertDialog dialog = new AlertDialog.Builder(this)
-                        .setTitle(getResources().getString(R.string.app_name) + " " + String.format("v%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
-                        .setMessage(abouotMsg)
-                        .setIcon(R.drawable.ic_launcher_openscale_sync)
-                        .setPositiveButton(getResources().getString(R.string.txt_btn_ok), null)
-                        .create();
-
-                dialog.show();
-
-                ((TextView)dialog.findViewById(android.R.id.message)).setMovementMethod(LinkMovementMethod.getInstance());
-                break;
-            case R.id.actionDebug:
-                if (item.isChecked()) {
-                    debugTree.close();
-                    item.setChecked(false);
-                } else {
-                    startActivityForResult(debugTree.requestDebugIntent(), DEBUG_WRITE_PERMISSIONS_REQUEST_CODE);
-                }
-                break;
             default:
                 Timber.e("no action item found");
                 break;
         }
 
         return super.onOptionsItemSelected(item);
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (requestCode == DEBUG_WRITE_PERMISSIONS_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-            debugTree.startLogTo(this, data.getData());
-            MenuItem actionDebug = actionMenu.findItem(R.id.actionDebug);
-            actionDebug.setChecked(true);
-        }
     }
 }

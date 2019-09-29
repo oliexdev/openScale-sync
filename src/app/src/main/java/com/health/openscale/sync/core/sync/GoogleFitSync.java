@@ -8,6 +8,8 @@ import android.content.Intent;
 import android.os.Handler;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessOptions;
@@ -25,6 +27,7 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.health.openscale.sync.BuildConfig;
 import com.health.openscale.sync.R;
+import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
 import com.health.openscale.sync.gui.MainActivity;
 
 import java.util.ArrayList;
@@ -33,31 +36,16 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import androidx.annotation.NonNull;
 import timber.log.Timber;
 
 import static android.os.Looper.getMainLooper;
 
-public class GoogleFitSync {
+public class GoogleFitSync extends ScaleMeasurementSync {
     private Context context;
-    private ArrayList<GoogleFitMeasurement> googleFitMeasurements;
-
-    public class GoogleFitMeasurement {
-        public GoogleFitMeasurement(Date date, float weight) {
-            this.date = date;
-            this.weight = weight;
-        }
-
-        @Override
-        public String toString() {
-            return "date " + date + " weight " + weight;
-        }
-
-        public Date date;
-        public float weight;
-    }
+    private ArrayList<ScaleMeasurement> googleFitMeasurements;
 
     public GoogleFitSync(Context context) {
+        super(context);
         this.context = context;
         this.googleFitMeasurements = new ArrayList<>();
     }
@@ -67,6 +55,16 @@ public class GoogleFitSync {
                .addDataType(DataType.TYPE_WEIGHT, FitnessOptions.ACCESS_READ)
                .addDataType(DataType.TYPE_WEIGHT, FitnessOptions.ACCESS_WRITE)
                .build();
+    }
+
+    @Override
+    public String getName() {
+        return "GoogleFitSync";
+    }
+
+    @Override
+    public boolean isEnable() {
+        return prefs.getBoolean("enableGoogleFit", true);
     }
 
     private void showToast(final String msg) {
@@ -94,7 +92,8 @@ public class GoogleFitSync {
         return true;
     }
 
-    public void insertMeasurement(final Date date, float weight) {
+    @Override
+    public void insert(final ScaleMeasurement measurement) {
         if (!checkPermission()) {
             return;
         }
@@ -106,8 +105,8 @@ public class GoogleFitSync {
                         .build();
 
         DataSet dataSet = DataSet.create(dataSource);
-        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(date.getTime(), TimeUnit.MILLISECONDS);
-        dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(weight);
+        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(measurement.getDate().getTime(), TimeUnit.MILLISECONDS);
+        dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(measurement.getWeight());
         dataSet.add(dataPoint);
 
         Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
@@ -115,7 +114,7 @@ public class GoogleFitSync {
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void aVoid) {
-                        Timber.d(context.getResources().getString(R.string.txt_successful_insert_googleFit_data) + " " + date);
+                        Timber.d(context.getResources().getString(R.string.txt_successful_insert_googleFit_data) + " " + measurement.getDate());
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
@@ -126,7 +125,8 @@ public class GoogleFitSync {
                 });
     }
 
-    public void deleteMeasurement(final Date date) {
+    @Override
+    public void delete(final Date date) {
         if (!checkPermission()) {
             return;
         }
@@ -152,7 +152,8 @@ public class GoogleFitSync {
                 });
     }
 
-    public void clearMeasurements() {
+    @Override
+    public void clear() {
         if (!checkPermission()) {
             return;
         }
@@ -184,7 +185,8 @@ public class GoogleFitSync {
                 });
     }
 
-    public void updateMeasurement(final Date date, float weight) {
+    @Override
+    public void update(final ScaleMeasurement measurement) {
         if (!checkPermission()) {
             return;
         }
@@ -196,13 +198,13 @@ public class GoogleFitSync {
                 .build();
 
         DataSet dataSet = DataSet.create(dataSource);
-        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(date.getTime(), TimeUnit.MILLISECONDS);
-        dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(weight);
+        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(measurement.getDate().getTime(), TimeUnit.MILLISECONDS);
+        dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(measurement.getWeight());
         dataSet.add(dataPoint);
 
         DataUpdateRequest request = new DataUpdateRequest.Builder()
                 .setDataSet(dataSet)
-                .setTimeInterval(date.getTime()-100, date.getTime()+100, TimeUnit.MILLISECONDS)
+                .setTimeInterval(measurement.getDate().getTime()-100, measurement.getDate().getTime()+100, TimeUnit.MILLISECONDS)
                 .build();
 
         Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
@@ -210,7 +212,7 @@ public class GoogleFitSync {
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(Void aVoid) {
-                        Timber.d(context.getResources().getString(R.string.txt_successful_updated_googleFit_data) + " " + date);
+                        Timber.d(context.getResources().getString(R.string.txt_successful_updated_googleFit_data) + " " + measurement.getDate());
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
@@ -247,14 +249,14 @@ public class GoogleFitSync {
 
                         for (DataSet set : dataReadResponse.getDataSets()) {
                             for (DataPoint dp : set.getDataPoints()) {
-                                googleFitMeasurements.add(new GoogleFitMeasurement(new Date(dp.getStartTime(TimeUnit.MILLISECONDS)), dp.getValue(Field.FIELD_WEIGHT).asFloat()));
+                                googleFitMeasurements.add(new ScaleMeasurement(new Date(dp.getStartTime(TimeUnit.MILLISECONDS)), dp.getValue(Field.FIELD_WEIGHT).asFloat()));
                             }
                         }
                     }
                 });
     }
 
-    public List<GoogleFitMeasurement> getQueryMeasurementsResults() {
+    public List<ScaleMeasurement> getQueryMeasurementsResults() {
         return googleFitMeasurements;
     }
 }

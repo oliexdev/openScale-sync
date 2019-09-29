@@ -10,15 +10,17 @@ import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import com.health.openscale.sync.R;
 
 import java.util.ArrayList;
 
-import androidx.annotation.Nullable;
 import timber.log.Timber;
 
 public class StatusView extends LinearLayout {
     public static final int COLOR_RED = Color.parseColor("#FF4444");
+    public static final int COLOR_BLACK = Color.parseColor("#000000");
 
     private LinearLayout horizontalLayout;
     private LinearLayout horizontalIconLayout;

@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:layout_margin="15dp"
     tools:context=".gui.fragments.OverviewFragment">
 
-    <TextView
+    <LinearLayout
+        android:id="@+id/overviewMainLayout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:text="Overview" />
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+    </LinearLayout>
 
-</FrameLayout>
+    <Switch
+        android:id="@+id/chkDebugLog"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Debug log"
+        android:textColor="@android:color/tertiary_text_light"
+        />
+
+</LinearLayout>

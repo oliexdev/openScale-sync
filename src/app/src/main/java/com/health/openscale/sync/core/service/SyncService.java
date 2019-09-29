@@ -14,14 +14,19 @@ import android.os.Build;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
 
-import com.health.openscale.sync.R;
-import com.health.openscale.sync.core.sync.GoogleFitSync;
-
-import java.util.Date;
-
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
+
+import com.health.openscale.sync.R;
+import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
+import com.health.openscale.sync.core.sync.GoogleFitSync;
+import com.health.openscale.sync.core.sync.MQTTSync;
+import com.health.openscale.sync.core.sync.ScaleMeasurementSync;
+
+import java.util.ArrayList;
+import java.util.Date;
+
 import timber.log.Timber;
 
 import static androidx.core.app.NotificationCompat.PRIORITY_LOW;
@@ -29,7 +34,7 @@ import static androidx.core.app.NotificationCompat.PRIORITY_LOW;
 public class SyncService extends Service {
     private static final int ID_SERVICE = 5;
 
-    private GoogleFitSync syncProvider;
+    private ArrayList<ScaleMeasurementSync> scaleMeasurementSyncList;
     private SharedPreferences prefs;
 
     @Nullable
@@ -42,7 +47,10 @@ public class SyncService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         super.onStartCommand(intent, flags, startId);
 
-        syncProvider = new GoogleFitSync(getApplicationContext());
+        scaleMeasurementSyncList = new ArrayList<>();
+        scaleMeasurementSyncList.add(new GoogleFitSync(getApplicationContext()));
+        scaleMeasurementSyncList.add(new MQTTSync(getApplicationContext()));
+
         prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
 
         onHandleIntent(intent);
@@ -63,52 +71,62 @@ public class SyncService extends Service {
 
    // @Override
     protected void onHandleIntent(@Nullable Intent intent) {
-        if (!prefs.getBoolean("enableGoogleFit", true)) {
-            Timber.d(getResources().getString(R.string.txt_sign_request_received_but_disabled));
-            stopForeground(true);
-            return;
-        }
-
         Timber.d(getResources().getString(R.string.txt_sign_request_received));
 
-        String mode = intent.getExtras().getString("mode");
-        int openScaleUserId = prefs.getInt("openScaleUserId", 0);
+        String mode = "none";
+        int openScaleUserId = 0;
 
-        if (mode.equals("insert")) {
-            int userId = intent.getIntExtra("userId", 0);
-            float weight = intent.getFloatExtra("weight", 0.0f);
-            Date date = new Date(intent.getLongExtra("date", 0L));
+        try {
+            mode = intent.getExtras().getString("mode");
+            openScaleUserId = prefs.getInt("openScaleUserId", 0);
+        } catch (NullPointerException ex) {
+            Timber.e(ex.getMessage());
+        }
 
-            Timber.d( getResources().getString(R.string.txt_sync_insert)+ " user Id: " + userId + " weight: " + weight + " date: " + date);
+        for (ScaleMeasurementSync scaleMeasurementSync : scaleMeasurementSyncList) {
 
-            if (userId == openScaleUserId) {
-                syncProvider.insertMeasurement(date, weight);
-            } else {
-                Timber.d(getResources().getString(R.string.txt_openScale_userid_missmatch));
+            if (!scaleMeasurementSync.isEnable()) {
+                Timber.d(scaleMeasurementSync.getName() + " [disabled]");
+                continue;
             }
-        } else if (mode.equals("update")) {
-            int userId = intent.getIntExtra("userId", 0);
-            float weight = intent.getFloatExtra("weight", 0.0f);
-            Date date = new Date(intent.getLongExtra("date", 0L));
 
-            Timber.d(getResources().getString(R.string.txt_sync_update) + " userId: " + userId + " weight: " + weight + " date: " + date);
+            Timber.d(scaleMeasurementSync.getName() + " [enabled]");
 
-            if (userId == openScaleUserId) {
-                syncProvider.updateMeasurement(date, weight);
+            if (mode.equals("insert")) {
+                int userId = intent.getIntExtra("userId", 0);
+                float weight = intent.getFloatExtra("weight", 0.0f);
+                Date date = new Date(intent.getLongExtra("date", 0L));
+
+                Timber.d(getResources().getString(R.string.txt_sync_insert) + " user Id: " + userId + " weight: " + weight + " date: " + date);
+
+                if (userId == openScaleUserId) {
+                    scaleMeasurementSync.insert(new ScaleMeasurement(date, weight));
+                } else {
+                    Timber.d(getResources().getString(R.string.txt_openScale_userid_missmatch));
+                }
+            } else if (mode.equals("update")) {
+                int userId = intent.getIntExtra("userId", 0);
+                float weight = intent.getFloatExtra("weight", 0.0f);
+                Date date = new Date(intent.getLongExtra("date", 0L));
+
+                Timber.d(getResources().getString(R.string.txt_sync_update) + " userId: " + userId + " weight: " + weight + " date: " + date);
+
+                if (userId == openScaleUserId) {
+                    scaleMeasurementSync.update(new ScaleMeasurement(date, weight));
+                } else {
+                    Timber.d(getResources().getString(R.string.txt_openScale_userid_missmatch));
+                }
+            } else if (mode.equals("delete")) {
+                Date date = new Date(intent.getLongExtra("date", 0L));
+
+                Timber.d(getResources().getString(R.string.txt_sync_delete) + " date: " + date);
+
+                scaleMeasurementSync.delete(date);
+            } else if (mode.equals("clear")) {
+                Timber.d(getResources().getString(R.string.txt_sync_clear));
+
+                scaleMeasurementSync.clear();
             }
-            else {
-                Timber.d(getResources().getString(R.string.txt_openScale_userid_missmatch));
-            }
-        } else if (mode.equals("delete")) {
-            Date date = new Date(intent.getLongExtra("date", 0L));
-
-            Timber.d(getResources().getString(R.string.txt_sync_delete) + " date: " + date);
-
-            syncProvider.deleteMeasurement(date);
-        } else if (mode.equals("clear")) {
-            Timber.d(getResources().getString(R.string.txt_sync_clear));
-
-            syncProvider.clearMeasurements();
         }
 
         stopForeground(true);
