@@ -27,6 +27,8 @@ import androidx.fragment.app.Fragment;
 import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.datatypes.ScaleUser;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
+import com.health.openscale.sync.core.sync.GoogleFitSync;
+import com.health.openscale.sync.core.sync.MQTTSync;
 import com.health.openscale.sync.gui.utils.DebugTree;
 import com.health.openscale.sync.gui.view.StatusView;
 
@@ -46,14 +48,17 @@ public class OverviewFragment extends Fragment {
     private LinearLayout overviewMainLayout;
     private DebugTree debugTree;
     private Switch chkDebugLog;
-    private StatusView statusGoogleFitSync;
-    private StatusView statusMQTTSync;
+    private StatusView statusViewGoogleFitSync;
+    private StatusView statusViewMQTTSync;
     private StatusView statusOpenScaleConnection;
     private StatusView statusOpenScaleUser;
     private Button btnInstallOpenScale;
     private Button btnPermissionOpenScale;
     private Spinner spinScaleUer;
     private ArrayAdapter<String> spinScaleUserAdapter;
+
+    private GoogleFitSync googleFitSync;
+    private MQTTSync mqttSync;
 
     public OverviewFragment() {
         debugTree = new DebugTree();
@@ -66,6 +71,9 @@ public class OverviewFragment extends Fragment {
         View fragment = inflater.inflate(R.layout.fragment_overview, container, false);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
+
+        googleFitSync = new GoogleFitSync(getContext());
+        mqttSync = new MQTTSync(getContext());
 
         chkDebugLog = fragment.findViewById(R.id.chkDebugLog);
 
@@ -105,11 +113,11 @@ public class OverviewFragment extends Fragment {
         statusOpenScaleUser = new StatusView(getContext(),getResources().getString(R.string.txt_openScale_user));
         spinScaleUer = statusOpenScaleUser.addSpinner();
 
-        statusGoogleFitSync = new StatusView(getContext(), getResources().getString(R.string.txt_googlefit_status));
-        statusMQTTSync = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status));
+        statusViewGoogleFitSync = new StatusView(getContext(), getResources().getString(R.string.txt_googlefit_status));
+        statusViewMQTTSync = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status));
 
-        overviewMainLayout.addView(statusGoogleFitSync);
-        overviewMainLayout.addView(statusMQTTSync);
+        overviewMainLayout.addView(statusViewGoogleFitSync);
+        overviewMainLayout.addView(statusViewMQTTSync);
         overviewMainLayout.addView(statusOpenScaleConnection);
         overviewMainLayout.addView(statusOpenScaleUser);
 
@@ -168,20 +176,8 @@ public class OverviewFragment extends Fragment {
             checkOpenScaleUsers();
         }
 
-        boolean googleFitStatus = prefs.getBoolean("enableGoogleFit", true);
-        boolean mqttStatus = prefs.getBoolean("enableMQTT", false);
-
-        if (googleFitStatus) {
-            statusGoogleFitSync.setCheck(true, "GoogleFit is enabled");
-        } else {
-            statusGoogleFitSync.setCheck(false, "GoogleFit is disabled");
-        }
-
-        if (mqttStatus) {
-            statusMQTTSync.setCheck(true, "MQTT sync is enabled");
-        } else {
-            statusMQTTSync.setCheck(false, "MQTT sync is disabled");
-        }
+        googleFitSync.checkStatus(statusViewGoogleFitSync);
+        mqttSync.checkStatus(statusViewMQTTSync);
     }
 
     private boolean checkOpenScaleConnection() {

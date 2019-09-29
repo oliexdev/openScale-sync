@@ -21,12 +21,9 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.fitness.result.DataReadResponse;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
@@ -42,13 +39,13 @@ public class GoogleFitFragment extends Fragment {
     private SharedPreferences prefs;
 
     private LinearLayout googleFitMainLayout;
-    private StatusView statusGoogleSignIn;
+    private StatusView statusViewGoogleFit;
     private Switch toggleGoogleSync;
     private Button btnGoogleSignIn;
 
     private Button btnGoogleFitSync;
     private ProgressBar progressBar;
-
+    private GoogleFitSync googleFitSync;
 
     public GoogleFitFragment() {
         // Required empty public constructor
@@ -62,15 +59,17 @@ public class GoogleFitFragment extends Fragment {
 
         prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
 
+        googleFitSync = new GoogleFitSync(getContext());
+
         googleFitMainLayout = fragment.findViewById(R.id.googleFitMainLayout);
         toggleGoogleSync = fragment.findViewById(R.id.toggleGoogleFit);
         btnGoogleFitSync = fragment.findViewById(R.id.btnGoogleFitSync);
         progressBar = fragment.findViewById(R.id.progressBar);
 
-        statusGoogleSignIn = new StatusView(getContext(), getResources().getString(R.string.txt_googlefit_status));
-        btnGoogleSignIn = statusGoogleSignIn.addButton(getResources().getString(R.string.txt_google_sign_in));
+        statusViewGoogleFit = new StatusView(getContext(), getResources().getString(R.string.txt_googlefit_status));
+        btnGoogleSignIn = statusViewGoogleFit.addButton(getResources().getString(R.string.txt_google_sign_in));
 
-        googleFitMainLayout.addView(statusGoogleSignIn);
+        googleFitMainLayout.addView(statusViewGoogleFit);
 
         toggleGoogleSync.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
@@ -149,48 +148,22 @@ public class GoogleFitFragment extends Fragment {
     }
 
     private boolean checkStatusGoogleFit() {
-        if (prefs.getBoolean("enableGoogleFit", true)) {
+        if (googleFitSync.isEnable()) {
             toggleGoogleSync.setChecked(true);
             btnGoogleFitSync.setEnabled(true);
 
-            statusGoogleSignIn.setEnable(true);
+            statusViewGoogleFit.setEnable(true);
 
-            checkGoogleFitConnection();
+            googleFitSync.checkStatus(statusViewGoogleFit);
             return true;
         } else {
             toggleGoogleSync.setChecked(false);
             btnGoogleFitSync.setEnabled(false);
 
-            statusGoogleSignIn.setEnable(false);
+            statusViewGoogleFit.setEnable(false);
         }
 
         return false;
-    }
-
-    private void checkGoogleFitConnection() {
-        if (GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(getContext()), GoogleFitSync.getFitnessOptions())) {
-            if (GoogleSignIn.getLastSignedInAccount(getContext()).isExpired()) {
-                statusGoogleSignIn.setCheck(false, getResources().getString(R.string.txt_google_sign_in_expired));
-
-                GoogleSignIn.getClient(getContext(), GoogleSignInOptions.DEFAULT_SIGN_IN).
-                        silentSignIn().addOnSuccessListener(new OnSuccessListener<GoogleSignInAccount>() {
-                    @Override
-                    public void onSuccess(GoogleSignInAccount googleSignInAccount) {
-                        statusGoogleSignIn.setCheck(true, getResources().getString(R.string.txt_googleFit_successful_sign_in));
-                    }
-                }).addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        statusGoogleSignIn.setCheck(false, getResources().getString(R.string.txt_google_sign_in_failed));
-                    }
-                });
-
-            } else {
-                statusGoogleSignIn.setCheck(true, getResources().getString(R.string.txt_googleFit_successful_sign_in));
-            }
-        } else {
-            statusGoogleSignIn.setCheck(false, getResources().getString(R.string.txt_google_permission_not_granted));
-        }
     }
 
     private void requestGoogleFitPermission() {
@@ -201,8 +174,6 @@ public class GoogleFitFragment extends Fragment {
                 GoogleFitSync.getFitnessOptions());
     }
 
-
-
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -210,9 +181,9 @@ public class GoogleFitFragment extends Fragment {
         if (requestCode == GOOGLE_FIT_PERMISSIONS_REQUEST_CODE) {
 
             if (resultCode == Activity.RESULT_OK) {
-                statusGoogleSignIn.setCheck(true, getResources().getString(R.string.txt_googleFit_permission_granted));
+                statusViewGoogleFit.setCheck(true, getResources().getString(R.string.txt_googleFit_permission_granted));
             } else if (resultCode == Activity.RESULT_CANCELED) {
-                statusGoogleSignIn.setCheck(false, getResources().getString(R.string.txt_googleFit_permission_not_granted));
+                statusViewGoogleFit.setCheck(false, getResources().getString(R.string.txt_googleFit_permission_not_granted));
             }
         }
     }

@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 
 import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
+import com.health.openscale.sync.gui.view.StatusView;
 
 import java.util.Date;
 
@@ -24,4 +25,5 @@ public abstract class ScaleMeasurementSync {
     public abstract void delete(final Date date);
     public abstract void clear();
     public abstract void update(final ScaleMeasurement measurement);
+    public abstract void checkStatus(final StatusView statusView);
 }

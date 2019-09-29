@@ -7,6 +7,7 @@ import android.content.Context;
 
 import com.google.gson.Gson;
 import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
+import com.health.openscale.sync.gui.view.StatusView;
 
 import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
@@ -20,12 +21,15 @@ import java.util.Date;
 import timber.log.Timber;
 
 public class MQTTSync extends ScaleMeasurementSync {
+    private Context context;
     private MqttAndroidClient mqttAndroidClient;
+    private final String mqttServer;
     private final String clientId = "openScaleSync";
 
     public MQTTSync(Context context) {
         super(context);
-        final String mqttServer = prefs.getString("mqttServer", "noneMQTTServer");
+        this.context = context;
+        mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199");
         mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId);
     }
 
@@ -65,6 +69,32 @@ public class MQTTSync extends ScaleMeasurementSync {
         sendMessageToMQTT("measurements/update", jsonMeasurement);
     }
 
+    @Override
+    public void checkStatus(final StatusView statusView) {
+        Timber.d("Check MQTT sync status");
+
+        if (!isEnable()) {
+            statusView.setCheck(false, "MQTT sync is disabled");
+            return;
+        }
+
+        try {
+            mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken asyncActionToken) {
+                    statusView.setCheck(true, "Successful connected to " + mqttServer);
+                }
+
+                @Override
+                public void onFailure(IMqttToken asyncActionToken, final Throwable exception) {
+                    statusView.setCheck(false, "Failed to connect to " + mqttServer + " " + exception.toString());
+                }
+            });
+        } catch (MqttException ex) {
+            statusView.setCheck(false, ex.getMessage());
+        }
+    }
+
     private void sendMessageToMQTT(final String topic, final String payload) {
         try {
             mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
@@ -94,8 +124,8 @@ public class MQTTSync extends ScaleMeasurementSync {
     }
 
     private MqttConnectOptions getMQTTOptions() {
-        final String mqttUsername = prefs.getString("mqttUsername", "noneMQTTUsername");
-        final String mqttPassword = prefs.getString("mqttPassword", "noneMQTTPassword");
+        final String mqttUsername = prefs.getString("mqttUsername", "ztntplvc");
+        final String mqttPassword = prefs.getString("mqttPassword", "IqdBs7XMr-Kr");
 
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
         mqttConnectOptions.setAutomaticReconnect(true);
@@ -104,5 +134,9 @@ public class MQTTSync extends ScaleMeasurementSync {
         mqttConnectOptions.setPassword(mqttPassword.toCharArray());
 
         return mqttConnectOptions;
+    }
+
+    public final MqttAndroidClient getMqttAndroidClient() {
+        return mqttAndroidClient;
     }
 }

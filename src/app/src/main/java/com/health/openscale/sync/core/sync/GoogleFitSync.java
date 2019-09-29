@@ -11,6 +11,8 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessOptions;
 import com.google.android.gms.fitness.data.DataPoint;
@@ -29,6 +31,7 @@ import com.health.openscale.sync.BuildConfig;
 import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
 import com.health.openscale.sync.gui.MainActivity;
+import com.health.openscale.sync.gui.view.StatusView;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -221,6 +224,40 @@ public class GoogleFitSync extends ScaleMeasurementSync {
                         Timber.e(context.getResources().getString(R.string.txt_error_updating_googleFit_data) + " " + e.getMessage());
                     }
                 });
+    }
+
+    @Override
+    public void checkStatus(final StatusView statusView) {
+        Timber.d("Check GoogleFit sync status");
+
+        if (!isEnable()) {
+            statusView.setCheck(false, "GoogleFit sync is disabled");
+            return;
+        }
+
+        if (GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(context), GoogleFitSync.getFitnessOptions())) {
+            if (GoogleSignIn.getLastSignedInAccount(context).isExpired()) {
+                statusView.setCheck(false, context.getResources().getString(R.string.txt_google_sign_in_expired));
+
+                GoogleSignIn.getClient(context, GoogleSignInOptions.DEFAULT_SIGN_IN).
+                        silentSignIn().addOnSuccessListener(new OnSuccessListener<GoogleSignInAccount>() {
+                    @Override
+                    public void onSuccess(GoogleSignInAccount googleSignInAccount) {
+                        statusView.setCheck(true, context.getResources().getString(R.string.txt_googleFit_successful_sign_in));
+                    }
+                }).addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        statusView.setCheck(false, context.getResources().getString(R.string.txt_google_sign_in_failed));
+                    }
+                });
+
+            } else {
+                statusView.setCheck(true, context.getResources().getString(R.string.txt_googleFit_successful_sign_in));
+            }
+        } else {
+            statusView.setCheck(false, context.getResources().getString(R.string.txt_google_permission_not_granted));
+        }
     }
 
     public Task<DataReadResponse> queryMeasurements() {
