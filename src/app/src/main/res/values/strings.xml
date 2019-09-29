@@ -46,7 +46,7 @@
     <string name="txt_manual_sync_data">Manual sync data</string>
 
     <string name="txt_btn_ok">Ok</string>
-    <string name="txt_about_info">Copyright (C) 2019 All Rights Reserved\nby olie.xdev@googlemail.com\n\nWebsite https://github.com/oliexdev/openScale/wiki/openScale-sync</string>
+    <string name="txt_about_info">Copyright (C) 2019 All Rights Reserved\nby olie.xdev@googlemail.com</string>
 
     <string name="txt_successful_request_googleFit_measurements">Successful request GoogleFit measurements</string>
     <string name="txt_successful_updated_googleFit_data">Successful updated GoogleFit data</string>

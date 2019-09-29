@@ -4,13 +4,12 @@
 package com.health.openscale.sync.gui;
 
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.SpannableString;
-import android.text.method.LinkMovementMethod;
-import android.text.util.Linkify;
 import android.view.MenuItem;
-import android.widget.TextView;
 
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
@@ -97,9 +96,12 @@ public class MainActivity extends AppCompatActivity {
             case R.id.nav_mqtt_fragment:
                 fragmentClass = MQTTFragment.class;
                 break;
+            case R.id.nav_help:
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/oliexdev/openScale/wiki/openScale-sync")));
+                return;
             case R.id.nav_about:
                 showAboutDialog();
-                break;
+                return;
             default:
                 fragmentClass = OverviewFragment.class;
         }
@@ -127,7 +129,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void showAboutDialog() {
         final SpannableString abouotMsg = new SpannableString(getResources().getString(R.string.txt_about_info));
-        Linkify.addLinks(abouotMsg, Linkify.WEB_URLS);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(getResources().getString(R.string.app_name) + " " + String.format("v%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
@@ -137,8 +138,6 @@ public class MainActivity extends AppCompatActivity {
                 .create();
 
         dialog.show();
-
-        ((TextView)dialog.findViewById(android.R.id.message)).setMovementMethod(LinkMovementMethod.getInstance());
     }
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
