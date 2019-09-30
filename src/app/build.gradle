@@ -6,7 +6,7 @@ android {
         applicationId "com.health.openscale.sync"
         minSdkVersion 19
         targetSdkVersion 28
-        versionCode 4
+        versionCode 5
         versionName "0.3.1"
     }
     buildTypes {

@@ -23,7 +23,7 @@ import timber.log.Timber;
 public class MQTTSync extends ScaleMeasurementSync {
     private Context context;
     private MqttAndroidClient mqttAndroidClient;
-    private final String mqttServer;
+    private String mqttServer;
     private final String clientId = "openScaleSync";
 
     public MQTTSync(Context context) {
@@ -78,20 +78,45 @@ public class MQTTSync extends ScaleMeasurementSync {
             return;
         }
 
-        try {
-            mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
-                @Override
-                public void onSuccess(IMqttToken asyncActionToken) {
-                    statusView.setCheck(true, "Successful connected to " + mqttServer);
-                }
+        if (mqttAndroidClient.isConnected()) {
+            Timber.d("already connected to MQTT server, trying to disconnect");
 
-                @Override
-                public void onFailure(IMqttToken asyncActionToken, final Throwable exception) {
-                    statusView.setCheck(false, "Failed to connect to " + mqttServer + " " + exception.toString());
-                }
-            });
-        } catch (MqttException ex) {
-            statusView.setCheck(false, ex.getMessage());
+            try {
+                mqttAndroidClient.disconnect().setActionCallback(new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        Timber.d("succesful disconnected from MQTT server");
+                        checkStatus(statusView);
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                        statusView.setCheck(false, exception.getMessage());
+                    }
+                });
+            } catch (Exception ex) {
+                Timber.e(ex.getMessage());
+            }
+        } else {
+            try {
+                Timber.d("Trying to connect to MQTT server");
+                mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199");
+                mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId);
+
+                mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        statusView.setCheck(true, "Successful connected to " + mqttServer);
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, final Throwable exception) {
+                        statusView.setCheck(false, "Failed to connect to " + mqttServer + " " + exception.toString());
+                    }
+                });
+            } catch(MqttException ex){
+                statusView.setCheck(false, ex.getMessage());
+            }
         }
     }
 
