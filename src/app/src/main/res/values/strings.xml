@@ -75,4 +75,6 @@
     <string name="txt_mqtt_sync">MQTT sync</string>
     <string name="txt_mqtt_connection_sucessful">MQTT connection successful</string>
     <string name="txt_mqtt_status">MQTT status</string>
+    <string name="txt_mqtt_save_credentials">Save login credentials</string>
+    <string name="txt_mqtt_field_is_empty">field is empty</string>
 </resources>

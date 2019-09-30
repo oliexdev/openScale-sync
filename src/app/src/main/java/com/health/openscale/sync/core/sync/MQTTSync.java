@@ -128,10 +128,15 @@ public class MQTTSync extends ScaleMeasurementSync {
         final String mqttPassword = prefs.getString("mqttPassword", "IqdBs7XMr-Kr");
 
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
-        mqttConnectOptions.setAutomaticReconnect(true);
-        mqttConnectOptions.setCleanSession(true);
-        mqttConnectOptions.setUserName(mqttUsername);
-        mqttConnectOptions.setPassword(mqttPassword.toCharArray());
+
+        try {
+            mqttConnectOptions.setAutomaticReconnect(true);
+            mqttConnectOptions.setCleanSession(true);
+            mqttConnectOptions.setUserName(mqttUsername);
+            mqttConnectOptions.setPassword(mqttPassword.toCharArray());
+        } catch (Exception e) {
+            Timber.e(e.getMessage());
+        }
 
         return mqttConnectOptions;
     }

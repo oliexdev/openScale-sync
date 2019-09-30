@@ -7,8 +7,6 @@ import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -45,6 +43,7 @@ public class MQTTFragment extends Fragment {
     private EditText txtServer;
     private EditText txtUsername;
     private EditText txtPassword;
+    private Button btnSaveCredentials;
     private Button btnMQTTSync;
     private ProgressBar progressBar;
     private StatusView statusViewMQTT;
@@ -71,11 +70,37 @@ public class MQTTFragment extends Fragment {
         txtServer = fragment.findViewById(R.id.txtServer);
         txtUsername = fragment.findViewById(R.id.txtUsername);
         txtPassword = fragment.findViewById(R.id.txtPassword);
+        btnSaveCredentials = fragment.findViewById(R.id.btnSaveCredentials);
         btnMQTTSync = fragment.findViewById(R.id.btnMQTTSync);
         progressBar = fragment.findViewById(R.id.progressBar);
         statusViewMQTT = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status));
 
         mqttMainLayout.addView(statusViewMQTT);
+
+        btnSaveCredentials.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (txtServer.getText().toString().isEmpty()) {
+                    txtServer.setError(getResources().getString(R.string.txt_mqtt_field_is_empty));
+                } else {
+                    prefs.edit().putString("mqttServer", txtServer.getText().toString()).commit();
+                }
+
+                if (txtUsername.getText().toString().isEmpty()) {
+                    txtUsername.setError(getResources().getString(R.string.txt_mqtt_field_is_empty));
+                } else {
+                    prefs.edit().putString("mqttUsername", txtUsername.getText().toString()).commit();
+                }
+
+                if (txtPassword.getText().toString().isEmpty()) {
+                    txtPassword.setError(getResources().getString(R.string.txt_mqtt_field_is_empty));
+                } else {
+                    prefs.edit().putString("mqttPassword", txtPassword.getText().toString()).commit();
+                }
+
+                mqttSync.checkStatus(statusViewMQTT);
+            }
+        });
 
         btnMQTTSync.setOnClickListener(new onFullSyncClick());
 
@@ -92,10 +117,6 @@ public class MQTTFragment extends Fragment {
         txtServer.setText(prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199"));
         txtUsername.setText(prefs.getString("mqttUsername", "ztntplvc"));
         txtPassword.setText(prefs.getString("mqttPassword", "IqdBs7XMr-Kr"));
-
-        txtServer.addTextChangedListener(new onTextChangeListener("mqttServer"));
-        txtUsername.addTextChangedListener(new onTextChangeListener("mqttUsername"));
-        txtPassword.addTextChangedListener(new onTextChangeListener("mqttPassword"));
 
         checkStatusMQTT();
 
@@ -152,30 +173,6 @@ public class MQTTFragment extends Fragment {
                     });
                 }
             });
-        }
-    }
-
-    private class onTextChangeListener implements TextWatcher {
-        private String prefKey;
-
-        public onTextChangeListener(String key) {
-            prefKey = key;
-        }
-
-        @Override
-        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-
-        }
-
-        @Override
-        public void onTextChanged(CharSequence s, int start, int before, int count) {
-
-        }
-
-        @Override
-        public void afterTextChanged(Editable s) {
-            prefs.edit().putString(prefKey, s.toString()).commit();
-            mqttSync.checkStatus(statusViewMQTT);
         }
     }
 

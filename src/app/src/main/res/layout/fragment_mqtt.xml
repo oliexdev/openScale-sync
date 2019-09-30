@@ -84,6 +84,16 @@
 
     </LinearLayout>
 
+    <Button
+        android:id="@+id/btnSaveCredentials"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_margin="10dp"
+        android:background="@drawable/flat_selector"
+        android:text="@string/txt_mqtt_save_credentials"
+        android:textAllCaps="false" />
+
     <LinearLayout
         android:id="@+id/mqttMainLayout"
         android:layout_width="match_parent"
