@@ -121,30 +121,37 @@ public class MQTTSync extends ScaleMeasurementSync {
     }
 
     private void sendMessageToMQTT(final String topic, final String payload) {
-        try {
-            mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
-                @Override
-                public void onSuccess(IMqttToken asyncActionToken) {
-                    MqttMessage msg = new MqttMessage();
-                    msg.setPayload(payload.getBytes());
-                    msg.setQos(2);
+        final MqttMessage msg = new MqttMessage();
+        msg.setPayload(payload.getBytes());
+        msg.setQos(2);
 
-                    try {
-                        Timber.d("Succesful published on " + topic + " with message " + msg);
-                        mqttAndroidClient.publish("openScaleSync/" + topic, msg);
-                        mqttAndroidClient.disconnect();
-                    } catch (MqttException ex) {
-                        Timber.e(ex.getMessage());
+        if (mqttAndroidClient.isConnected()) {
+            try {
+                mqttAndroidClient.publish("openScaleSync/" + topic, msg);
+            } catch(MqttException ex){
+                Timber.e(ex.getMessage());
+            }
+        } else{
+            try{
+                mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        try {
+                            Timber.d("Succesful published on " + topic + " with message " + msg);
+                            mqttAndroidClient.publish("openScaleSync/" + topic, msg);
+                        } catch (MqttException ex) {
+                            Timber.e(ex.getMessage());
+                        }
                     }
-                }
 
-                @Override
-                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                    Timber.e(exception.toString());
-                }
-            });
-        } catch (MqttException ex) {
-            Timber.e(ex.getMessage());
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                        Timber.e(exception.toString());
+                    }
+                });
+            } catch(MqttException ex){
+                    Timber.e(ex.getMessage());
+            }
         }
     }
 
