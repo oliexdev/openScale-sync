@@ -1,4 +1,4 @@
-# ![openScale sync logo](https://github.com/oliexdev/openScale/blob/master/doc/sync/openscale_sync.png) openScale sync
+# ![openScale sync logo](https://github.com/oliexdev/openScale/blob/master/docs/sync/openscale_sync.png) openScale sync
 
 <a href="https://play.google.com/store/apps/details?id=com.health.openscale.sync" target="_blank">
 <img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" alt="Get it on Google Play" height="80"/></a>
