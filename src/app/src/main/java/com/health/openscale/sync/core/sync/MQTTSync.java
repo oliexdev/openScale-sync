@@ -10,8 +10,11 @@ import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
 import com.health.openscale.sync.gui.view.StatusView;
 
 import org.eclipse.paho.android.service.MqttAndroidClient;
+import org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -25,6 +28,7 @@ public class MQTTSync extends ScaleMeasurementSync {
     private MqttAndroidClient mqttAndroidClient;
     private String mqttServer;
     private final String clientId = "openScaleSync";
+    private final String SUBSCRIPTION_TOPIC_SYNC = "measurements/sync";
 
     public MQTTSync(Context context) {
         super(context);
@@ -107,6 +111,14 @@ public class MQTTSync extends ScaleMeasurementSync {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
                         statusView.setCheck(true, "Successful connected to " + mqttServer);
+                        DisconnectedBufferOptions disconnectedBufferOptions = new DisconnectedBufferOptions();
+                        disconnectedBufferOptions.setBufferEnabled(true);
+                        disconnectedBufferOptions.setBufferSize(100);
+                        disconnectedBufferOptions.setPersistBuffer(false);
+                        disconnectedBufferOptions.setDeleteOldestMessages(false);
+                        mqttAndroidClient.setBufferOpts(disconnectedBufferOptions);
+
+                        subscribeToTopic(SUBSCRIPTION_TOPIC_SYNC);
                     }
 
                     @Override
@@ -114,9 +126,58 @@ public class MQTTSync extends ScaleMeasurementSync {
                         statusView.setCheck(false, "Failed to connect to " + mqttServer + " " + exception.toString());
                     }
                 });
+
+                mqttAndroidClient.setCallback(new MqttCallbackExtended() {
+                    @Override
+                    public void connectComplete(boolean b, String s) {
+
+                    }
+
+                    @Override
+                    public void connectionLost(Throwable throwable) {
+
+                    }
+
+                    @Override
+                    public void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
+                        Timber.d("MQTT message received: " + mqttMessage.toString() + " on topic " + topic);
+
+                        if (topic.equals(clientId + "/" + SUBSCRIPTION_TOPIC_SYNC)) {
+                            if (mqttMessage.toString().equals("true")) {
+                                Timber.d("MQTT sync request received");
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void deliveryComplete(IMqttDeliveryToken iMqttDeliveryToken) {
+
+                    }
+                });
             } catch(MqttException ex){
                 statusView.setCheck(false, ex.getMessage());
             }
+        }
+    }
+
+    private void subscribeToTopic(final String subscriptionTopic) {
+        try {
+            mqttAndroidClient.unsubscribe(clientId + "/" + subscriptionTopic);
+
+            mqttAndroidClient.subscribe(clientId + "/" + subscriptionTopic, 0, null, new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken asyncActionToken) {
+                    Timber.d("MQTT subscribe successfull to " + clientId + "/" + subscriptionTopic);
+                }
+
+                @Override
+                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                    Timber.d("MQTT subscribe failed to" + clientId + "/" + subscriptionTopic);
+                }
+            });
+
+        } catch (MqttException ex) {
+            Timber.e("MQTT subscribe failed: " + ex.getMessage());
         }
     }
 
