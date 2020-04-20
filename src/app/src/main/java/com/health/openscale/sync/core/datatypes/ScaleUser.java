@@ -4,6 +4,9 @@
 
 package com.health.openscale.sync.core.datatypes;
 
+import androidx.annotation.Keep;
+
+@Keep
 public class ScaleUser {
     public ScaleUser(int userid, String name) {
         this.userid = userid;

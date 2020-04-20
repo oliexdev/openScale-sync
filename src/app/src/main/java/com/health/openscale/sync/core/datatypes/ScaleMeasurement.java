@@ -4,8 +4,11 @@
 
 package com.health.openscale.sync.core.datatypes;
 
+import androidx.annotation.Keep;
+
 import java.util.Date;
 
+@Keep
 public class ScaleMeasurement {
     private long date;
     private float weight;
