@@ -1,0 +1,72 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+opt_out_usage
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+# Add gradle get version name plugin
+# fastlane add_plugin get_version_name
+
+default_platform(:android)
+
+platform :android do 
+    versionName = get_version_name(
+        gradle_file_path:"src/app/build.gradle",
+        ext_constant_name:"versionName"
+    )
+
+    versionCode = get_version_name(
+        gradle_file_path:"src/app/build.gradle",
+        ext_constant_name:"versionCode"
+    )
+
+    desc "Generate release version"
+    lane :release do |options|
+        gradle(
+            task: "clean", 
+            project_dir: 'src/'
+        )
+        gradle(
+            task: "assemble",
+            project_dir: 'src/',
+            build_type: "Release"
+        )
+    end
+
+    desc "Deploy a new version to Google Play"
+    lane :deployRelease do
+        gradle(
+            task: "clean", 
+            project_dir: 'src/'
+        )
+        gradle(
+            task: "assemble",
+            project_dir: 'src/',
+            build_type: "Release"
+        )
+        upload_to_play_store
+    end
+
+    desc "Deploy a new version to GitHub"
+    lane :deployGitHubRelease do
+        set_github_release(
+            repository_name: "oliexdev/openScale-sync",
+            api_token: ENV["OLIEXDEV_GITHUB_API_TOKEN"],
+            name: "openScale sync #{versionName} release",
+            tag_name: "v#{versionName}",
+            description: (File.read("metadata/android/en-GB/changelogs/#{versionCode}.txt") rescue "No changelog provided"),
+            upload_assets: [ "src/app/build/outputs/apk/release/openScale_sync-#{versionName}.apk" ]
+        )
+    end
+end
