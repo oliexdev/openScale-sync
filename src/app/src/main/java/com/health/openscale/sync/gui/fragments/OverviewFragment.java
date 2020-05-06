@@ -46,7 +46,7 @@ public class OverviewFragment extends Fragment {
     private SharedPreferences prefs;
 
     private LinearLayout overviewMainLayout;
-    private DebugTree debugTree;
+    static private DebugTree debugTree = new DebugTree();
     private Switch chkDebugLog;
     private StatusView statusViewGoogleFitSync;
     private StatusView statusViewMQTTSync;
@@ -61,7 +61,7 @@ public class OverviewFragment extends Fragment {
     private MQTTSync mqttSync;
 
     public OverviewFragment() {
-        debugTree = new DebugTree();
+
     }
 
     @Override
@@ -77,6 +77,7 @@ public class OverviewFragment extends Fragment {
 
         chkDebugLog = fragment.findViewById(R.id.chkDebugLog);
 
+        chkDebugLog.setChecked(debugTree.isLogging());
         chkDebugLog.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {

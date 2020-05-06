@@ -87,6 +87,8 @@ public class GoogleFitSync extends ScaleMeasurementSync {
             mainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(mainIntent);
 
+            Timber.d("Can't sign into Google, last signed in account was expired");
+
             showToast(context.getResources().getString(R.string.txt_error_cannot_sign_in_to_googleFit));
 
             return false;

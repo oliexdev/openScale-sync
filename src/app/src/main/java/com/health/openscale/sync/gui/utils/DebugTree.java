@@ -23,7 +23,11 @@ import timber.log.Timber;
 
 public class DebugTree {
 
+    private boolean isLogging;
+
     public DebugTree() {
+        isLogging = false;
+
         if (Timber.forest().isEmpty()) {
             Timber.plant(new Timber.DebugTree());
         }
@@ -49,6 +53,8 @@ public class DebugTree {
                     context.getResources().getString(R.string.app_name),
                     BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE,
                     Build.VERSION.SDK_INT, Build.MANUFACTURER, Build.MODEL);
+
+            isLogging = true;
         }
         catch (IOException ex) {
             Timber.e(ex, "Failed to open debug log %s", uri.toString());
@@ -61,7 +67,12 @@ public class DebugTree {
             Timber.d("Debug log disabled");
             Timber.uproot(tree);
             tree.close();
+            isLogging = false;
         }
+    }
+
+    public boolean isLogging() {
+        return isLogging;
     }
 
     private FileDebugTree getEnabledFileDebugTree() {
