@@ -89,7 +89,7 @@ public class MQTTSync extends ScaleMeasurementSync {
                 mqttAndroidClient.disconnect().setActionCallback(new IMqttActionListener() {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
-                        Timber.d("succesful disconnected from MQTT server");
+                        Timber.d("successful disconnected from MQTT server");
                         checkStatus(statusView);
                     }
 
@@ -167,7 +167,7 @@ public class MQTTSync extends ScaleMeasurementSync {
             mqttAndroidClient.subscribe(clientId + "/" + subscriptionTopic, 0, null, new IMqttActionListener() {
                 @Override
                 public void onSuccess(IMqttToken asyncActionToken) {
-                    Timber.d("MQTT subscribe successfull to " + clientId + "/" + subscriptionTopic);
+                    Timber.d("MQTT subscribe successful to " + clientId + "/" + subscriptionTopic);
                 }
 
                 @Override
@@ -198,7 +198,7 @@ public class MQTTSync extends ScaleMeasurementSync {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
                         try {
-                            Timber.d("Succesful published on " + topic + " with message " + msg);
+                            Timber.d("Successful published on " + topic + " with message " + msg);
                             mqttAndroidClient.publish("openScaleSync/" + topic, msg);
                         } catch (MqttException ex) {
                             Timber.e(ex.getMessage());
