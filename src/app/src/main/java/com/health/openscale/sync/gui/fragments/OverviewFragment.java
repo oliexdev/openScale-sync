@@ -29,6 +29,7 @@ import com.health.openscale.sync.core.datatypes.ScaleUser;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.GoogleFitSync;
 import com.health.openscale.sync.core.sync.MQTTSync;
+import com.health.openscale.sync.core.sync.WgerSync;
 import com.health.openscale.sync.gui.utils.DebugTree;
 import com.health.openscale.sync.gui.view.StatusView;
 
@@ -50,6 +51,7 @@ public class OverviewFragment extends Fragment {
     private Switch chkDebugLog;
     private StatusView statusViewGoogleFitSync;
     private StatusView statusViewMQTTSync;
+    private StatusView statusViewWgerSync;
     private StatusView statusViewOpenScale;
     private StatusView statusOpenScaleUser;
     private Button btnInstallOpenScale;
@@ -59,6 +61,7 @@ public class OverviewFragment extends Fragment {
 
     private GoogleFitSync googleFitSync;
     private MQTTSync mqttSync;
+    private WgerSync wgerSync;
 
     public OverviewFragment() {
 
@@ -74,6 +77,7 @@ public class OverviewFragment extends Fragment {
 
         googleFitSync = new GoogleFitSync(getContext());
         mqttSync = new MQTTSync(getContext());
+        wgerSync = new WgerSync(getContext());
 
         chkDebugLog = fragment.findViewById(R.id.chkDebugLog);
 
@@ -116,9 +120,11 @@ public class OverviewFragment extends Fragment {
 
         statusViewGoogleFitSync = new StatusView(getContext(), getResources().getString(R.string.txt_googlefit_status));
         statusViewMQTTSync = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status));
+        statusViewWgerSync = new StatusView(getContext(), getResources().getString(R.string.txt_wger_status));
 
         overviewMainLayout.addView(statusViewGoogleFitSync);
         overviewMainLayout.addView(statusViewMQTTSync);
+        overviewMainLayout.addView(statusViewWgerSync);
         overviewMainLayout.addView(statusViewOpenScale);
         overviewMainLayout.addView(statusOpenScaleUser);
 
@@ -179,6 +185,7 @@ public class OverviewFragment extends Fragment {
 
         googleFitSync.checkStatus(statusViewGoogleFitSync);
         mqttSync.checkStatus(statusViewMQTTSync);
+        wgerSync.checkStatus(statusViewWgerSync);
     }
 
     private boolean checkOpenScaleConnection() {

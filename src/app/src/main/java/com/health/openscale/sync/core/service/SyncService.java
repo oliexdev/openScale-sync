@@ -23,6 +23,7 @@ import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
 import com.health.openscale.sync.core.sync.GoogleFitSync;
 import com.health.openscale.sync.core.sync.MQTTSync;
 import com.health.openscale.sync.core.sync.ScaleMeasurementSync;
+import com.health.openscale.sync.core.sync.WgerSync;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -50,6 +51,7 @@ public class SyncService extends Service {
         scaleMeasurementSyncList = new ArrayList<>();
         scaleMeasurementSyncList.add(new GoogleFitSync(getApplicationContext()));
         scaleMeasurementSyncList.add(new MQTTSync(getApplicationContext()));
+        scaleMeasurementSyncList.add(new WgerSync(getApplicationContext()));
 
         prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
 
