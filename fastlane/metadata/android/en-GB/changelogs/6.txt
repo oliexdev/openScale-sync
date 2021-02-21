@@ -1,0 +1,4 @@
+v0.3.2:
+* synchronization with wger the workout manager (https://wger.de/)
+* support for round launcher icons
+* minor bug fixes
