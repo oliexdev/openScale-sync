@@ -35,6 +35,7 @@ import retrofit2.http.GET;
 import retrofit2.http.PATCH;
 import retrofit2.http.POST;
 import retrofit2.http.Path;
+import retrofit2.http.Query;
 import timber.log.Timber;
 
 import static android.os.Looper.getMainLooper;
@@ -48,23 +49,45 @@ public class WgerSync extends ScaleMeasurementSync {
         super(context);
         this.context = context;
 
-        OkHttpClient client = new OkHttpClient.Builder().addInterceptor(new Interceptor() {
-            @Override
-            public okhttp3.Response intercept(Chain chain) throws IOException {
-                Request newRequest  = chain.request().newBuilder()
-                        .addHeader("Authorization", "Token " + prefs.getString("wgerApiKey", "Insert here the REST API KEY"))
-                        .build();
-                return chain.proceed(newRequest);
-            }
-        }).build();
+        try {
+            OkHttpClient client = new OkHttpClient.Builder().addInterceptor(new Interceptor() {
+                @Override
+                public okhttp3.Response intercept(Chain chain) throws IOException {
+                    Request newRequest = chain.request().newBuilder()
+                            .addHeader("Authorization", "Token " + prefs.getString("wgerApiKey", "7faf59e0fac4aceb12d90c2f2603349d4de8471b"))
+                            .build();
+                    return chain.proceed(newRequest);
+                }
+            }).build();
 
-        wgerRetrofit = new Retrofit.Builder()
-                .client(client)
-                .baseUrl("https://wger.de/api/v2/")
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
+            wgerRetrofit = new Retrofit.Builder()
+                    .client(client)
+                    .baseUrl(prefs.getString("wgerServer", "https://wger.de/api/v2/"))
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build();
 
-        wgerApi = wgerRetrofit.create(WgerApi.class);
+            wgerApi = wgerRetrofit.create(WgerApi.class);
+        } catch (Exception ex) {
+            showToast(ex.getMessage() + " using default url https://wger.de/api/v2/");
+
+            OkHttpClient client = new OkHttpClient.Builder().addInterceptor(new Interceptor() {
+                @Override
+                public okhttp3.Response intercept(Chain chain) throws IOException {
+                    Request newRequest = chain.request().newBuilder()
+                            .addHeader("Authorization", "Token " + prefs.getString("wgerApiKey", "7faf59e0fac4aceb12d90c2f2603349d4de8471b"))
+                            .build();
+                    return chain.proceed(newRequest);
+                }
+            }).build();
+
+            wgerRetrofit = new Retrofit.Builder()
+                    .client(client)
+                    .baseUrl("https://wger.de/api/v2/")
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build();
+
+            wgerApi = wgerRetrofit.create(WgerApi.class);
+        }
     }
 
     @Override
@@ -87,7 +110,7 @@ public class WgerSync extends ScaleMeasurementSync {
         });
     }
 
-    public Call<WgerWeightEntry> getWgerWeightList() {
+    public Call<WgerWeightEntryList> getWgerWeightList() {
         return wgerApi.getWeightEntryList();
     }
 
@@ -117,36 +140,34 @@ public class WgerSync extends ScaleMeasurementSync {
     public void delete(final Date date) {
         String wgerDateFormat = DateFormat.format("yyyy-MM-dd", date).toString();
 
-        Call<WgerWeightEntry> callWgerWeightEntryList = wgerApi.getWeightEntryList();
+        Call<WgerWeightEntryList> callWgerWeightEntry = wgerApi.getWeightEntry(wgerDateFormat);
 
-        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntry>() {
+        callWgerWeightEntry.enqueue(new Callback<WgerWeightEntryList>() {
             @Override
-            public void onResponse(Call<WgerWeightEntry> call, Response<WgerWeightEntry> response) {
+            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
                 if (response.isSuccessful()) {
-                    Timber.d("successfully wger weight entry list updated");
-                    List<WgerWeightEntry.WeightEntry> wgerWeightEntryList = response.body().results;
+                    List<WgerWeightEntry> wgerWeightEntryList = response.body().results;
 
-                    for (WgerWeightEntry.WeightEntry wgerWeightEntry : wgerWeightEntryList) {
-                        if (wgerDateFormat.equals(wgerWeightEntry.date)) {
-                            Call<ResponseBody> responseBodyCall = wgerApi.delete(wgerWeightEntry.id);
+                    if (!wgerWeightEntryList.isEmpty()) {
+                        long wgerId = wgerWeightEntryList.get(0).id;
+                        Call<ResponseBody> responseBodyCall = wgerApi.delete(wgerId);
 
-                            responseBodyCall.enqueue(new Callback<ResponseBody>() {
-                                @Override
-                                public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                                    if (response.isSuccessful()) {
-                                        Timber.d("wger successful deleted " + response.message());
-                                        return;
-                                    } else {
-                                        Timber.d("wger delete response error " + response.message());
-                                    }
+                        responseBodyCall.enqueue(new Callback<ResponseBody>() {
+                            @Override
+                            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                                if (response.isSuccessful()) {
+                                    Timber.d("wger successful deleted " + response.message());
+                                    return;
+                                } else {
+                                    Timber.d("wger delete response error " + response.message());
                                 }
+                            }
 
-                                @Override
-                                public void onFailure(Call<ResponseBody> call, Throwable t) {
-                                    Timber.e("wger update delete " + t.getMessage());
-                                }
-                            });
-                        }
+                            @Override
+                            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                                Timber.e("wger update delete " + t.getMessage());
+                            }
+                        });
                     }
                 } else {
                     Timber.d("get weight entry list error " + response.message());
@@ -154,7 +175,7 @@ public class WgerSync extends ScaleMeasurementSync {
             }
 
             @Override
-            public void onFailure(Call<WgerWeightEntry> call, Throwable t) {
+            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
                 Timber.e("get weight entry list failure " + t.getMessage());
             }
         });
@@ -163,16 +184,16 @@ public class WgerSync extends ScaleMeasurementSync {
 
     @Override
     public void clear() {
-        Call<WgerWeightEntry> callWgerWeightEntryList = wgerApi.getWeightEntryList();
+        Call<WgerWeightEntryList> callWgerWeightEntryList = wgerApi.getWeightEntryList();
 
-        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntry>() {
+        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntryList>() {
             @Override
-            public void onResponse(Call<WgerWeightEntry> call, Response<WgerWeightEntry> response) {
+            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
                 if (response.isSuccessful()) {
                     Timber.d("successfully wger weight entry list updated");
-                    List<WgerWeightEntry.WeightEntry> wgerWeightEntryList = response.body().results;
+                    List<WgerWeightEntry> wgerWeightEntryList = response.body().results;
 
-                    for (WgerWeightEntry.WeightEntry wgerWeightEntry : wgerWeightEntryList) {
+                    for (WgerWeightEntry wgerWeightEntry : wgerWeightEntryList) {
                         Call<ResponseBody> responseBodyCall = wgerApi.delete(wgerWeightEntry.id);
 
                         responseBodyCall.enqueue(new Callback<ResponseBody>() {
@@ -197,7 +218,7 @@ public class WgerSync extends ScaleMeasurementSync {
             }
 
             @Override
-            public void onFailure(Call<WgerWeightEntry> call, Throwable t) {
+            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
                 Timber.e("get weight entry list failure " + t.getMessage());
             }
         });
@@ -207,35 +228,33 @@ public class WgerSync extends ScaleMeasurementSync {
     public void update(final ScaleMeasurement measurement) {
         String wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.getDate()).toString();
 
-        Call<WgerWeightEntry> callWgerWeightEntryList = wgerApi.getWeightEntryList();
+        Call<WgerWeightEntryList> callWgerWeightEntryList = wgerApi.getWeightEntry(wgerDateFormat);
 
-        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntry>() {
+        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntryList>() {
             @Override
-            public void onResponse(Call<WgerWeightEntry> call, Response<WgerWeightEntry> response) {
+            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
                 if (response.isSuccessful()) {
-                    Timber.d("successfully wger weight entry list updated");
-                    List<WgerWeightEntry.WeightEntry> wgerWeightEntryList = response.body().results;
+                    List<WgerWeightEntry> wgerWeightEntryList = response.body().results;
 
-                    for (WgerWeightEntry.WeightEntry wgerWeightEntry : wgerWeightEntryList) {
-                        if (wgerDateFormat.equals(wgerWeightEntry.date)) {
-                            Call<ResponseBody> responseBodyCall = wgerApi.update(wgerWeightEntry.id, wgerDateFormat, measurement.getWeight());
+                    if (!wgerWeightEntryList.isEmpty()) {
+                        long wgerId = wgerWeightEntryList.get(0).id;
+                        Call<ResponseBody> responseBodyCall = wgerApi.update(wgerId, wgerDateFormat, measurement.getWeight());
 
-                            responseBodyCall.enqueue(new Callback<ResponseBody>() {
-                                @Override
-                                public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                                    if (response.isSuccessful()) {
-                                        Timber.d("wger successful updated " + response.message());
-                                    } else {
-                                        Timber.d("wger update response error " + response.message());
-                                    }
+                        responseBodyCall.enqueue(new Callback<ResponseBody>() {
+                            @Override
+                            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                                if (response.isSuccessful()) {
+                                    Timber.d("wger successful updated " + response.message());
+                                } else {
+                                    Timber.d("wger update response error " + response.message());
                                 }
+                            }
 
-                                @Override
-                                public void onFailure(Call<ResponseBody> call, Throwable t) {
-                                    Timber.e("wger update failure " + t.getMessage());
-                                }
-                            });
-                        }
+                            @Override
+                            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                                Timber.e("wger update failure " + t.getMessage());
+                            }
+                        });
                     }
                 } else {
                     Timber.d("get weight entry list error " + response.message());
@@ -243,7 +262,7 @@ public class WgerSync extends ScaleMeasurementSync {
             }
 
             @Override
-            public void onFailure(Call<WgerWeightEntry> call, Throwable t) {
+            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
                 Timber.e("get weight entry list failure " + t.getMessage());
             }
         });
@@ -258,11 +277,11 @@ public class WgerSync extends ScaleMeasurementSync {
             return;
         }
 
-        Call<WgerWeightEntry> callWgerWeightEntryList = wgerApi.getWeightEntryList();
+        Call<WgerWeightEntryList> callWgerWeightEntryList = wgerApi.getWeightEntryList();
 
-        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntry>() {
+        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntryList>() {
             @Override
-            public void onResponse(Call<WgerWeightEntry> call, Response<WgerWeightEntry> response) {
+            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
                 if (response.isSuccessful()) {
                     statusView.setCheck(true, context.getResources().getString(R.string.txt_wger_connection_successful));
                     Timber.d("wger successful connected " + response.message());
@@ -273,7 +292,7 @@ public class WgerSync extends ScaleMeasurementSync {
             }
 
             @Override
-            public void onFailure(Call<WgerWeightEntry> call, Throwable t) {
+            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
                 statusView.setCheck(false, context.getResources().getString(R.string.txt_wger_wrong_api_key));
                 Timber.e("get connection failure " + t.getMessage());
             }
@@ -282,7 +301,10 @@ public class WgerSync extends ScaleMeasurementSync {
 
     private interface WgerApi {
         @GET("weightentry")
-        Call<WgerWeightEntry> getWeightEntryList();
+        Call<WgerWeightEntryList> getWeightEntryList();
+
+        @GET("weightentry/")
+        Call<WgerWeightEntryList> getWeightEntry(@Query("date") String wgerDate);
 
         @POST("weightentry/")
         @FormUrlEncoded
@@ -297,18 +319,19 @@ public class WgerSync extends ScaleMeasurementSync {
     }
 
     @Keep
-    public class WgerWeightEntry {
+    public class WgerWeightEntryList {
         @SerializedName("results")
-        public List<WeightEntry> results;
+        public List<WgerWeightEntry> results;
+    }
 
-        public class WeightEntry {
-            @SerializedName("id")
-            public long id;
-            @SerializedName("date")
-            public String date;
-            @SerializedName("weight")
-            public float weight;
-        }
+    @Keep
+    public class WgerWeightEntry {
+        @SerializedName("id")
+        public long id;
+        @SerializedName("date")
+        public String date;
+        @SerializedName("weight")
+        public float weight;
     }
 }
 

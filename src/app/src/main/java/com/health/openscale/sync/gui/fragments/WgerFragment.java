@@ -41,6 +41,7 @@ public class WgerFragment extends Fragment {
 
     private LinearLayout wgerMainLayout;
     private Switch toggleWgerSync;
+    private EditText txtServer;
     private EditText txtApiKey;
     private Button btnSaveCredentials;
     private Button btnWgerSync;
@@ -64,6 +65,7 @@ public class WgerFragment extends Fragment {
 
         wgerMainLayout = fragment.findViewById(R.id.wgerMainLayout);
         toggleWgerSync = fragment.findViewById(R.id.toggleWger);
+        txtServer = fragment.findViewById(R.id.txtServer);
         txtApiKey = fragment.findViewById(R.id.txtApiKey);
         btnSaveCredentials = fragment.findViewById(R.id.btnSaveCredentials);
         btnWgerSync = fragment.findViewById(R.id.btnWgerSync);
@@ -78,6 +80,16 @@ public class WgerFragment extends Fragment {
             @Override
             public void onClick(View v) {
                 if (v.isPressed()) {
+                    if (txtServer.getText().toString().isEmpty()) {
+                        txtServer.setError(getResources().getString(R.string.txt_mqtt_field_is_empty));
+                    } else {
+                        if (txtServer.getText().toString().endsWith("/")) {
+                            prefs.edit().putString("wgerServer", txtServer.getText().toString()).commit();
+                        } else {
+                            txtServer.setError(getResources().getString(R.string.txt_wger_server_not_end_with_slash));
+                        }
+                    }
+
                     if (txtApiKey.getText().toString().isEmpty()) {
                         txtApiKey.setError(getResources().getString(R.string.txt_mqtt_field_is_empty));
                     } else {
@@ -101,8 +113,10 @@ public class WgerFragment extends Fragment {
             }
         });
 
+        txtServer.setText(prefs.getString("wgerServer", "https://wger.de/api/v2/"));
         txtApiKey.setText(prefs.getString("wgerApiKey", "7faf59e0fac4aceb12d90c2f2603349d4de8471b"));
 
+        txtServer.addTextChangedListener(new onTextChangeListener());
         txtApiKey.addTextChangedListener(new onTextChangeListener());
 
         checkStatusWger();
@@ -151,16 +165,16 @@ public class WgerFragment extends Fragment {
 
                 Timber.d(getResources().getString(R.string.txt_manual_sync_wgerFit_openScale));
 
-                Call<WgerSync.WgerWeightEntry> callWgerWeightEntryList = wgerSync.getWgerWeightList();
+                Call<WgerSync.WgerWeightEntryList> callWgerWeightEntryList = wgerSync.getWgerWeightList();
 
-                callWgerWeightEntryList.enqueue(new Callback<WgerSync.WgerWeightEntry>() {
+                callWgerWeightEntryList.enqueue(new Callback<WgerSync.WgerWeightEntryList>() {
                     @Override
-                    public void onResponse(Call<WgerSync.WgerWeightEntry> call, Response<WgerSync.WgerWeightEntry> response) {
+                    public void onResponse(Call<WgerSync.WgerWeightEntryList> call, Response<WgerSync.WgerWeightEntryList> response) {
                         if (response.isSuccessful()) {
                             Timber.d("successfully wger weight entry list");
-                            List<WgerSync.WgerWeightEntry.WeightEntry> wgerWeightEntryList = response.body().results;
+                            List<WgerSync.WgerWeightEntry> wgerWeightEntryList = response.body().results;
 
-                            for (WgerSync.WgerWeightEntry.WeightEntry wgerWeightEntry : wgerWeightEntryList) {
+                            for (WgerSync.WgerWeightEntry wgerWeightEntry : wgerWeightEntryList) {
                                 SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
                                 try {
                                     Date wgerDate = format.parse(wgerWeightEntry.date);
@@ -178,7 +192,7 @@ public class WgerFragment extends Fragment {
                     }
 
                     @Override
-                    public void onFailure(Call<WgerSync.WgerWeightEntry> call, Throwable t) {
+                    public void onFailure(Call<WgerSync.WgerWeightEntryList> call, Throwable t) {
                         progressBar.setVisibility(View.GONE);
                         btnWgerSync.setEnabled(true);
                         Timber.e("get weight entry list failure " + t.getMessage());
