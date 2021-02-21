@@ -1,1 +1,1 @@
-openScale synchronisation service to GoogleFit and/or MQTT
+openScale synchronisation service to GoogleFit, wger and/or MQTT

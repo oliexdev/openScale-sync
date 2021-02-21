@@ -1,8 +1,8 @@
-Synchronise your openScale weight data to GoogleFit and/or MQTT.
+Synchronise your openScale weight data to GoogleFit, wger and/or MQTT.
 
 Features:
-* automatic synchronization to GoogleFit and/or MQTT 3.1 when inserting, editing, deleting in openScale
-* manual complete synchronization from/to openScale/GoogleFit/MQTT 3.1
+* automatic synchronization to GoogleFit, wger and/or MQTT 3.1 when inserting, editing, deleting in openScale
+* manual complete synchronization from/to openScale/GoogleFit/wger/MQTT 3.1
 * background service which is only called when needed (low battery consumption)
 * selectable openScale user to synchronize with
 * easy to use graphical user interface
