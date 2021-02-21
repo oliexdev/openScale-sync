@@ -13,7 +13,7 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@drawable/ic_launcher_openscale_sync"
+        android:icon="@mipmap/ic_launcher_openscale_sync"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
