@@ -25,6 +25,7 @@ import com.health.openscale.sync.R;
 import com.health.openscale.sync.gui.fragments.GoogleFitFragment;
 import com.health.openscale.sync.gui.fragments.MQTTFragment;
 import com.health.openscale.sync.gui.fragments.OverviewFragment;
+import com.health.openscale.sync.gui.fragments.WgerFragment;
 
 import cat.ereza.customactivityoncrash.config.CaocConfig;
 import timber.log.Timber;
@@ -95,6 +96,9 @@ public class MainActivity extends AppCompatActivity {
                 break;
             case R.id.nav_mqtt_fragment:
                 fragmentClass = MQTTFragment.class;
+                break;
+            case R.id.nav_wger_fragment:
+                fragmentClass = WgerFragment.class;
                 break;
             case R.id.nav_help:
                 startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/oliexdev/openScale/wiki/openScale-sync")));

@@ -77,4 +77,12 @@
     <string name="txt_mqtt_status">MQTT status</string>
     <string name="txt_mqtt_save_credentials">Save login credentials</string>
     <string name="txt_mqtt_field_is_empty">field is empty</string>
+
+    <string name="txt_wger_sync">Wger sync</string>
+    <string name="txt_wger_status">Wger status</string>
+    <string name="txt_wger_connection_successful">Wger connection successful</string>
+    <string name="txt_wger_wrong_api_key">Probably wrong wger REST API Key</string>
+    <string name="txt_wger_server_not_end_with_slash">Server name needs to end with /</string>
+    <string name="txt_manual_sync_wgerFit_openScale">Manual sync wger measurements -> openScale</string>
+    <string name="txt_manual_sync_openScale_wgerFit">Manual sync openScale measurements -> wger</string>
 </resources>

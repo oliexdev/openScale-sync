@@ -109,10 +109,15 @@ public class GoogleFitSync extends ScaleMeasurementSync {
                         .setType(DataSource.TYPE_RAW)
                         .build();
 
-        DataSet dataSet = DataSet.create(dataSource);
-        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(measurement.getDate().getTime(), TimeUnit.MILLISECONDS);
-        dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(measurement.getWeight());
-        dataSet.add(dataPoint);
+
+        DataPoint dataPoint = DataPoint.builder(dataSource)
+                .setTimestamp(measurement.getDate().getTime(), TimeUnit.MILLISECONDS)
+                .setField(Field.FIELD_WEIGHT, measurement.getWeight())
+                .build();
+
+        DataSet dataSet = DataSet.builder(dataSource)
+                .add(dataPoint)
+                .build();
 
         Fitness.getHistoryClient(context, GoogleSignIn.getLastSignedInAccount(context))
                 .insertData(dataSet)
@@ -202,10 +207,14 @@ public class GoogleFitSync extends ScaleMeasurementSync {
                 .setType(DataSource.TYPE_RAW)
                 .build();
 
-        DataSet dataSet = DataSet.create(dataSource);
-        DataPoint dataPoint = dataSet.createDataPoint().setTimestamp(measurement.getDate().getTime(), TimeUnit.MILLISECONDS);
-        dataPoint.getValue(Field.FIELD_WEIGHT).setFloat(measurement.getWeight());
-        dataSet.add(dataPoint);
+        DataPoint dataPoint = DataPoint.builder(dataSource)
+                .setTimestamp(measurement.getDate().getTime(), TimeUnit.MILLISECONDS)
+                .setField(Field.FIELD_WEIGHT, measurement.getWeight())
+                .build();
+
+        DataSet dataSet = DataSet.builder(dataSource)
+                .add(dataPoint)
+                .build();
 
         DataUpdateRequest request = new DataUpdateRequest.Builder()
                 .setDataSet(dataSet)
