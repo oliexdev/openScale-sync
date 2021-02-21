@@ -205,6 +205,7 @@ public class WgerFragment extends Fragment {
     private boolean checkStatusWger() {
         if (wgerSync.isEnable()) {
             toggleWgerSync.setChecked(true);
+            txtServer.setEnabled(true);
             txtApiKey.setEnabled(true);
             btnWgerSync.setEnabled(true);
 
@@ -212,6 +213,7 @@ public class WgerFragment extends Fragment {
             return true;
         } else {
             toggleWgerSync.setChecked(false);
+            txtServer.setEnabled(false);
             txtApiKey.setEnabled(false);
             btnWgerSync.setEnabled(false);
         }
