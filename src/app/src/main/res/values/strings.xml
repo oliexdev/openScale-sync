@@ -16,26 +16,26 @@
     <string name="txt_install_openScale">Install openScale</string>
     <string name="txt_request_openScale_permission">Request openScale permission</string>
     <string name="txt_openScale_user">openScale user</string>
-    <string name="txt_googlefit_status">GoogleFit status</string>
+    <string name="txt_googlefit_status">Google Fit status</string>
     <string name="txt_google_sign_in_expired">Google sign in expired</string>
-    <string name="txt_google_sign_in_failed">"GoogleFit sign in failed"</string>
+    <string name="txt_google_sign_in_failed">"Google Fit sign in failed"</string>
     <string name="txt_google_permission_not_granted">Google permission not granted</string>
     <string name="txt_openScale_version_too_old">openScale version is too old</string>
     <string name="txt_openScale_is_not_installed">openScale is not installed</string>
     <string name="txt_openScale_permission_not_granted">"openScale permission not granted"</string>
     <string name="txt_openScale_user_not_found">openScale user not found</string>
-    <string name="txt_googleFit_permission_not_granted">"GoogleFit permission denied"</string>
+    <string name="txt_googleFit_permission_not_granted">"Google Fit permission denied"</string>
     <string name="txt_openScale_connection_failed">openScale connection failed</string>
     <string name="txt_openScale_userid_missmatch">openScale user id missmatched with openScale sync user id</string>
 
     <string name="txt_openScale_connection_successful">openScale connection successful</string>
-    <string name="txt_googleFit_permission_granted">"GoogleFit permission granted"</string>
+    <string name="txt_googleFit_permission_granted">"Google Fit permission granted"</string>
     <string name="txt_openScale_user_found">openScale user found</string>
     <string name="txt_openScale_version_is_ok">openScale version is ok</string>
-    <string name="txt_googleFit_successful_sign_in">GoogleFit successful sign in</string>
+    <string name="txt_googleFit_successful_sign_in">Google Fit successful sign in</string>
 
-    <string name="txt_manual_sync_googleFit_openScale">Manual sync GoogleFit measurements -> openScale</string>
-    <string name="txt_manual_sync_openScale_googleFit">Manual sync openScale measurements -> GoogleFit</string>
+    <string name="txt_manual_sync_googleFit_openScale">Manual sync Google Fit measurements -> openScale</string>
+    <string name="txt_manual_sync_openScale_googleFit">Manual sync openScale measurements -> Google Fit</string>
 
     <string name="txt_permission_button_clicked">Permission openScale button clicked</string>
     <string name="txt_install_button_clicked">Install openScale button clicked</string>
@@ -43,24 +43,24 @@
 
     <string name="txt_enable_debug_mode">Enable debug mode</string>
     <string name="txt_about">About</string>
-    <string name="txt_googleFit_sync">GoogleFit sync</string>
+    <string name="txt_googleFit_sync">Google Fit sync</string>
     <string name="txt_manual_full_sync">Manual full sync</string>
 
     <string name="txt_btn_ok">Ok</string>
     <string name="txt_about_info">Copyright (C) 2019 All Rights Reserved\nby olie.xdev@googlemail.com</string>
 
-    <string name="txt_successful_request_googleFit_measurements">Successful request GoogleFit measurements</string>
-    <string name="txt_successful_updated_googleFit_data">Successful updated GoogleFit data</string>
-    <string name="txt_error_updating_googleFit_data">Error on updating of GoogleFit data</string>
-    <string name="txt_error_clearing_googleFit_data">Error on clearing of GoogleFit data</string>
-    <string name="txt_successful_cleared_googleFit_data">Successful cleared GoogleFit data</string>
-    <string name="txt_error_deletion_googleFit_data">Error on deletion of GoogleFit data</string>
-    <string name="txt_successful_delete_googleFit_data">Successful deleted GoogleFit data</string>
-    <string name="txt_error_insert_googleFit_data">Error on inserting of GoogleFit data</string>
-    <string name="txt_successful_insert_googleFit_data">Successful insert GoogleFit data</string>
-    <string name="txt_error_cannot_sign_in_to_googleFit">Can not sync to GoogleFit. Please login into a Google Account</string>
+    <string name="txt_successful_request_googleFit_measurements">Successful request Google Fit measurements</string>
+    <string name="txt_successful_updated_googleFit_data">Successful updated Google Fit data</string>
+    <string name="txt_error_updating_googleFit_data">Error on updating of Google Fit data</string>
+    <string name="txt_error_clearing_googleFit_data">Error on clearing of Google Fit data</string>
+    <string name="txt_successful_cleared_googleFit_data">Successful cleared Google Fit data</string>
+    <string name="txt_error_deletion_googleFit_data">Error on deletion of Google Fit data</string>
+    <string name="txt_successful_delete_googleFit_data">Successful deleted Google Fit data</string>
+    <string name="txt_error_insert_googleFit_data">Error on inserting of Google Fit data</string>
+    <string name="txt_successful_insert_googleFit_data">Successful insert Google Fit data</string>
+    <string name="txt_error_cannot_sign_in_to_googleFit">Can not sync to Google Fit. Please login into a Google Account</string>
 
-    <string name="txt_sign_request_received_but_disabled">Sync request received but GoogleFit sync is disabeld</string>
+    <string name="txt_sign_request_received_but_disabled">Sync request received but Google Fit sync is disabled</string>
     <string name="txt_sign_request_received">Sync request received</string>
     <string name="txt_sync_clear">Sync clear measurements</string>
     <string name="txt_sync_delete">Sync delete measurement</string>

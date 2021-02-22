@@ -242,7 +242,7 @@ public class GoogleFitSync extends ScaleMeasurementSync {
         Timber.d("Check GoogleFit sync status");
 
         if (!isEnable()) {
-            statusView.setCheck(false, "GoogleFit sync is disabled");
+            statusView.setCheck(false, "Google Fit sync is disabled");
             return;
         }
 
