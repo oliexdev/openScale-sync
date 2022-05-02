@@ -3,6 +3,8 @@
  */
 package com.health.openscale.sync.core.sync;
 
+import static android.os.Looper.getMainLooper;
+
 import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
@@ -40,8 +42,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import timber.log.Timber;
-
-import static android.os.Looper.getMainLooper;
 
 public class GoogleFitSync extends ScaleMeasurementSync {
     private Context context;
@@ -170,12 +170,14 @@ public class GoogleFitSync extends ScaleMeasurementSync {
 
         Calendar cal = Calendar.getInstance();
         cal.setTime(new Date());
+        cal.add(Calendar.DAY_OF_YEAR, 2);
         long endTime = cal.getTimeInMillis();
         cal.add(Calendar.YEAR, -5);
         long startTime = cal.getTimeInMillis();
 
         DataDeleteRequest request = new DataDeleteRequest.Builder()
                 .addDataType(DataType.TYPE_WEIGHT)
+                .deleteAllSessions()
                 .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
                 .build();
 
