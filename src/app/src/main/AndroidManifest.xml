@@ -11,6 +11,12 @@
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.pro.READ_WRITE_DATA" />
 
+    <queries>
+        <package android:name="com.health.openscale" />
+        <package android:name="com.health.openscale.light" />
+        <package android:name="com.health.openscale.pro" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher_openscale_sync"
@@ -18,11 +24,12 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <service
-            android:name=".core.service.SyncService"
-            android:exported="true" />
+        <service android:name=".core.service.SyncService" android:exported="true" />
+        <service android:name="org.eclipse.paho.android.service.MqttService" android:exported="true"/>
 
-        <activity android:name=".gui.MainActivity">
+        <activity
+            android:name=".gui.MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -30,7 +37,7 @@
             </intent-filter>
         </activity>
 
-        <service android:name="org.eclipse.paho.android.service.MqttService" />
+
     </application>
 
 </manifest>

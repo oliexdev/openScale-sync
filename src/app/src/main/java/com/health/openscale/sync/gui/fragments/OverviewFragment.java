@@ -3,10 +3,11 @@
  */
 package com.health.openscale.sync.gui.fragments;
 
+import static android.app.Activity.RESULT_OK;
+
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
@@ -37,8 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import timber.log.Timber;
-
-import static android.app.Activity.RESULT_OK;
 
 public class OverviewFragment extends Fragment {
     private final int OPENSCALE_PERMISSIONS_REQUEST_CODE = 101;
@@ -212,15 +211,12 @@ public class OverviewFragment extends Fragment {
     }
 
     private boolean isPackageInstalled(String packageName) {
-        Intent intent = getActivity().getPackageManager().getLaunchIntentForPackage(packageName);
-
-        if (intent == null) {
+        try {
+            getContext().getPackageManager().getPackageInfo(packageName, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
             return false;
         }
-
-        List<ResolveInfo> list = getActivity().getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
-
-        return !list.isEmpty();
     }
 
     private boolean checkOpenScaleUsers() {
