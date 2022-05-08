@@ -10,8 +10,8 @@ android {
         applicationId "com.health.openscale.sync"
         minSdkVersion 19
         targetSdkVersion 31
-        versionCode 6
-        versionName "0.3.2"
+        versionCode 7
+        versionName "0.3.3"
         archivesBaseName = "openScale-sync-$versionName"
     }
 
