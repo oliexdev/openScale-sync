@@ -3,6 +3,8 @@
  */
 package com.health.openscale.sync.core.service;
 
+import static androidx.core.app.NotificationCompat.PRIORITY_LOW;
+
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -29,8 +31,6 @@ import java.util.ArrayList;
 import java.util.Date;
 
 import timber.log.Timber;
-
-import static androidx.core.app.NotificationCompat.PRIORITY_LOW;
 
 public class SyncService extends Service {
     private static final int ID_SERVICE = 5;
@@ -132,6 +132,7 @@ public class SyncService extends Service {
         }
 
         stopForeground(true);
+        stopSelf();
     }
 
     private void showNotification() {
