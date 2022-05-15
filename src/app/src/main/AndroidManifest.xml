@@ -25,7 +25,7 @@
         android:theme="@style/AppTheme">
 
         <service android:name=".core.service.SyncService" android:exported="true" />
-        <service android:name="org.eclipse.paho.android.service.MqttService" android:exported="true"/>
+        <service android:name="info.mqtt.android.service.MqttService" android:exported="true"/>
 
         <activity
             android:name=".gui.MainActivity"

@@ -1,0 +1,1 @@
+* fixed MQTT bug for Android 12

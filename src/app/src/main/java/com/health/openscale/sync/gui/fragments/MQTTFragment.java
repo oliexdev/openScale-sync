@@ -28,7 +28,6 @@ import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.MQTTSync;
 import com.health.openscale.sync.gui.view.StatusView;
 
-import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import timber.log.Timber;
@@ -185,9 +184,7 @@ public class MQTTFragment extends Fragment {
                         try {
                             mqttSync.getMqttAndroidClient().publish("openScaleSync/measurements/insert", msg);
                             Thread.sleep(10);
-                        } catch (MqttException e) {
-                            Timber.e(e.getMessage());
-                        } catch (InterruptedException e) {
+                        } catch (Exception e) {
                             Timber.e(e.getMessage());
                         }
                     }

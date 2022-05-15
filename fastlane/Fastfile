@@ -66,7 +66,7 @@ platform :android do
             name: "openScale sync #{versionName} release",
             tag_name: "v#{versionName}",
             description: (File.read("metadata/android/en-GB/changelogs/#{versionCode}.txt") rescue "No changelog provided"),
-            upload_assets: [ "src/app/build/outputs/apk/release/openScale_sync-#{versionName}.apk" ]
+            upload_assets: [ "src/app/build/outputs/apk/release/openScale_sync-#{versionName}-release.apk" ]
         )
     end
 end

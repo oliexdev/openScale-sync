@@ -9,18 +9,18 @@ import com.google.gson.Gson;
 import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
 import com.health.openscale.sync.gui.view.StatusView;
 
-import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import java.util.Date;
 
+import info.mqtt.android.service.Ack;
+import info.mqtt.android.service.MqttAndroidClient;
 import timber.log.Timber;
 
 public class MQTTSync extends ScaleMeasurementSync {
@@ -34,7 +34,7 @@ public class MQTTSync extends ScaleMeasurementSync {
         super(context);
         this.context = context;
         mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199");
-        mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId);
+        mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId, Ack.AUTO_ACK);
     }
 
     @Override
@@ -105,7 +105,7 @@ public class MQTTSync extends ScaleMeasurementSync {
             try {
                 Timber.d("Trying to connect to MQTT server");
                 mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199");
-                mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId);
+                mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId, Ack.AUTO_ACK);
 
                 mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
                     @Override
@@ -154,31 +154,26 @@ public class MQTTSync extends ScaleMeasurementSync {
 
                     }
                 });
-            } catch(MqttException ex){
+            } catch(Exception ex){
                 statusView.setCheck(false, ex.getMessage());
             }
         }
     }
 
     private void subscribeToTopic(final String subscriptionTopic) {
-        try {
-            mqttAndroidClient.unsubscribe(clientId + "/" + subscriptionTopic);
+        mqttAndroidClient.unsubscribe(clientId + "/" + subscriptionTopic);
 
-            mqttAndroidClient.subscribe(clientId + "/" + subscriptionTopic, 0, null, new IMqttActionListener() {
-                @Override
-                public void onSuccess(IMqttToken asyncActionToken) {
-                    Timber.d("MQTT subscribe successful to " + clientId + "/" + subscriptionTopic);
-                }
+        mqttAndroidClient.subscribe(clientId + "/" + subscriptionTopic, 0, null, new IMqttActionListener() {
+            @Override
+            public void onSuccess(IMqttToken asyncActionToken) {
+                Timber.d("MQTT subscribe successful to " + clientId + "/" + subscriptionTopic);
+            }
 
-                @Override
-                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                    Timber.d("MQTT subscribe failed to" + clientId + "/" + subscriptionTopic);
-                }
-            });
-
-        } catch (MqttException ex) {
-            Timber.e("MQTT subscribe failed: " + ex.getMessage());
-        }
+            @Override
+            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                Timber.d("MQTT subscribe failed to" + clientId + "/" + subscriptionTopic);
+            }
+        });
     }
 
     private void sendMessageToMQTT(final String topic, final String payload) {
@@ -187,32 +182,20 @@ public class MQTTSync extends ScaleMeasurementSync {
         msg.setQos(2);
 
         if (mqttAndroidClient.isConnected()) {
-            try {
-                mqttAndroidClient.publish("openScaleSync/" + topic, msg);
-            } catch(MqttException ex){
-                Timber.e(ex.getMessage());
-            }
+            mqttAndroidClient.publish("openScaleSync/" + topic, msg);
         } else{
-            try{
-                mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
-                    @Override
-                    public void onSuccess(IMqttToken asyncActionToken) {
-                        try {
-                            Timber.d("Successful published on " + topic + " with message " + msg);
-                            mqttAndroidClient.publish("openScaleSync/" + topic, msg);
-                        } catch (MqttException ex) {
-                            Timber.e(ex.getMessage());
-                        }
-                    }
+            mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken asyncActionToken) {
+                    Timber.d("Successful published on " + topic + " with message " + msg);
+                    mqttAndroidClient.publish("openScaleSync/" + topic, msg);
+                }
 
-                    @Override
-                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                        Timber.e(exception.toString());
-                    }
-                });
-            } catch(MqttException ex){
-                    Timber.e(ex.getMessage());
-            }
+                @Override
+                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                    Timber.e(exception.toString());
+                }
+            });
         }
     }
 

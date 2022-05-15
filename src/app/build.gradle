@@ -8,11 +8,12 @@ android {
     compileSdkVersion 31
     defaultConfig {
         applicationId "com.health.openscale.sync"
-        minSdkVersion 19
+        minSdkVersion 23
         targetSdkVersion 31
-        versionCode 7
-        versionName "0.3.3"
+        versionCode 8
+        versionName "0.3.4"
         archivesBaseName = "openScale-sync-$versionName"
+        multiDexEnabled true
     }
 
     signingConfigs {
@@ -48,11 +49,12 @@ dependencies {
     implementation 'cat.ereza:customactivityoncrash:2.3.0'
     implementation 'com.google.android.gms:play-services-fitness:21.0.1'
     implementation 'com.google.android.gms:play-services-auth:20.2.0'
-    implementation 'com.google.android.material:material:1.5.0'
+    implementation 'com.google.android.material:material:1.6.0'
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
-    implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.1.0'
-    implementation 'org.eclipse.paho:org.eclipse.paho.android.service:1.1.1'
-    implementation 'com.google.code.gson:gson:2.8.6'
+    implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
+    implementation 'com.github.hannesa2:paho.mqtt.android:3.3.8'
+    //implementation 'org.eclipse.paho:org.eclipse.paho.android.service:1.1.1' // doesn't work with Android 12 replaced by com.github.hannesa2:paho.mqtt.android:3.3.8
+    implementation 'com.google.code.gson:gson:2.8.9'
     implementation 'com.squareup.retrofit2:retrofit:2.8.1'
     implementation 'com.squareup.retrofit2:converter-gson:2.8.1'
 }
