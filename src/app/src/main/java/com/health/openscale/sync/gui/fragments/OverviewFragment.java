@@ -29,6 +29,7 @@ import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.datatypes.ScaleUser;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.GoogleFitSync;
+import com.health.openscale.sync.core.sync.HealthConnectSync;
 import com.health.openscale.sync.core.sync.MQTTSync;
 import com.health.openscale.sync.core.sync.WgerSync;
 import com.health.openscale.sync.gui.utils.DebugTree;
@@ -49,6 +50,7 @@ public class OverviewFragment extends Fragment {
     static private DebugTree debugTree = new DebugTree();
     private Switch chkDebugLog;
     private StatusView statusViewGoogleFitSync;
+    private StatusView statusViewHealthConnectSync;
     private StatusView statusViewMQTTSync;
     private StatusView statusViewWgerSync;
     private StatusView statusViewOpenScale;
@@ -59,6 +61,7 @@ public class OverviewFragment extends Fragment {
     private ArrayAdapter<String> spinScaleUserAdapter;
 
     private GoogleFitSync googleFitSync;
+    private HealthConnectSync healthConnectSync;
     private MQTTSync mqttSync;
     private WgerSync wgerSync;
 
@@ -75,6 +78,7 @@ public class OverviewFragment extends Fragment {
         prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
 
         googleFitSync = new GoogleFitSync(getContext());
+        healthConnectSync = new HealthConnectSync(getContext());
         mqttSync = new MQTTSync(getContext());
         wgerSync = new WgerSync(getContext());
 
@@ -118,10 +122,12 @@ public class OverviewFragment extends Fragment {
         spinScaleUer = statusOpenScaleUser.addSpinner();
 
         statusViewGoogleFitSync = new StatusView(getContext(), getResources().getString(R.string.txt_googlefit_status));
+        statusViewHealthConnectSync = new StatusView(getContext(), getResources().getString(R.string.txt_healthConnect_status));
         statusViewMQTTSync = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status));
         statusViewWgerSync = new StatusView(getContext(), getResources().getString(R.string.txt_wger_status));
 
         overviewMainLayout.addView(statusViewGoogleFitSync);
+        overviewMainLayout.addView(statusViewHealthConnectSync);
         overviewMainLayout.addView(statusViewMQTTSync);
         overviewMainLayout.addView(statusViewWgerSync);
         overviewMainLayout.addView(statusViewOpenScale);
@@ -183,6 +189,7 @@ public class OverviewFragment extends Fragment {
         }
 
         googleFitSync.checkStatus(statusViewGoogleFitSync);
+        healthConnectSync.checkStatus(statusViewHealthConnectSync);
         mqttSync.checkStatus(statusViewMQTTSync);
         wgerSync.checkStatus(statusViewWgerSync);
     }

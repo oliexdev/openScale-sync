@@ -23,6 +23,7 @@ import com.google.android.material.navigation.NavigationView;
 import com.health.openscale.sync.BuildConfig;
 import com.health.openscale.sync.R;
 import com.health.openscale.sync.gui.fragments.GoogleFitFragment;
+import com.health.openscale.sync.gui.fragments.HealthConnectFragment;
 import com.health.openscale.sync.gui.fragments.MQTTFragment;
 import com.health.openscale.sync.gui.fragments.OverviewFragment;
 import com.health.openscale.sync.gui.fragments.WgerFragment;
@@ -93,6 +94,9 @@ public class MainActivity extends AppCompatActivity {
                 break;
             case R.id.nav_googlefit_fragment:
                 fragmentClass = GoogleFitFragment.class;
+                break;
+            case R.id.nav_health_connect_fragment:
+                fragmentClass = HealthConnectFragment.class;
                 break;
             case R.id.nav_mqtt_fragment:
                 fragmentClass = MQTTFragment.class;

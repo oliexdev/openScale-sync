@@ -13,6 +13,11 @@
             android:title="Google Fit" />
 
         <item
+            android:id="@+id/nav_health_connect_fragment"
+            android:icon="@drawable/ic_health_connect"
+            android:title="Health Connect" />
+
+        <item
             android:id="@+id/nav_mqtt_fragment"
             android:icon="@drawable/ic_mqtt"
             android:title="MQTT" />
