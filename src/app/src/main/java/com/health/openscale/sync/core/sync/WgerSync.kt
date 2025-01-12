@@ -1,337 +1,335 @@
 /**
  * Copyright (C) 2021 by olie.xdev@googlemail.com All Rights Reserved
  */
-package com.health.openscale.sync.core.sync;
+package com.health.openscale.sync.core.sync
 
-import android.content.Context;
-import android.os.Handler;
-import android.text.format.DateFormat;
-import android.widget.Toast;
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.text.format.DateFormat
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.annotation.Keep
+import com.google.gson.annotations.SerializedName
+import com.health.openscale.sync.core.datatypes.ScaleMeasurement
+import com.health.openscale.sync.gui.view.StatusViewAdapter
+import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.DELETE
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
+import retrofit2.http.GET
+import retrofit2.http.PATCH
+import retrofit2.http.POST
+import retrofit2.http.Path
+import retrofit2.http.Query
+import timber.log.Timber
+import java.util.Date
 
-import androidx.annotation.Keep;
+class WgerSync(private val context: Context) : ScaleMeasurementSync(context) {
+    private var wgerApi: WgerApi
+    private var wgerRetrofit: Retrofit
 
-import com.google.gson.annotations.SerializedName;
-import com.health.openscale.sync.R;
-import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
-import com.health.openscale.sync.gui.view.StatusView;
-
-import java.io.IOException;
-import java.util.Date;
-import java.util.List;
-
-import okhttp3.Interceptor;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.ResponseBody;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-import retrofit2.Retrofit;
-import retrofit2.converter.gson.GsonConverterFactory;
-import retrofit2.http.DELETE;
-import retrofit2.http.Field;
-import retrofit2.http.FormUrlEncoded;
-import retrofit2.http.GET;
-import retrofit2.http.PATCH;
-import retrofit2.http.POST;
-import retrofit2.http.Path;
-import retrofit2.http.Query;
-import timber.log.Timber;
-
-import static android.os.Looper.getMainLooper;
-
-public class WgerSync extends ScaleMeasurementSync {
-    private Context context;
-    private WgerApi wgerApi;
-    private Retrofit wgerRetrofit;
-
-    public WgerSync(Context context) {
-        super(context);
-        this.context = context;
-
+    init {
         try {
-            OkHttpClient client = new OkHttpClient.Builder().addInterceptor(new Interceptor() {
-                @Override
-                public okhttp3.Response intercept(Chain chain) throws IOException {
-                    Request newRequest = chain.request().newBuilder()
-                            .addHeader("Authorization", "Token " + prefs.getString("wgerApiKey", "7faf59e0fac4aceb12d90c2f2603349d4de8471b"))
-                            .build();
-                    return chain.proceed(newRequest);
-                }
-            }).build();
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                val newRequest = chain.request().newBuilder()
+                    .addHeader(
+                        "Authorization",
+                        "Token " + prefs.getString(
+                            "wgerApiKey",
+                            "7faf59e0fac4aceb12d90c2f2603349d4de8471b"
+                        )
+                    )
+                    .build()
+                chain.proceed(newRequest)
+            }.build()
 
-            wgerRetrofit = new Retrofit.Builder()
-                    .client(client)
-                    .baseUrl(prefs.getString("wgerServer", "https://wger.de/api/v2/"))
-                    .addConverterFactory(GsonConverterFactory.create())
-                    .build();
+            wgerRetrofit = Retrofit.Builder()
+                .client(client)
+                .baseUrl(prefs.getString("wgerServer", "https://wger.de/api/v2/"))
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
 
-            wgerApi = wgerRetrofit.create(WgerApi.class);
-        } catch (Exception ex) {
-            showToast(ex.getMessage() + " using default url https://wger.de/api/v2/");
+            wgerApi = wgerRetrofit.create(WgerApi::class.java)
+        } catch (ex: Exception) {
+            showToast(ex.message + " using default url https://wger.de/api/v2/")
 
-            OkHttpClient client = new OkHttpClient.Builder().addInterceptor(new Interceptor() {
-                @Override
-                public okhttp3.Response intercept(Chain chain) throws IOException {
-                    Request newRequest = chain.request().newBuilder()
-                            .addHeader("Authorization", "Token " + prefs.getString("wgerApiKey", "7faf59e0fac4aceb12d90c2f2603349d4de8471b"))
-                            .build();
-                    return chain.proceed(newRequest);
-                }
-            }).build();
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                val newRequest = chain.request().newBuilder()
+                    .addHeader(
+                        "Authorization",
+                        "Token " + prefs.getString(
+                            "wgerApiKey",
+                            "7faf59e0fac4aceb12d90c2f2603349d4de8471b"
+                        )
+                    )
+                    .build()
+                chain.proceed(newRequest)
+            }.build()
 
-            wgerRetrofit = new Retrofit.Builder()
-                    .client(client)
-                    .baseUrl("https://wger.de/api/v2/")
-                    .addConverterFactory(GsonConverterFactory.create())
-                    .build();
+            wgerRetrofit = Retrofit.Builder()
+                .client(client)
+                .baseUrl("https://wger.de/api/v2/")
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
 
-            wgerApi = wgerRetrofit.create(WgerApi.class);
+            wgerApi = wgerRetrofit.create(WgerApi::class.java)
         }
     }
 
-    @Override
-    public String getName() {
-        return "WgerSync";
+    override fun getName(): String {
+        return "WgerSync"
     }
 
-    @Override
-    public boolean isEnable() {
-        return prefs.getBoolean("enableWger", false);
+    override fun isEnable(): Boolean {
+        return prefs.getBoolean("enableWger", false)
     }
 
-    private void showToast(final String msg) {
-        Handler mHandler = new Handler(getMainLooper());
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(context, msg, Toast.LENGTH_LONG).show();
-            }
-        });
+    private fun showToast(msg: String) {
+        val mHandler = Handler(Looper.getMainLooper())
+        mHandler.post { Toast.makeText(context, msg, Toast.LENGTH_LONG).show() }
     }
 
-    public Call<WgerWeightEntryList> getWgerWeightList() {
-        return wgerApi.getWeightEntryList();
-    }
+    val wgerWeightList: Call<WgerWeightEntryList>
+        get() = wgerApi.weightEntryList
 
-    @Override
-    public void insert(final ScaleMeasurement measurement) {
-        String wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.getDate()).toString();
+    override suspend fun insert(measurement: ScaleMeasurement) {
+        val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
 
-        Call<ResponseBody> responseBodyCall = wgerApi.insert(wgerDateFormat, measurement.getWeight());
-        responseBodyCall.enqueue(new Callback<ResponseBody>() {
-            @Override
-            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                if (response.isSuccessful()) {
-                    Timber.d("wger successful inserted " + response.message());
+        val responseBodyCall = wgerApi!!.insert(wgerDateFormat, measurement.weight)
+        responseBodyCall.enqueue(object : Callback<ResponseBody?> {
+            override fun onResponse(call: Call<ResponseBody?>, response: Response<ResponseBody?>) {
+                if (response.isSuccessful) {
+                    Timber.d("wger successful inserted " + response.message())
                 } else {
-                    Timber.d("wger insert response error " + response.message());
+                    Timber.d("wger insert response error " + response.message())
                 }
             }
 
-            @Override
-            public void onFailure(Call<ResponseBody> call, Throwable t) {
-                Timber.e("wger insert failure " + t.getMessage());
+            override fun onFailure(call: Call<ResponseBody?>, t: Throwable) {
+                Timber.e("wger insert failure " + t.message)
             }
-        });
+        })
     }
 
-    @Override
-    public void delete(final Date date) {
-        String wgerDateFormat = DateFormat.format("yyyy-MM-dd", date).toString();
+    override fun delete(date: Date) {
+        val wgerDateFormat = DateFormat.format("yyyy-MM-dd", date).toString()
 
-        Call<WgerWeightEntryList> callWgerWeightEntry = wgerApi.getWeightEntry(wgerDateFormat);
+        val callWgerWeightEntry = wgerApi!!.getWeightEntry(wgerDateFormat)
 
-        callWgerWeightEntry.enqueue(new Callback<WgerWeightEntryList>() {
-            @Override
-            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
-                if (response.isSuccessful()) {
-                    List<WgerWeightEntry> wgerWeightEntryList = response.body().results;
+        callWgerWeightEntry.enqueue(object : Callback<WgerWeightEntryList> {
+            override fun onResponse(
+                call: Call<WgerWeightEntryList>,
+                response: Response<WgerWeightEntryList>
+            ) {
+                if (response.isSuccessful) {
+                    val wgerWeightEntryList = response.body()!!.results
 
-                    if (!wgerWeightEntryList.isEmpty()) {
-                        long wgerId = wgerWeightEntryList.get(0).id;
-                        Call<ResponseBody> responseBodyCall = wgerApi.delete(wgerId);
+                    if (!wgerWeightEntryList!!.isEmpty()) {
+                        val wgerId = wgerWeightEntryList[0].id
+                        val responseBodyCall = wgerApi.delete(wgerId)
 
-                        responseBodyCall.enqueue(new Callback<ResponseBody>() {
-                            @Override
-                            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                                if (response.isSuccessful()) {
-                                    Timber.d("wger successful deleted " + response.message());
-                                    return;
+                        responseBodyCall.enqueue(object : Callback<ResponseBody?> {
+                            override fun onResponse(
+                                call: Call<ResponseBody?>,
+                                response: Response<ResponseBody?>
+                            ) {
+                                if (response.isSuccessful) {
+                                    Timber.d("wger successful deleted " + response.message())
+                                    return
                                 } else {
-                                    Timber.d("wger delete response error " + response.message());
+                                    Timber.d("wger delete response error " + response.message())
                                 }
                             }
 
-                            @Override
-                            public void onFailure(Call<ResponseBody> call, Throwable t) {
-                                Timber.e("wger update delete " + t.getMessage());
+                            override fun onFailure(call: Call<ResponseBody?>, t: Throwable) {
+                                Timber.e("wger update delete " + t.message)
                             }
-                        });
+                        })
                     }
                 } else {
-                    Timber.d("get weight entry list error " + response.message());
+                    Timber.d("get weight entry list error " + response.message())
                 }
             }
 
-            @Override
-            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
-                Timber.e("get weight entry list failure " + t.getMessage());
+            override fun onFailure(call: Call<WgerWeightEntryList>, t: Throwable) {
+                Timber.e("get weight entry list failure " + t.message)
             }
-        });
-
+        })
     }
 
-    @Override
-    public void clear() {
-        Call<WgerWeightEntryList> callWgerWeightEntryList = wgerApi.getWeightEntryList();
+    override fun clear() {
+        val callWgerWeightEntryList: Call<WgerWeightEntryList> = wgerApi.weightEntryList
 
-        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntryList>() {
-            @Override
-            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
-                if (response.isSuccessful()) {
-                    Timber.d("successfully wger weight entry list updated");
-                    List<WgerWeightEntry> wgerWeightEntryList = response.body().results;
+        callWgerWeightEntryList.enqueue(object : Callback<WgerWeightEntryList> {
+            override fun onResponse(
+                call: Call<WgerWeightEntryList>,
+                response: Response<WgerWeightEntryList>
+            ) {
+                if (response.isSuccessful) {
+                    Timber.d("successfully wger weight entry list updated")
+                    val wgerWeightEntryList = response.body()!!.results
 
-                    for (WgerWeightEntry wgerWeightEntry : wgerWeightEntryList) {
-                        Call<ResponseBody> responseBodyCall = wgerApi.delete(wgerWeightEntry.id);
+                    for (wgerWeightEntry in wgerWeightEntryList!!) {
+                        val responseBodyCall = wgerApi!!.delete(wgerWeightEntry.id)
 
-                        responseBodyCall.enqueue(new Callback<ResponseBody>() {
-                            @Override
-                            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                                if (response.isSuccessful()) {
-                                    Timber.d("wger successful deleted " + response.message());
+                        responseBodyCall.enqueue(object : Callback<ResponseBody?> {
+                            override fun onResponse(
+                                call: Call<ResponseBody?>,
+                                response: Response<ResponseBody?>
+                            ) {
+                                if (response.isSuccessful) {
+                                    Timber.d("wger successful deleted " + response.message())
                                 } else {
-                                    Timber.d("wger delete response error " + response.message());
+                                    Timber.d("wger delete response error " + response.message())
                                 }
                             }
 
-                            @Override
-                            public void onFailure(Call<ResponseBody> call, Throwable t) {
-                                Timber.e("wger update delete " + t.getMessage());
+                            override fun onFailure(call: Call<ResponseBody?>, t: Throwable) {
+                                Timber.e("wger update delete " + t.message)
                             }
-                        });
+                        })
                     }
                 } else {
-                    Timber.d("get weight entry list error " + response.message());
+                    Timber.d("get weight entry list error " + response.message())
                 }
             }
 
-            @Override
-            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
-                Timber.e("get weight entry list failure " + t.getMessage());
+            override fun onFailure(call: Call<WgerWeightEntryList>, t: Throwable) {
+                Timber.e("get weight entry list failure " + t.message)
             }
-        });
+        })
     }
 
-    @Override
-    public void update(final ScaleMeasurement measurement) {
-        String wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.getDate()).toString();
+    override fun update(measurement: ScaleMeasurement) {
+        val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
 
-        Call<WgerWeightEntryList> callWgerWeightEntryList = wgerApi.getWeightEntry(wgerDateFormat);
+        val callWgerWeightEntryList = wgerApi!!.getWeightEntry(wgerDateFormat)
 
-        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntryList>() {
-            @Override
-            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
-                if (response.isSuccessful()) {
-                    List<WgerWeightEntry> wgerWeightEntryList = response.body().results;
+        callWgerWeightEntryList.enqueue(object : Callback<WgerWeightEntryList> {
+            override fun onResponse(
+                call: Call<WgerWeightEntryList>,
+                response: Response<WgerWeightEntryList>
+            ) {
+                if (response.isSuccessful) {
+                    val wgerWeightEntryList = response.body()!!.results
 
-                    if (!wgerWeightEntryList.isEmpty()) {
-                        long wgerId = wgerWeightEntryList.get(0).id;
-                        Call<ResponseBody> responseBodyCall = wgerApi.update(wgerId, wgerDateFormat, measurement.getWeight());
+                    if (!wgerWeightEntryList!!.isEmpty()) {
+                        val wgerId = wgerWeightEntryList[0].id
+                        val responseBodyCall =
+                            wgerApi.update(wgerId, wgerDateFormat, measurement.weight)
 
-                        responseBodyCall.enqueue(new Callback<ResponseBody>() {
-                            @Override
-                            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                                if (response.isSuccessful()) {
-                                    Timber.d("wger successful updated " + response.message());
+                        responseBodyCall.enqueue(object : Callback<ResponseBody?> {
+                            override fun onResponse(
+                                call: Call<ResponseBody?>,
+                                response: Response<ResponseBody?>
+                            ) {
+                                if (response.isSuccessful) {
+                                    Timber.d("wger successful updated " + response.message())
                                 } else {
-                                    Timber.d("wger update response error " + response.message());
+                                    Timber.d("wger update response error " + response.message())
                                 }
                             }
 
-                            @Override
-                            public void onFailure(Call<ResponseBody> call, Throwable t) {
-                                Timber.e("wger update failure " + t.getMessage());
+                            override fun onFailure(call: Call<ResponseBody?>, t: Throwable) {
+                                Timber.e("wger update failure " + t.message)
                             }
-                        });
+                        })
                     }
                 } else {
-                    Timber.d("get weight entry list error " + response.message());
+                    Timber.d("get weight entry list error " + response.message())
                 }
             }
 
-            @Override
-            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
-                Timber.e("get weight entry list failure " + t.getMessage());
+            override fun onFailure(call: Call<WgerWeightEntryList>, t: Throwable) {
+                Timber.e("get weight entry list failure " + t.message)
             }
-        });
+        })
     }
 
-    @Override
-    public void checkStatus(final StatusView statusView) {
-        Timber.d("Check Wger sync status");
+    override fun hasPermission(): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun askPermission(context: ComponentActivity) {
+
+    }
+
+    override fun checkStatus(statusView: StatusViewAdapter) {
+        Timber.d("Check Wger sync status")
 
         if (!isEnable()) {
-            statusView.setCheck(false, "Wger sync is disabled");
-            return;
+            return
         }
 
-        Call<WgerWeightEntryList> callWgerWeightEntryList = wgerApi.getWeightEntryList();
+        val callWgerWeightEntryList: Call<WgerWeightEntryList> = wgerApi.weightEntryList
 
-        callWgerWeightEntryList.enqueue(new Callback<WgerWeightEntryList>() {
-            @Override
-            public void onResponse(Call<WgerWeightEntryList> call, Response<WgerWeightEntryList> response) {
-                if (response.isSuccessful()) {
-                    statusView.setCheck(true, context.getResources().getString(R.string.txt_wger_connection_successful));
-                    Timber.d("wger successful connected " + response.message());
+        callWgerWeightEntryList.enqueue(object : Callback<WgerWeightEntryList?> {
+            override fun onResponse(
+                call: Call<WgerWeightEntryList?>,
+                response: Response<WgerWeightEntryList?>
+            ) {
+                if (response.isSuccessful) {
+                    Timber.d("wger successful connected " + response.message())
                 } else {
-                    statusView.setCheck(false, context.getResources().getString(R.string.txt_wger_wrong_api_key));
-                    Timber.d("wger connected response error " + response.message());
+                    Timber.d("wger connected response error " + response.message())
                 }
             }
 
-            @Override
-            public void onFailure(Call<WgerWeightEntryList> call, Throwable t) {
-                statusView.setCheck(false, context.getResources().getString(R.string.txt_wger_wrong_api_key));
-                Timber.e("get connection failure " + t.getMessage());
+            override fun onFailure(call: Call<WgerWeightEntryList?>, t: Throwable) {
+                Timber.e("get connection failure " + t.message)
             }
-        });
+        })
     }
 
     private interface WgerApi {
-        @GET("weightentry")
-        Call<WgerWeightEntryList> getWeightEntryList();
+        @get:GET("weightentry")
+        val weightEntryList: Call<WgerWeightEntryList>
 
         @GET("weightentry/")
-        Call<WgerWeightEntryList> getWeightEntry(@Query("date") String wgerDate);
+        fun getWeightEntry(@Query("date") wgerDate: String?): Call<WgerWeightEntryList>
 
         @POST("weightentry/")
         @FormUrlEncoded
-        Call<ResponseBody> insert(@retrofit2.http.Field("date") String date, @Field("weight") float weight);
+        fun insert(@Field("date") date: String?, @Field("weight") weight: Float): Call<ResponseBody>
 
         @PATCH("weightentry/{wger_id}/")
         @FormUrlEncoded
-        Call<ResponseBody> update(@Path(value = "wger_id", encoded = true) long wgerId, @retrofit2.http.Field("date") String date, @Field("weight") float weight);
+        fun update(
+            @Path(value = "wger_id", encoded = true) wgerId: Long,
+            @Field("date") date: String?,
+            @Field("weight") weight: Float
+        ): Call<ResponseBody>
 
         @DELETE("weightentry/{wger_id}/")
-        Call<ResponseBody> delete(@Path(value = "wger_id", encoded = true) long wgerId);
+        fun delete(@Path(value = "wger_id", encoded = true) wgerId: Long): Call<ResponseBody>
     }
 
     @Keep
-    public class WgerWeightEntryList {
+    inner class WgerWeightEntryList {
+        @JvmField
         @SerializedName("results")
-        public List<WgerWeightEntry> results;
+        var results: List<WgerWeightEntry>? = null
     }
 
     @Keep
-    public class WgerWeightEntry {
+    inner class WgerWeightEntry {
         @SerializedName("id")
-        public long id;
+        var id: Long = 0
+
+        @JvmField
         @SerializedName("date")
-        public String date;
+        var date: String? = null
+
+        @JvmField
         @SerializedName("weight")
-        public float weight;
+        var weight: Float = 0f
     }
 }
 

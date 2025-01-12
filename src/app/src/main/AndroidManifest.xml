@@ -5,15 +5,19 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="com.health.openscale.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.pro.READ_WRITE_DATA" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT"/>
+    <uses-permission android:name="android.permission.health.WRITE_WEIGHT"/>
 
     <queries>
         <package android:name="com.health.openscale" />
         <package android:name="com.health.openscale.light" />
         <package android:name="com.health.openscale.pro" />
+        <package android:name="com.google.android.apps.healthdata" />
     </queries>
 
     <application
@@ -23,7 +27,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <service android:name=".core.service.SyncService" android:exported="true" />
+        <service android:name=".core.service.SyncService" android:exported="true" android:foregroundServiceType="dataSync"/>
         <service android:name="info.mqtt.android.service.MqttService" android:exported="true"/>
 
         <activity
@@ -34,6 +38,18 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Permission handling for Android 13 and before -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+
+            <!-- Permission handling for Android 14 and later -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE"/>
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS"/>
+            </intent-filter>
+
         </activity>
 
 

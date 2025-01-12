@@ -24,7 +24,7 @@ import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.WgerSync;
-import com.health.openscale.sync.gui.view.StatusView;
+import com.health.openscale.sync.gui.view.StatusViewAdapter;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -46,7 +46,7 @@ public class WgerFragment extends Fragment {
     private Button btnSaveCredentials;
     private Button btnWgerSync;
     private ProgressBar progressBar;
-    private StatusView statusViewWger;
+    private StatusViewAdapter statusViewWger;
     private WgerSync wgerSync;
 
     public WgerFragment() {
@@ -70,9 +70,6 @@ public class WgerFragment extends Fragment {
         btnSaveCredentials = fragment.findViewById(R.id.btnSaveCredentials);
         btnWgerSync = fragment.findViewById(R.id.btnWgerSync);
         progressBar = fragment.findViewById(R.id.progressBar);
-        statusViewWger = new StatusView(getContext(), getResources().getString(R.string.txt_wger_status));
-
-        wgerMainLayout.addView(statusViewWger);
 
         btnSaveCredentials.setEnabled(false);
 
@@ -160,7 +157,8 @@ public class WgerFragment extends Fragment {
                 for (ScaleMeasurement openScaleMeasurement : openScaleProvider.getMeasurements(openScaleUserId)) {
                     Timber.d("openScale measurement " + openScaleMeasurement + " added to wger");
 
-                    wgerSync.insert(openScaleMeasurement);
+
+                    //wgerSync.insert(openScaleMeasurement);
                 }
 
                 Timber.d(getResources().getString(R.string.txt_manual_sync_wgerFit_openScale));

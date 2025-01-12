@@ -1,223 +1,202 @@
 /**
  * Copyright (C) 2019 by olie.xdev@googlemail.com All Rights Reserved
  */
-package com.health.openscale.sync.core.sync;
+package com.health.openscale.sync.core.sync
 
-import android.content.Context;
+import android.content.Context
+import androidx.activity.ComponentActivity
+import com.google.gson.Gson
+import com.health.openscale.sync.core.datatypes.ScaleMeasurement
+import com.health.openscale.sync.gui.view.StatusViewAdapter
+import info.mqtt.android.service.Ack
+import info.mqtt.android.service.MqttAndroidClient
+import org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions
+import org.eclipse.paho.client.mqttv3.IMqttActionListener
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
+import org.eclipse.paho.client.mqttv3.IMqttToken
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions
+import org.eclipse.paho.client.mqttv3.MqttMessage
+import timber.log.Timber
+import java.util.Date
 
-import com.google.gson.Gson;
-import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
-import com.health.openscale.sync.gui.view.StatusView;
+class MQTTSync(private val context: Context) : ScaleMeasurementSync(context) {
+    var mqttAndroidClient: MqttAndroidClient
+        private set
+    private var mqttServer: String?
+    private val clientId = "openScaleSync"
+    private val SUBSCRIPTION_TOPIC_SYNC = "measurements/sync"
 
-import org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions;
-import org.eclipse.paho.client.mqttv3.IMqttActionListener;
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.IMqttToken;
-import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
-
-import java.util.Date;
-
-import info.mqtt.android.service.Ack;
-import info.mqtt.android.service.MqttAndroidClient;
-import timber.log.Timber;
-
-public class MQTTSync extends ScaleMeasurementSync {
-    private Context context;
-    private MqttAndroidClient mqttAndroidClient;
-    private String mqttServer;
-    private final String clientId = "openScaleSync";
-    private final String SUBSCRIPTION_TOPIC_SYNC = "measurements/sync";
-
-    public MQTTSync(Context context) {
-        super(context);
-        this.context = context;
-        mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199");
-        mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId, Ack.AUTO_ACK);
+    init {
+        mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199")
+        mqttAndroidClient = MqttAndroidClient(context, mqttServer!!, clientId, Ack.AUTO_ACK)
     }
 
-    @Override
-    public String getName() {
-        return "MQTTSync";
+    override fun getName(): String {
+        return "MQTTSync"
     }
 
-    @Override
-    public boolean isEnable() {
-        return prefs.getBoolean("enableMQTT", false);
+    override fun isEnable(): Boolean {
+        return prefs.getBoolean("enableMQTT", false)
     }
 
-    @Override
-    public void insert(final ScaleMeasurement measurement) {
-        Gson gson = new Gson();
-        String jsonMeasurement = gson.toJson(measurement);
+    override suspend fun insert(measurement: ScaleMeasurement) {
+        val gson = Gson()
+        val jsonMeasurement = gson.toJson(measurement)
 
-        sendMessageToMQTT("measurements/insert", jsonMeasurement);
+        sendMessageToMQTT("measurements/insert", jsonMeasurement)
     }
 
-    @Override
-    public void delete(final Date date) {
-        sendMessageToMQTT("measurements/delete", "{\"date\":" + date.getTime() + "}");
+    override fun delete(date: Date) {
+        sendMessageToMQTT("measurements/delete", "{\"date\":" + date.time + "}")
     }
 
-    @Override
-    public void clear() {
-        sendMessageToMQTT("measurements/clear", "true");
+    override fun clear() {
+        sendMessageToMQTT("measurements/clear", "true")
     }
 
-    @Override
-    public void update(final ScaleMeasurement measurement) {
-        Gson gson = new Gson();
-        String jsonMeasurement = gson.toJson(measurement);
+    override fun update(measurement: ScaleMeasurement) {
+        val gson = Gson()
+        val jsonMeasurement = gson.toJson(measurement)
 
-        sendMessageToMQTT("measurements/update", jsonMeasurement);
+        sendMessageToMQTT("measurements/update", jsonMeasurement)
     }
 
-    @Override
-    public void checkStatus(final StatusView statusView) {
-        Timber.d("Check MQTT sync status");
+    override fun hasPermission(): Boolean {
+
+        return false
+    }
+
+    override fun askPermission(context: ComponentActivity) {
+
+    }
+
+    override fun checkStatus(statusView: StatusViewAdapter) {
+        Timber.d("Check MQTT sync status")
 
         if (!isEnable()) {
-            statusView.setCheck(false, "MQTT sync is disabled");
-            return;
+            return
         }
 
-        if (mqttAndroidClient.isConnected()) {
-            Timber.d("already connected to MQTT server, trying to disconnect");
+        if (mqttAndroidClient.isConnected) {
+            Timber.d("already connected to MQTT server, trying to disconnect")
 
             try {
-                mqttAndroidClient.disconnect().setActionCallback(new IMqttActionListener() {
-                    @Override
-                    public void onSuccess(IMqttToken asyncActionToken) {
-                        Timber.d("successful disconnected from MQTT server");
-                        checkStatus(statusView);
+                mqttAndroidClient.disconnect().actionCallback = object : IMqttActionListener {
+                    override fun onSuccess(asyncActionToken: IMqttToken) {
+                        Timber.d("successful disconnected from MQTT server")
+                        checkStatus(statusView)
                     }
 
-                    @Override
-                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                        statusView.setCheck(false, exception.getMessage());
+                    override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
                     }
-                });
-            } catch (Exception ex) {
-                Timber.e(ex.getMessage());
+                }
+            } catch (ex: Exception) {
+                Timber.e(ex.message)
             }
         } else {
             try {
-                Timber.d("Trying to connect to MQTT server");
-                mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199");
-                mqttAndroidClient = new MqttAndroidClient(context, mqttServer, clientId, Ack.AUTO_ACK);
+                Timber.d("Trying to connect to MQTT server")
+                mqttServer = prefs.getString("mqttServer", "tcp://farmer.cloudmqtt.com:16199")
+                mqttAndroidClient = MqttAndroidClient(context, mqttServer!!, clientId, Ack.AUTO_ACK)
 
-                mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
-                    @Override
-                    public void onSuccess(IMqttToken asyncActionToken) {
-                        statusView.setCheck(true, "Successful connected to " + mqttServer);
-                        DisconnectedBufferOptions disconnectedBufferOptions = new DisconnectedBufferOptions();
-                        disconnectedBufferOptions.setBufferEnabled(true);
-                        disconnectedBufferOptions.setBufferSize(100);
-                        disconnectedBufferOptions.setPersistBuffer(false);
-                        disconnectedBufferOptions.setDeleteOldestMessages(false);
-                        mqttAndroidClient.setBufferOpts(disconnectedBufferOptions);
+                mqttAndroidClient.connect(mQTTOptions, null, object : IMqttActionListener {
+                    override fun onSuccess(asyncActionToken: IMqttToken) {
+                        val disconnectedBufferOptions = DisconnectedBufferOptions()
+                        disconnectedBufferOptions.isBufferEnabled = true
+                        disconnectedBufferOptions.bufferSize = 100
+                        disconnectedBufferOptions.isPersistBuffer = false
+                        disconnectedBufferOptions.isDeleteOldestMessages = false
+                        mqttAndroidClient.setBufferOpts(disconnectedBufferOptions)
 
-                        subscribeToTopic(SUBSCRIPTION_TOPIC_SYNC);
+                        subscribeToTopic(SUBSCRIPTION_TOPIC_SYNC)
                     }
 
-                    @Override
-                    public void onFailure(IMqttToken asyncActionToken, final Throwable exception) {
-                        statusView.setCheck(false, "Failed to connect to " + mqttServer + " " + exception.toString());
+                    override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
                     }
-                });
+                })
 
-                mqttAndroidClient.setCallback(new MqttCallbackExtended() {
-                    @Override
-                    public void connectComplete(boolean b, String s) {
-
+                mqttAndroidClient.setCallback(object : MqttCallbackExtended {
+                    override fun connectComplete(b: Boolean, s: String) {
                     }
 
-                    @Override
-                    public void connectionLost(Throwable throwable) {
-
+                    override fun connectionLost(throwable: Throwable) {
                     }
 
-                    @Override
-                    public void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
-                        Timber.d("MQTT message received: " + mqttMessage.toString() + " on topic " + topic);
+                    @Throws(Exception::class)
+                    override fun messageArrived(topic: String, mqttMessage: MqttMessage) {
+                        Timber.d("MQTT message received: $mqttMessage on topic $topic")
 
-                        if (topic.equals(clientId + "/" + SUBSCRIPTION_TOPIC_SYNC)) {
-                            if (mqttMessage.toString().equals("true")) {
-                                Timber.d("MQTT sync request received");
+                        if (topic == "$clientId/$SUBSCRIPTION_TOPIC_SYNC") {
+                            if (mqttMessage.toString() == "true") {
+                                Timber.d("MQTT sync request received")
                             }
                         }
                     }
 
-                    @Override
-                    public void deliveryComplete(IMqttDeliveryToken iMqttDeliveryToken) {
-
+                    override fun deliveryComplete(iMqttDeliveryToken: IMqttDeliveryToken) {
                     }
-                });
-            } catch(Exception ex){
-                statusView.setCheck(false, ex.getMessage());
+                })
+            } catch (ex: Exception) {
             }
         }
     }
 
-    private void subscribeToTopic(final String subscriptionTopic) {
-        mqttAndroidClient.unsubscribe(clientId + "/" + subscriptionTopic);
+    private fun subscribeToTopic(subscriptionTopic: String) {
+        mqttAndroidClient.unsubscribe("$clientId/$subscriptionTopic")
 
-        mqttAndroidClient.subscribe(clientId + "/" + subscriptionTopic, 0, null, new IMqttActionListener() {
-            @Override
-            public void onSuccess(IMqttToken asyncActionToken) {
-                Timber.d("MQTT subscribe successful to " + clientId + "/" + subscriptionTopic);
-            }
-
-            @Override
-            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                Timber.d("MQTT subscribe failed to" + clientId + "/" + subscriptionTopic);
-            }
-        });
-    }
-
-    private void sendMessageToMQTT(final String topic, final String payload) {
-        final MqttMessage msg = new MqttMessage();
-        msg.setPayload(payload.getBytes());
-        msg.setQos(2);
-
-        if (mqttAndroidClient.isConnected()) {
-            mqttAndroidClient.publish("openScaleSync/" + topic, msg);
-        } else{
-            mqttAndroidClient.connect(getMQTTOptions(), null, new IMqttActionListener() {
-                @Override
-                public void onSuccess(IMqttToken asyncActionToken) {
-                    Timber.d("Successful published on " + topic + " with message " + msg);
-                    mqttAndroidClient.publish("openScaleSync/" + topic, msg);
+        mqttAndroidClient.subscribe(
+            "$clientId/$subscriptionTopic",
+            0,
+            null,
+            object : IMqttActionListener {
+                override fun onSuccess(asyncActionToken: IMqttToken) {
+                    Timber.d("MQTT subscribe successful to $clientId/$subscriptionTopic")
                 }
 
-                @Override
-                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                    Timber.e(exception.toString());
+                override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
+                    Timber.d("MQTT subscribe failed to$clientId/$subscriptionTopic")
                 }
-            });
+            })
+    }
+
+    private fun sendMessageToMQTT(topic: String, payload: String) {
+        val msg = MqttMessage()
+        msg.payload = payload.toByteArray()
+        msg.qos = 2
+
+        if (mqttAndroidClient.isConnected) {
+            mqttAndroidClient.publish("openScaleSync/$topic", msg)
+        } else {
+            mqttAndroidClient.connect(mQTTOptions, null, object : IMqttActionListener {
+                override fun onSuccess(asyncActionToken: IMqttToken) {
+                    Timber.d("Successful published on $topic with message $msg")
+                    mqttAndroidClient.publish("openScaleSync/$topic", msg)
+                }
+
+                override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
+                    Timber.e(exception.toString())
+                }
+            })
         }
     }
 
-    private MqttConnectOptions getMQTTOptions() {
-        final String mqttUsername = prefs.getString("mqttUsername", "ztntplvc");
-        final String mqttPassword = prefs.getString("mqttPassword", "IqdBs7XMr-Kr");
+    private val mQTTOptions: MqttConnectOptions
+        get() {
+            val mqttUsername = prefs.getString("mqttUsername", "ztntplvc")
+            val mqttPassword = prefs.getString("mqttPassword", "IqdBs7XMr-Kr")
 
-        MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
+            val mqttConnectOptions = MqttConnectOptions()
 
-        try {
-            mqttConnectOptions.setAutomaticReconnect(true);
-            mqttConnectOptions.setCleanSession(true);
-            mqttConnectOptions.setUserName(mqttUsername);
-            mqttConnectOptions.setPassword(mqttPassword.toCharArray());
-        } catch (Exception e) {
-            Timber.e(e.getMessage());
+            try {
+                mqttConnectOptions.isAutomaticReconnect = true
+                mqttConnectOptions.isCleanSession = true
+                mqttConnectOptions.userName = mqttUsername
+                mqttConnectOptions.password = mqttPassword!!.toCharArray()
+            } catch (e: Exception) {
+                Timber.e(e.message)
+            }
+
+            return mqttConnectOptions
         }
-
-        return mqttConnectOptions;
-    }
-
-    public final MqttAndroidClient getMqttAndroidClient() {
-        return mqttAndroidClient;
-    }
 }

@@ -26,7 +26,7 @@ import com.health.openscale.sync.R;
 import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
 import com.health.openscale.sync.core.provider.OpenScaleProvider;
 import com.health.openscale.sync.core.sync.MQTTSync;
-import com.health.openscale.sync.gui.view.StatusView;
+import com.health.openscale.sync.gui.view.StatusViewAdapter;
 
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
@@ -47,7 +47,7 @@ public class MQTTFragment extends Fragment {
     private Button btnSaveCredentials;
     private Button btnMQTTSync;
     private ProgressBar progressBar;
-    private StatusView statusViewMQTT;
+    private StatusViewAdapter statusViewMQTT;
     private MQTTSync mqttSync;
 
     private final String clientId = "openScaleSync";
@@ -74,9 +74,7 @@ public class MQTTFragment extends Fragment {
         btnSaveCredentials = fragment.findViewById(R.id.btnSaveCredentials);
         btnMQTTSync = fragment.findViewById(R.id.btnMQTTSync);
         progressBar = fragment.findViewById(R.id.progressBar);
-        statusViewMQTT = new StatusView(getContext(), getResources().getString(R.string.txt_mqtt_status));
 
-        mqttMainLayout.addView(statusViewMQTT);
 
         btnSaveCredentials.setEnabled(false);
 
