@@ -38,6 +38,14 @@ If you found a bug, have an idea how to improve the openScale sync app or have a
         <img src='docs/screenshots/openScale_sync_main.png' width='200px' alt='image missing' /> </a>
     </th>
     <th>
+        <a href="docs/screenshots/openScale_sync_drawer.png" target="_blank">
+        <img src='docs/screenshots/openScale_sync_drawer.png' width='200px' alt='image missing' /> </a>
+    </th>
+    <th>
+        <a href="docs/screenshots/openScale_sync_mqtt.png" target="_blank">
+        <img src='docs/screenshots/openScale_sync_mqtt.png' width='200px' alt='image missing' /> </a>
+    </th>
+    <th>
         <a href="docs/screenshots/openScale_sync_error.png" target="_blank">
         <img src='docs/screenshots/openScale_sync_error.png' width='200px' alt='image missing' /> </a>
     </th>
