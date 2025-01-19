@@ -6,8 +6,4 @@ package com.health.openscale.sync.core.datatypes
 import androidx.annotation.Keep
 
 @Keep
-class ScaleUser(var userid: Int, var name: String) {
-    override fun toString(): String {
-        return "userId $userid name $name"
-    }
-}
+data class OpenScaleUser(var id: Int, var username: String)

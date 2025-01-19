@@ -1,151 +1,188 @@
-/**
- * Copyright (C) 2019 by olie.xdev@googlemail.com All Rights Reserved
- */
-package com.health.openscale.sync.core.provider;
+package com.health.openscale.sync.core.provider
 
-import android.content.ContentResolver;
-import android.content.ContentUris;
-import android.content.ContentValues;
-import android.content.Context;
-import android.content.SharedPreferences;
-import android.database.Cursor;
-import android.net.Uri;
-import android.preference.PreferenceManager;
-import android.provider.BaseColumns;
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.net.Uri
+import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
+import com.health.openscale.sync.core.datatypes.OpenScaleUser
+import com.health.openscale.sync.core.model.OpenScaleViewModel
+import com.health.openscale.sync.core.model.ViewModelInterface
+import timber.log.Timber
 
-import com.health.openscale.sync.R;
-import com.health.openscale.sync.core.datatypes.ScaleMeasurement;
-import com.health.openscale.sync.core.datatypes.ScaleUser;
+class OpenScaleProvider (
+    private val context: Context,
+    private val openScaleDataService : OpenScaleDataProvider,
+    private val sharedPreferences: SharedPreferences
+) {
+    private val viewModel: OpenScaleViewModel = OpenScaleViewModel(sharedPreferences)//ViewModelProvider(context)[OpenScaleViewModel::class.java]
+    private val tag = "OpenScaleService"
+    private val requiredPermissions = sharedPreferences.getString("packageName", "com.health.openscale") + ".READ_WRITE_DATA"
+    private lateinit var requestPermission : ActivityResultLauncher<String>
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+     fun init() {
+        viewModel.setConnectAvailable(true)
+        checkPermissionGranted()
 
-import timber.log.Timber;
-
-public class OpenScaleProvider {
-    private Context context;
-
-    private SharedPreferences prefs;
-
-    private Uri metaUri;
-    private Uri usersUri;
-    private Uri measurementsUri;
-
-    public OpenScaleProvider(Context context) {
-        this.context = context;
-
-        prefs = PreferenceManager.getDefaultSharedPreferences(context);
-
-        String packageName = prefs.getString("openScalePackageName", "com.health.openscale.pro");
-
-        metaUri = new Uri.Builder()
-                .scheme(ContentResolver.SCHEME_CONTENT)
-                .authority(packageName + ".provider")
-                .path("meta")
-                .build();
-
-        usersUri = new Uri.Builder()
-                .scheme(ContentResolver.SCHEME_CONTENT)
-                .authority(packageName + ".provider")
-                .path("users")
-                .build();
-
-        measurementsUri = new Uri.Builder()
-                .scheme(ContentResolver.SCHEME_CONTENT)
-                .authority(packageName + ".provider")
-                .path("measurements")
-                .build();
+        if (viewModel.allPermissionsGranted.value) {
+            viewModel.setOpenScaleUsers(openScaleDataService.getUsers())
+            viewModel.selectOpenScaleUser(getSelectedUser())
+        }
     }
 
-    public boolean checkVersion() {
+    fun viewModel(): ViewModelInterface {
+        return viewModel
+    }
+
+    fun checkPermissionGranted() {
+        if (ContextCompat.checkSelfPermission(context, requiredPermissions) == PERMISSION_GRANTED) {
+            viewModel.setAllPermissionsGranted(true)
+        } else {
+            viewModel.setAllPermissionsGranted(false)
+        }
+    }
+
+    fun registerActivityResultLauncher(activity: ComponentActivity) {
+        requestPermission = activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                checkPermissionGranted()
+
+                if (isGranted) {
+                    Timber.d("openScale permission is granted")
+                    viewModel.setOpenScaleUsers(openScaleDataService.getUsers())
+                    viewModel.selectOpenScaleUser(getSelectedUser())
+                } else {
+                    Timber.d("openScale permission is not granted")
+                }
+            }
+    }
+
+    fun requestPermissions() {
+        requestPermission.launch(requiredPermissions)
+    }
+
+    fun getSelectedUser(): OpenScaleUser? {
+        val selectedUserId = openScaleDataService.getSavedSelectedUserId()
         try {
-            Cursor cursor = context.getContentResolver().query(
-                    metaUri, null, null, null, null);
+            if (selectedUserId != null) {
+                return viewModel.openScaleUsers.value.first { user -> user.id == selectedUserId }
+            } else {
+                return viewModel.openScaleUsers.value.first()
+            }
+        } catch (e: NoSuchElementException) {
+            // ignored
+        }
 
-            try {
-                while (cursor.moveToNext()) {
-                    int apiVersion = cursor.getInt(cursor.getColumnIndex("apiVersion"));
-                    int versionCode = cursor.getInt(cursor.getColumnIndex("versionCode"));
+        return null
+    }
 
-                    Timber.d("openScale version " + versionCode + " with content provider API version " + apiVersion);
-
-                    if (versionCode >= 43) {
-                        return true;
+    @Composable
+    fun composeSettings(activity: ComponentActivity) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
+                UserSelect()
+            } else {
+                if (!viewModel.connectAvailable.value) {
+                    Text(text = "openScale is not available on this device.")
+                    Button(onClick = {
+                        openAppStore(activity)
+                    }){
+                        Text("Get openScale")
                     }
                 }
-            } finally {
-                cursor.close();
-            }
-        } catch (Exception e) {
-            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
-        }
-
-        return false;
-    }
-
-    public List<ScaleUser> getUsers() {
-        ArrayList<ScaleUser> openScaleUsers = new ArrayList<>();
-
-        try {
-            Cursor cursor = context.getContentResolver().query(
-                    usersUri, null, null, null, null);
-
-            try {
-                while (cursor.moveToNext()) {
-                    long userId = cursor.getLong(cursor.getColumnIndex(BaseColumns._ID));
-                    String name = cursor.getString(cursor.getColumnIndex("username"));
-
-                    openScaleUsers.add(new ScaleUser((int)userId, name));
+                else if (!viewModel.allPermissionsGranted.value)  {
+                    Text(text = "Permission to openScale not granted")
+                    Button(onClick = {
+                        requestPermissions()
+                    }){
+                        Text("Request openScale permission")
+                    }
                 }
-            } finally {
-                cursor.close();
             }
         }
-        catch (Exception e) {
-            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
-        }
-
-        return openScaleUsers;
     }
 
-    public List<ScaleMeasurement> getMeasurements(int userId) {
-        ArrayList<ScaleMeasurement> openScaleMeasurements = new ArrayList<>();
+    private fun openAppStore(activity: ComponentActivity) {
+        val packageName = "com.health.openscale.pro"
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            data = Uri.parse("market://details?id=$packageName")
+            setPackage("com.health.openscale.pro") // Google Play Store package
+        }
 
         try {
-            Cursor cursor = context.getContentResolver().query(
-                    ContentUris.withAppendedId(measurementsUri, userId),
-                    null, null, null, null);
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            val webIntent = Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse("https://github.com/oliexdev/openScale")
+            }
+            activity.startActivity(webIntent)
+        }
+    }
 
-            try {
-                while (cursor.moveToNext()) {
-                    long datetime = cursor.getLong(cursor.getColumnIndex("datetime"));
-                    float weight = cursor.getFloat(cursor.getColumnIndex("weight"));
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun UserSelect() {
+        var expanded by remember { mutableStateOf(false) }
 
-                    openScaleMeasurements.add(new ScaleMeasurement(new Date(datetime), weight));
+        ExposedDropdownMenuBox(
+            modifier = Modifier.fillMaxWidth(),
+            expanded = expanded,
+            onExpandedChange = {
+                expanded = !expanded
+            }
+        ) {
+            val selectedOpenScale by viewModel.openScaleSelectedUser.observeAsState()
+
+            TextField(
+                label = { Text("openScale user") },
+                value = selectedOpenScale?.username ?: "",
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                    .fillMaxWidth()
+            )
+
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                viewModel.openScaleUsers.value.forEach { user ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(user.username)
+                        },
+                        onClick = {
+                            viewModel.selectOpenScaleUser(user)
+                            openScaleDataService.saveSelectedUserId(user.id)
+                            expanded = false
+                        }
+                    )
                 }
-            } finally {
-                cursor.close();
+
             }
-        }
-        catch (Exception e) {
-            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
-        }
-
-        return openScaleMeasurements;
-    }
-
-    public void insertMeasurement(Date date, float weight, int userId) {
-        try {
-            ContentValues values = new ContentValues();
-
-            values.put("datetime", date.getTime());
-            values.put("weight", weight);
-            values.put("userId", userId);
-
-            context.getContentResolver().insert(measurementsUri, values);
-        } catch (Exception e) {
-            Timber.e(context.getResources().getString(R.string.txt_openScale_provider_error) + " " + e.getMessage());
         }
     }
 }

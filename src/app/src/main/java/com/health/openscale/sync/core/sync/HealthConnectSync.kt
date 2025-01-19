@@ -1,126 +1,213 @@
-/**
- * Copyright (C) 2019 by olie.xdev@googlemail.com All Rights Reserved
- */
 package com.health.openscale.sync.core.sync
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.PermissionController
-import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.BodyWaterMassRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
+import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.response.ReadRecordsResponse
+import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Mass
-import com.health.openscale.sync.core.datatypes.ScaleMeasurement
-import com.health.openscale.sync.gui.view.StatusViewAdapter
+import androidx.health.connect.client.units.Percentage
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import timber.log.Timber
+import java.time.Instant
 import java.time.ZoneId
 import java.util.Date
+import kotlin.reflect.KClass
 
-class HealthConnectSync(val context: Context) : ScaleMeasurementSync(context) {
+class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : SyncInterface(){
+    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) {
+        Timber.d("Writing ${measurements.size} measurements to HealthConnect")
 
-    val PERMISSIONS = setOf(
-        HealthPermission.getReadPermission(WeightRecord::class),
-        HealthPermission.getWritePermission(WeightRecord::class)
-    )
+        val records = mutableListOf<Record>()
 
-    val requestPermissionActivityContract = PermissionController.createRequestPermissionResultContract()
+        measurements.forEach {
+            val weightRecord = buildWeightRecord(it)
+            records.add(weightRecord)
 
-    override fun getName(): String {
-        return "HealthConnectSync"
-    }
+            val waterRecord = buildWaterRecord(it)
+            records.add(waterRecord)
 
-    override fun isEnable(): Boolean {
-        return prefs.getBoolean("enableHealthConnect", true)
-    }
+            val fatRecord = buildFatRecord(it)
+            records.add(fatRecord)
+        }
 
-    override suspend fun insert(measurement: ScaleMeasurement) {
-        val time = measurement.date.toInstant().atZone(ZoneId.systemDefault())
-        val weightRecord = WeightRecord(
-            weight = Mass.kilograms(measurement.weight.toDouble()),
-            time = time.toInstant(),
-            zoneOffset = time.offset
-        )
-        val records = listOf(weightRecord)
+        Timber.d("Converted the ${measurements.size} measurements to ${records.size} records")
+
         try {
-            //healthConnectClient.insertRecords(records)
-            Toast.makeText(context, "Successfully insert records", Toast.LENGTH_SHORT).show()
+            healthConnectClient.insertRecords(records)
         } catch (e: Exception) {
-            Toast.makeText(context, e.message.toString(), Toast.LENGTH_SHORT).show()
+            Timber.e( e.toString())
+        } finally {
+            Timber.d("Writing ${records.size} measurements done")
         }
     }
 
-    override fun delete(date: Date) {
+    suspend fun insert(measurement: OpenScaleMeasurement) {
+        val records = mutableListOf<Record>()
 
-    }
+        val weightRecord = buildWeightRecord(measurement)
+        records.add(weightRecord)
 
-    override fun clear() {
+        val waterRecord = buildWaterRecord(measurement)
+        records.add(waterRecord)
 
-    }
+        val fatRecord = buildFatRecord(measurement)
+        records.add(fatRecord)
 
-    override fun update(measurement: ScaleMeasurement) {
-
-    }
-
-    override fun hasPermission(): Boolean {
-        val healthConnectClient = detectHealthConnect()
-
-        if (healthConnectClient != null) {
-            Timber.d("Health Connect found")
-        }
-
-        return false
-    }
-
-    override fun askPermission(context: ComponentActivity) {
-        context.registerForActivityResult(requestPermissionActivityContract) { granted ->
-            if (granted.containsAll(PERMISSIONS)) {
-                Timber.d("Health Connect permissions granted")
-            } else {
-                Timber.d("Health Connect permissions not granted")
-            }
+        try {
+            healthConnectClient.insertRecords(records)
+        } catch (e: Exception) {
+            Timber.e(e.toString())
+        } finally {
+            Timber.d("Writing measurements done")
         }
     }
 
-    override fun checkStatus(statusView: StatusViewAdapter) {
-        Timber.d("Check Health Connect sync status")
+    suspend fun delete(date: Date) {
+        val localDate = date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+        val startOfDay = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val endOfDay = localDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
 
-    }
+        val timeRange = TimeRangeFilter.between(startOfDay, endOfDay)
 
-
-
-
-    suspend fun checkPermissionsAndRun(healthConnectClient: HealthConnectClient) {
-        val granted = healthConnectClient.permissionController.getGrantedPermissions()
-        if (granted.containsAll(PERMISSIONS)) {
-            // Permissions already granted; proceed with inserting or reading data
-        } else {
-           // requestPermissions.launch(PERMISSIONS)
+        try {
+            healthConnectClient.deleteRecords(
+                    WeightRecord::class,
+                    timeRange
+                )
+            healthConnectClient.deleteRecords(
+                    BodyFatRecord::class,
+                    timeRange
+                )
+            healthConnectClient.deleteRecords(
+                    BodyWaterMassRecord::class,
+                    timeRange
+                )
+            Timber.d("Successfully deleted records for date: $date")
+        } catch (e: Exception) {
+            Timber.e("Error deleting records for date: $date, error: ${e.message}")
         }
     }
 
-    fun detectHealthConnect(): HealthConnectClient? {
-        val availabilityStatus = HealthConnectClient.getSdkStatus(context)
-        if (availabilityStatus == HealthConnectClient.SDK_UNAVAILABLE) {
-            return null // early return as there is no viable integration
-        }
-        if (availabilityStatus == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
-            // Optionally redirect to package installer to find a provider, for example:
-            val uriString = "market://details?id=com.google.android.apps.healthdata&url=healthconnect%3A%2F%2Fonboarding"
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW).apply {
-                    setPackage("com.android.vending")
-                    data = Uri.parse(uriString)
-                    putExtra("overlay", true)
-                    putExtra("callerId", context.packageName)
-                }
+    suspend fun clear() {
+        val localDate = Date().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+        val startOfDay = localDate.minusYears(10).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val endOfDay = localDate.plusYears(10).atStartOfDay(ZoneId.systemDefault()).toInstant()
+
+        val timeRange = TimeRangeFilter.between(startOfDay, endOfDay)
+
+        try {
+            healthConnectClient.deleteRecords(
+                WeightRecord::class,
+                timeRange
             )
-            return null
+            healthConnectClient.deleteRecords(
+                BodyFatRecord::class,
+                timeRange
+            )
+            healthConnectClient.deleteRecords(
+                BodyWaterMassRecord::class,
+                timeRange
+            )
+            Timber.d("Successfully deleted all records")
+        } catch (e: Exception) {
+            Timber.e("Error deleting all records, error: ${e.message}")
         }
+    }
 
-        return HealthConnectClient.getOrCreate(context)
+    suspend fun update(measurement: OpenScaleMeasurement) {
+        val records = mutableListOf<Record>()
 
+        try {
+            val weightRecord = readWeightRecord(measurement)
+            val waterRecord = readWaterRecord(measurement)
+            val fatRecord = readFatRecord(measurement)
+
+            if (weightRecord != null) {
+                records.add(buildWeightRecord(measurement))
+            }
+            if (waterRecord != null) {
+                records.add(buildWaterRecord(measurement))
+            }
+            if (fatRecord != null) {
+                records.add(buildFatRecord(measurement))
+            }
+
+            if (records.isNotEmpty()) {
+                healthConnectClient.insertRecords(records)
+                Timber.d("Successfully updated records for measurement: ${measurement.id}")
+            } else {
+                Timber.e("No records found to update for measurement: ${measurement.id}")
+            }
+
+        } catch (e: Exception) {
+            Timber.e("Error updating records for measurement: ${measurement.id}, error: ${e.message}", e)
+        }
+    }
+
+    private suspend fun readWeightRecord(measurement: OpenScaleMeasurement): WeightRecord? {
+        return readRecord(measurement, WeightRecord::class)
+    }
+
+    private suspend fun readWaterRecord(measurement: OpenScaleMeasurement): BodyWaterMassRecord? {
+        return readRecord(measurement, BodyWaterMassRecord::class)
+    }
+
+    private suspend fun readFatRecord(measurement: OpenScaleMeasurement): BodyFatRecord? {
+        return readRecord(measurement,BodyFatRecord::class)
+    }
+
+    private suspend fun <T : Record> readRecord(
+        measurement: OpenScaleMeasurement,
+        recordType: KClass<T>,
+    ): T? {
+        val timeRangeFilter = TimeRangeFilter.between(measurement.date.toInstant().minusSeconds(1), measurement.date.toInstant().plusSeconds(1))
+        val dataOriginFilter = setOf(DataOrigin("com.health.openscale.sync"))
+        val readRequest = ReadRecordsRequest(
+            recordType = recordType,
+            timeRangeFilter = timeRangeFilter,
+            dataOriginFilter = dataOriginFilter
+        )
+        val response: ReadRecordsResponse<T> = healthConnectClient.readRecords(readRequest)
+        return response.records.firstOrNull()
+    }
+
+    private fun buildMetadata(measurement: OpenScaleMeasurement, type: String): Metadata {
+        return Metadata(
+            clientRecordId = measurement.id.toString() + "_" + type,
+            clientRecordVersion = Instant.now().toEpochMilli()
+        )
+    }
+
+    private fun buildWeightRecord(measurement: OpenScaleMeasurement): WeightRecord {
+        return WeightRecord(
+            time = measurement.date.toInstant(),
+            zoneOffset = null,
+            weight = Mass.kilograms(measurement.weight.toDouble()),
+            metadata = buildMetadata(measurement, "weight")
+        )
+    }
+
+    private fun buildWaterRecord(measurement: OpenScaleMeasurement): BodyWaterMassRecord {
+        return BodyWaterMassRecord(
+            time = measurement.date.toInstant(),
+            zoneOffset = null,
+            mass = Mass.kilograms(measurement.weight.toDouble() * measurement.water.toDouble() / 100),
+            metadata = buildMetadata(measurement, "water")
+        )
+    }
+
+    private fun buildFatRecord(measurement: OpenScaleMeasurement): BodyFatRecord {
+        return BodyFatRecord(
+            time = measurement.date.toInstant(),
+            zoneOffset = null,
+            percentage = Percentage(measurement.fat.toDouble()),
+            metadata = buildMetadata(measurement, "fat")
+        )
     }
 }

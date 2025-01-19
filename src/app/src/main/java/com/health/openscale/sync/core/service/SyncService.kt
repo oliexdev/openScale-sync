@@ -7,30 +7,24 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.os.IBinder
-import android.preference.PreferenceManager
 import androidx.core.app.NotificationCompat
 import com.health.openscale.sync.R
-import com.health.openscale.sync.core.datatypes.ScaleMeasurement
-import com.health.openscale.sync.core.sync.HealthConnectSync
-import com.health.openscale.sync.core.sync.MQTTSync
-import com.health.openscale.sync.core.sync.WgerSync
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import timber.log.Timber.Forest.plant
 import java.util.Date
 
 class SyncService : Service() {
-    private var scaleMeasurementSyncList = arrayOf(
-        HealthConnectSync(applicationContext),
-        MQTTSync(applicationContext),
-        WgerSync(applicationContext)
-    )
-    private var prefs: SharedPreferences? = null
+    private lateinit var syncServiceList : Array<ServiceInterface>
+    private lateinit var prefs: SharedPreferences
     private val ID_SERVICE = 5
 
     override fun onBind(intent: Intent): IBinder? {
@@ -40,8 +34,23 @@ class SyncService : Service() {
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
-        prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
+        showNotification() // Start foreground service immediately
 
+        prefs = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
+
+        syncServiceList = arrayOf(
+            HealthConnectService(applicationContext, prefs),
+            MQTTService(applicationContext, prefs),
+            WgerService(applicationContext, prefs)
+        )
+
+        CoroutineScope(Dispatchers.Main).launch {
+            for (syncService in syncServiceList) {
+                if (syncService.viewModel().syncEnabled.value) {
+                    syncService.init()
+                }
+            }
+        }
         onHandleIntent(intent)
 
         return START_STICKY
@@ -55,63 +64,69 @@ class SyncService : Service() {
         }
     }
 
-    protected fun onHandleIntent(intent: Intent?) {
+    protected fun onHandleIntent(intent: Intent) {
         Timber.d(resources.getString(R.string.txt_sign_request_received))
 
         var mode: String? = "none"
         var openScaleUserId = 0
 
         try {
-            mode = intent!!.extras!!.getString("mode")
-            openScaleUserId = prefs!!.getInt("openScaleUserId", 0)
+            mode = intent.extras!!.getString("mode")
+            openScaleUserId = prefs.getInt("selectedOpenScaleUserId", -1)
         } catch (ex: NullPointerException) {
             Timber.e(ex.message)
         }
 
-        for (scaleMeasurementSync in scaleMeasurementSyncList!!) {
-            if (!scaleMeasurementSync.isEnable()) {
-                Timber.d(scaleMeasurementSync.getName() + " [disabled]")
+        for (syncService in syncServiceList) {
+            if (!syncService.viewModel().syncEnabled.value) {
+                Timber.d(syncService.viewModel().getName() + " [disabled]")
                 continue
             }
 
-            Timber.d(scaleMeasurementSync.getName()  + " [enabled]")
+            Timber.d(syncService.viewModel().getName()  + " [enabled]")
 
             if (mode == "insert") {
-                val userId = intent!!.getIntExtra("userId", 0)
+                val userId = intent.getIntExtra("userId", 0)
                 val weight = intent.getFloatExtra("weight", 0.0f)
                 val date = Date(intent.getLongExtra("date", 0L))
 
                 Timber.d(resources.getString(R.string.txt_sync_insert) + " user Id: " + userId + " weight: " + weight + " date: " + date)
 
                 if (userId == openScaleUserId) {
-                    runBlocking { launch {
-                        scaleMeasurementSync.insert(ScaleMeasurement(date, weight))
-                    }}
+                    CoroutineScope(Dispatchers.Main).launch {
+                        syncService.insert(OpenScaleMeasurement(0, date, weight, 0f, 0f, 0f))
+                    }
                 } else {
                     Timber.d(resources.getString(R.string.txt_openScale_userid_missmatch))
                 }
             } else if (mode == "update") {
-                val userId = intent!!.getIntExtra("userId", 0)
+                val userId = intent.getIntExtra("userId", 0)
                 val weight = intent.getFloatExtra("weight", 0.0f)
                 val date = Date(intent.getLongExtra("date", 0L))
 
                 Timber.d(resources.getString(R.string.txt_sync_update) + " userId: " + userId + " weight: " + weight + " date: " + date)
 
                 if (userId == openScaleUserId) {
-                    scaleMeasurementSync.update(ScaleMeasurement(date, weight))
+                    CoroutineScope(Dispatchers.Main).launch {
+                        syncService.update(OpenScaleMeasurement(0, date, weight, 0f, 0f, 0f))
+                    }
                 } else {
                     Timber.d(resources.getString(R.string.txt_openScale_userid_missmatch))
                 }
             } else if (mode == "delete") {
-                val date = Date(intent!!.getLongExtra("date", 0L))
+                val date = Date(intent.getLongExtra("date", 0L))
 
                 Timber.d(resources.getString(R.string.txt_sync_delete) + " date: " + date)
 
-                scaleMeasurementSync.delete(date)
+                CoroutineScope(Dispatchers.Main).launch {
+                    syncService.delete(date)
+                }
             } else if (mode == "clear") {
                 Timber.d(resources.getString(R.string.txt_sync_clear))
 
-                scaleMeasurementSync.clear()
+                CoroutineScope(Dispatchers.Main).launch {
+                    syncService.clear()
+                }
             }
         }
 

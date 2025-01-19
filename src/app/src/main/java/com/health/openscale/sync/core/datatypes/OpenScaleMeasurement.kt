@@ -7,8 +7,11 @@ import androidx.annotation.Keep
 import java.util.Date
 
 @Keep
-class ScaleMeasurement(var date: Date, var weight: Float) {
-    override fun toString(): String {
-        return "date $date weight $weight"
-    }
-}
+data class OpenScaleMeasurement(
+    val id: Int,
+    val date: Date,
+    val weight: Float,
+    val fat: Float,
+    val water: Float,
+    val muscle: Float
+)
