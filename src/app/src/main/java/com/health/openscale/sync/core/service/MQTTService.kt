@@ -225,19 +225,20 @@ class MQTTService(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val errorMessage by viewModel.errorMessage.observeAsState()
-
-                if (errorMessage != null && viewModel.syncEnabled.value) {
-                    Text("$errorMessage", color = Color.Red)
-                }
                 Button(onClick = {
-                        activity.lifecycleScope.launch {
-                            connectMQTT()
-                        }
-                    },
+                    activity.lifecycleScope.launch {
+                        connectMQTT()
+                    }
+                },
                     enabled = viewModel.syncEnabled.value)
                 {
                     Text(text = "Connect to MQTT broker")
+                }
+
+                val errorMessage by viewModel.errorMessage.observeAsState()
+
+                if (errorMessage != null && errorMessage != "" && viewModel.syncEnabled.value) {
+                    Text("$errorMessage", color = Color.Red)
                 }
             }
         }

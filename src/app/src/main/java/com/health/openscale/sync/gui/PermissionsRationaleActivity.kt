@@ -36,7 +36,6 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -48,7 +47,6 @@ import com.health.openscale.sync.R
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 
 class PermissionsRationaleActivity : AppCompatActivity() {
-    @OptIn(ExperimentalTextApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -69,7 +67,7 @@ class PermissionsRationaleActivity : AppCompatActivity() {
                                 .fillMaxWidth()
                         ) {
                             Image(
-                                painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground), // Replace with your app icon resource
+                                painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground),
                                 contentDescription = "App Icon",
                                 modifier = Modifier.size(64.dp)
                             )

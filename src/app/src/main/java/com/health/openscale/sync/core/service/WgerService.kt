@@ -91,7 +91,7 @@ class WgerService(
         }
     }
 
-    private fun connectWger() {
+    private suspend fun connectWger() {
         try {
             val client = OkHttpClient.Builder().addInterceptor { chain ->
                 val newRequest = chain.request().newBuilder()
@@ -110,9 +110,17 @@ class WgerService(
                 .build()
 
             wgerSync = WgerSync(wgerRetrofit)
-            viewModel.setAllPermissionsGranted(true)
-            viewModel.setConnectAvailable(true)
-            viewModel.setErrorMessage("")
+            val wgerApi : WgerSync.WgerApi = wgerRetrofit.create(WgerSync.WgerApi::class.java)
+            val wgerWeightEntryList = wgerApi.weightEntryList()
+
+            if (wgerWeightEntryList.count >= 0) {
+                viewModel.setAllPermissionsGranted(true)
+                viewModel.setConnectAvailable(true)
+                viewModel.setErrorMessage("")
+                setInfoMessage("Successful connected to wger")
+            } else {
+                setErrorMessage("Can't connect to wger")
+            }
         } catch (ex: Exception) {
             setErrorMessage("$ex.message")
         }
@@ -171,19 +179,20 @@ class WgerService(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val errorMessage by viewModel.errorMessage.observeAsState()
-
-                if (errorMessage != null && viewModel.syncEnabled.value) {
-                    Text("$errorMessage", color = Color.Red)
-                }
                 Button(onClick = {
-                        activity.lifecycleScope.launch {
-                            connectWger()
-                        }
-                    },
+                    activity.lifecycleScope.launch {
+                        connectWger()
+                    }
+                },
                     enabled = viewModel.syncEnabled.value)
                 {
                     Text(text = "Connect to Wger")
+                }
+
+                val errorMessage by viewModel.errorMessage.observeAsState()
+
+                if (errorMessage != null && errorMessage != "" && viewModel.syncEnabled.value) {
+                    Text("$errorMessage", color = Color.Red)
                 }
             }
         }

@@ -322,7 +322,7 @@ class MainActivity : AppCompatActivity() {
                     .fillMaxWidth()
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground), // Replace with your app icon resource
+                    painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground),
                     contentDescription = "App Icon",
                     modifier = Modifier.size(64.dp)
                 )

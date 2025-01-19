@@ -156,7 +156,7 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
 
     data class WgerWeightEntryList(
         @SerializedName("count")
-        val count: Long = 0,
+        val count: Long = -1,
         @SerializedName("next")
         val next: String? = null,
         @SerializedName("previous")
