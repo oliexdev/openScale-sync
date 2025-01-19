@@ -65,7 +65,7 @@ class SyncService : Service() {
     }
 
     protected fun onHandleIntent(intent: Intent) {
-        Timber.d(resources.getString(R.string.txt_sign_request_received))
+        Timber.d("openScale sync service handle intent started")
 
         var mode: String? = "none"
         var openScaleUserId = 0
@@ -90,39 +90,39 @@ class SyncService : Service() {
                 val weight = intent.getFloatExtra("weight", 0.0f)
                 val date = Date(intent.getLongExtra("date", 0L))
 
-                Timber.d(resources.getString(R.string.txt_sync_insert) + " user Id: " + userId + " weight: " + weight + " date: " + date)
+                Timber.d("SyncService insert command received for user Id: $userId weight: $weight date: $date")
 
                 if (userId == openScaleUserId) {
                     CoroutineScope(Dispatchers.Main).launch {
                         syncService.insert(OpenScaleMeasurement(0, date, weight, 0f, 0f, 0f))
                     }
                 } else {
-                    Timber.d(resources.getString(R.string.txt_openScale_userid_missmatch))
+                    Timber.d("openScale sync userId and openScale userId mismatched")
                 }
             } else if (mode == "update") {
                 val userId = intent.getIntExtra("userId", 0)
                 val weight = intent.getFloatExtra("weight", 0.0f)
                 val date = Date(intent.getLongExtra("date", 0L))
 
-                Timber.d(resources.getString(R.string.txt_sync_update) + " userId: " + userId + " weight: " + weight + " date: " + date)
+                Timber.d("SyncService update command received for userId: $userId weight: $weight date: $date")
 
                 if (userId == openScaleUserId) {
                     CoroutineScope(Dispatchers.Main).launch {
                         syncService.update(OpenScaleMeasurement(0, date, weight, 0f, 0f, 0f))
                     }
                 } else {
-                    Timber.d(resources.getString(R.string.txt_openScale_userid_missmatch))
+                    Timber.d("openScale sync userId and openScale userId mismatched")
                 }
             } else if (mode == "delete") {
                 val date = Date(intent.getLongExtra("date", 0L))
 
-                Timber.d(resources.getString(R.string.txt_sync_delete) + " date: " + date)
+                Timber.d("SyncService delete command received for date: $date")
 
                 CoroutineScope(Dispatchers.Main).launch {
                     syncService.delete(date)
                 }
             } else if (mode == "clear") {
-                Timber.d(resources.getString(R.string.txt_sync_clear))
+                Timber.d("SyncService clear command received")
 
                 CoroutineScope(Dispatchers.Main).launch {
                     syncService.clear()
