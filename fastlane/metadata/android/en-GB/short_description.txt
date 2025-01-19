@@ -1,1 +1,1 @@
-openScale synchronisation service to various clouds
+Synchronize your openScale measurements with external services

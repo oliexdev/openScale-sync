@@ -1,8 +1,10 @@
-Synchronise your openScale weight data to various clouds.
+Synchronize your openScale measurements with external services
 
 Features:
-* automatic synchronization to Google Fit, wger and/or MQTT 3.1 when inserting, editing, deleting in openScale
-* manual complete synchronization from openScale to Google Fit, wger and/or MQTT 3.1
-* background service which is only called when needed (low battery consumption)
-* selectable openScale user to synchronize with
-* easy to use graphical user interface
+* Seamless External Service Integration: Effortlessly synchronize data with external services like Health Connect, Wger, and MQTT (versions 3.1 and 5.0).
+* Real-time Synchronization: Automatically synchronize data upon insertion, editing, deletion, or clearing of measurements within openScale.
+* Configurable Service Activation: Easily enable or disable individual external services to tailor your synchronization preferences.
+* On-Demand Full Synchronization: Initiate a complete data synchronization manually whenever needed.
+* Intelligent Foreground Service: Utilizes a foreground service that activates only when required, minimizing battery consumption.
+* User-Specific Synchronization: Select the specific openScale user for targeted data synchronization.
+* Intuitive User Interface: Enjoy a user-friendly graphical interface for effortless navigation and control.
