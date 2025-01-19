@@ -99,7 +99,7 @@ class OpenScaleProvider (
         requestPermission.launch(requiredPermissions)
     }
 
-    fun getSelectedUser(): OpenScaleUser? {
+    fun getSelectedUser(): OpenScaleUser {
         val selectedUserId = openScaleDataService.getSavedSelectedUserId()
         try {
             if (selectedUserId != null) {
@@ -108,10 +108,10 @@ class OpenScaleProvider (
                 return viewModel.openScaleUsers.value.first()
             }
         } catch (e: NoSuchElementException) {
-            // ignored
+            viewModel.setErrorMessage("Cannot find any openScale user")
         }
 
-        return null
+        return OpenScaleUser(Int.MAX_VALUE, "<none found>")
     }
 
     @Composable

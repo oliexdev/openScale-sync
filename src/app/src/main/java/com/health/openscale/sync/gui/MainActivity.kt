@@ -393,7 +393,7 @@ class MainActivity : AppCompatActivity() {
                     if (syncService.viewModel().syncEnabled.value) {
                         lifecycleScope.launch {
                             openScaleDataService.checkVersion()
-                            syncService.sync(openScaleDataService.getMeasurements(openScaleService.getSelectedUser()!!))
+                            syncService.sync(openScaleDataService.getMeasurements(openScaleService.getSelectedUser()))
                             syncService.viewModel().setLastSync(Instant.now())
                         }
                     }

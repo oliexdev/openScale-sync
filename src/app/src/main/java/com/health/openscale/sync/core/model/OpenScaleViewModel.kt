@@ -28,7 +28,7 @@ import com.health.openscale.sync.core.datatypes.OpenScaleUser
 
 class OpenScaleViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
     private val _openScaleUsers: MutableState<List<OpenScaleUser>> = mutableStateOf(listOf())
-    private val _openScaleSelectedUser = MutableLiveData<OpenScaleUser?>(null)
+    private val _openScaleSelectedUser = MutableLiveData<OpenScaleUser>(null)
 
     init {
     }
@@ -48,9 +48,9 @@ class OpenScaleViewModel(private val sharedPreferences: SharedPreferences) : Vie
     }
 
 
-    val openScaleSelectedUser: LiveData<OpenScaleUser?> = _openScaleSelectedUser
+    val openScaleSelectedUser: LiveData<OpenScaleUser> = _openScaleSelectedUser
 
-    fun selectOpenScaleUser(value: OpenScaleUser?) {
+    fun selectOpenScaleUser(value: OpenScaleUser) {
         _openScaleSelectedUser.value = value
     }
 }
