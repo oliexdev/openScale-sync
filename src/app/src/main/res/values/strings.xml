@@ -28,6 +28,11 @@
     <string name="txt_openScale_connection_failed">openScale connection failed</string>
     <string name="txt_openScale_userid_missmatch">openScale user id missmatched with openScale sync user id</string>
 
+    <string name="txt_healthConnect_status">Health Connect status</string>
+    <string name="txt_healthConnect_sync">Health Connect sync</string>
+    <string name="txt_healthConnect_permission_granted">"Health Connect permission granted"</string>
+    <string name="txt_healthConnect_permission_not_granted">"Health Connect permission not granted"</string>
+
     <string name="txt_openScale_connection_successful">openScale connection successful</string>
     <string name="txt_googleFit_permission_granted">"Google Fit permission granted"</string>
     <string name="txt_openScale_user_found">openScale user found</string>

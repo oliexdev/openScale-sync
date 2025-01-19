@@ -2,19 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="com.health.openscale.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.pro.READ_WRITE_DATA" />
+    <uses-permission android:name="android.permission.health.WRITE_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.WRITE_BODY_WATER_MASS" />
+    <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
 
     <queries>
         <package android:name="com.health.openscale" />
         <package android:name="com.health.openscale.light" />
         <package android:name="com.health.openscale.pro" />
+        <package android:name="com.google.android.apps.healthdata" />
     </queries>
 
     <application
@@ -22,22 +23,46 @@
         android:icon="@mipmap/ic_launcher_openscale_sync"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:enableOnBackInvokedCallback="true"
+        android:theme="@style/Theme.OpenScaleSync">
 
-        <service android:name=".core.service.SyncService" android:exported="true" />
-        <service android:name="info.mqtt.android.service.MqttService" android:exported="true"/>
+        <service android:name=".core.service.SyncService" android:exported="true" android:foregroundServiceType="dataSync"/>
 
         <activity
             android:name=".gui.MainActivity"
+            android:theme="@style/Theme.OpenScaleSync"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+
         </activity>
 
+        <!-- Permission handling for Android 13 and before -->
+        <activity
+            android:name=".gui.PermissionsRationaleActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:theme="@style/Theme.OpenScaleSync">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
 
+        <!-- Permission handling for Android 14 and later -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".gui.PermissionsRationaleActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
     </application>
 
 </manifest>
