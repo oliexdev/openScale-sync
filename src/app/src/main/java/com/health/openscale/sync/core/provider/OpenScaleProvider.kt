@@ -55,12 +55,10 @@ class OpenScaleProvider (
     private val sharedPreferences: SharedPreferences
 ) {
     private val viewModel: OpenScaleViewModel = OpenScaleViewModel(sharedPreferences)//ViewModelProvider(context)[OpenScaleViewModel::class.java]
-    private val tag = "OpenScaleService"
     private val requiredPermissions = sharedPreferences.getString("packageName", "com.health.openscale") + ".READ_WRITE_DATA"
     private lateinit var requestPermission : ActivityResultLauncher<String>
 
      fun init() {
-        viewModel.setConnectAvailable(true)
         checkPermissionGranted()
 
         if (viewModel.allPermissionsGranted.value) {

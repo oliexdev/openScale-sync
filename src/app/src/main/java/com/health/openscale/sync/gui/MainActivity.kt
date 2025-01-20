@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,8 +73,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
@@ -115,7 +122,6 @@ class MainActivity : AppCompatActivity() {
 
         sharedPreferences.edit().putString("packageName", detectPackage()).apply()
 
-        // Initialize ViewModel
         openScaleDataService = OpenScaleDataProvider(this, sharedPreferences)
         openScaleService = OpenScaleProvider(this, openScaleDataService, sharedPreferences)
 
@@ -123,6 +129,12 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             openScaleService.init()
+        }
+
+        if (sharedPreferences.getString("packageName", "null") == "null") {
+            openScaleService.viewModel().setConnectAvailable(false)
+        } else {
+            openScaleService.viewModel().setConnectAvailable(true)
         }
 
         syncServiceList = listOf(
@@ -298,7 +310,21 @@ class MainActivity : AppCompatActivity() {
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text("Website", style = MaterialTheme.typography.titleMedium)
-                Text("https://github.com/oliexdev/openScale/wiki/openScale-sync", style = MaterialTheme.typography.bodyMedium)
+                val annotatedString = buildAnnotatedString {
+                    val linkText = "https://github.com/oliexdev/openScale-sync"
+                    withStyle(
+                        SpanStyle(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 16.sp,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    ) {
+                        append(linkText)
+                    }
+                    addLink(LinkAnnotation.Url(linkText), 0, linkText.length)
+                }
+
+                Text(annotatedString, style = MaterialTheme.typography.bodyMedium)
             }
             Column (
                 modifier = Modifier.padding(16.dp)
@@ -382,6 +408,7 @@ class MainActivity : AppCompatActivity() {
     }
     @Composable
     fun fullSyncFloatingButton(syncService: ServiceInterface) {
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -390,28 +417,44 @@ class MainActivity : AppCompatActivity() {
         ) {
             ExtendedFloatingActionButton(
                 onClick = {
-                    if (syncService.viewModel().syncEnabled.value) {
+                    if (syncService.viewModel().syncEnabled.value && !syncService.viewModel().syncRunning.value) {
                         lifecycleScope.launch {
+                            syncService.viewModel().setSyncRunning(true)
                             openScaleDataService.checkVersion()
                             syncService.sync(openScaleDataService.getMeasurements(openScaleService.getSelectedUser()))
                             syncService.viewModel().setLastSync(Instant.now())
+                            syncService.viewModel().setSyncRunning(false)
                         }
                     }
                 },
                 containerColor = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.inverseOnSurface,
                 contentColor = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray,
                 text = {
-                    Text(
-                        text = "Fully sync",
-                        color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
-                    )
+                    if (syncService.viewModel().syncRunning.value) {
+                        Text(
+                            text = "Syncing ...",
+                            color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
+                        )
+                    } else {
+                        Text(
+                            text = "Fully sync",
+                            color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
+                        )
+                    }
                 },
                 icon = {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = "Full sync",
-                        tint = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
-                    )
+                    if (syncService.viewModel().syncRunning.value) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(8.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Full sync",
+                            tint = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
+                        )
+                    }
                 }
             )
         }
