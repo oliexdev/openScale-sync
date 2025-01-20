@@ -25,6 +25,8 @@ import android.net.Uri
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import timber.log.Timber
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Date
 
 class OpenScaleDataProvider(
@@ -160,33 +162,34 @@ class OpenScaleDataProvider(
                     }
 
                     if (record.getColumnName(i).equals("weight")) {
-                        weight = record.getFloat(i)
+                        weight = roundFloat(record.getFloat(i))
                     }
 
                     if (record.getColumnName(i).equals("fat")) {
-                        fat = record.getFloat(i)
+                        fat = roundFloat(record.getFloat(i))
                     }
 
                     if (record.getColumnName(i).equals("water")) {
-                        water = record.getFloat(i)
+                        water = roundFloat(record.getFloat(i))
                     }
 
                     if (record.getColumnName(i).equals("muscle")) {
-                        muscle = record.getFloat(i)
+                        muscle = roundFloat(record.getFloat(i))
                     }
                 }
 
                 if (id != null && dateTime != null && weight != null && fat != null && water != null && muscle != null) {
-                    measurements.add(
-                        OpenScaleMeasurement(
-                            id,
-                            dateTime,
-                            weight,
-                            fat,
-                            water,
-                            muscle
-                        )
+                    var measurement = OpenScaleMeasurement(
+                        id,
+                        dateTime,
+                        weight,
+                        fat,
+                        water,
+                        muscle
                     )
+
+                    measurements.add(measurement)
+                    Timber.d("Measurement by provide $measurement")
                 } else {
                     Timber.e("Not all required parameters are set")
                 }
@@ -196,6 +199,12 @@ class OpenScaleDataProvider(
         Timber.d("Loaded ${measurements.size} measurements for user ${openScaleUser.id}")
 
         return measurements
+    }
+
+    private fun roundFloat(number: Float): Float {
+        val bigDecimal = BigDecimal(number.toDouble())
+        val rounded = bigDecimal.setScale(2, RoundingMode.HALF_UP)
+        return rounded.toFloat()
     }
 
     fun insertMeasurement(date: Date, weight: Float, userId: Int) {

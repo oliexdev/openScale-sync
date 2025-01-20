@@ -90,6 +90,7 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
     }
 
     suspend fun clear() {
+        Timber.d("wger clear started")
             try {
                 var wgerWeightEntryList = wgerApi.weightEntryList()
 

@@ -31,9 +31,12 @@ import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import timber.log.Timber.Forest.plant
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Date
 
 class SyncService : Service() {
@@ -64,8 +67,10 @@ class SyncService : Service() {
                     syncService.init()
                 }
             }
+            delay(500) // wait a bit if all initialization are done before handle the intent
+
+            onHandleIntent(intent)
         }
-        onHandleIntent(intent)
 
         return START_STICKY
     }
@@ -101,28 +106,34 @@ class SyncService : Service() {
 
             if (mode == "insert") {
                 val userId = intent.getIntExtra("userId", 0)
-                val weight = intent.getFloatExtra("weight", 0.0f)
+                val weight = roundFloat(intent.getFloatExtra("weight", 0.0f))
+                val fat = roundFloat(intent.getFloatExtra("fat", 0.0f))
+                val water = roundFloat(intent.getFloatExtra("water", 0.0f))
+                val muscle = roundFloat(intent.getFloatExtra("muscle", 0.0f))
                 val date = Date(intent.getLongExtra("date", 0L))
 
-                Timber.d("SyncService insert command received for user Id: $userId weight: $weight date: $date")
+                Timber.d("SyncService insert command received for user Id: $userId date: $date weight: $weight fat: $fat water: $water muscle: $muscle")
 
                 if (userId == openScaleUserId) {
                     CoroutineScope(Dispatchers.Main).launch {
-                        syncService.insert(OpenScaleMeasurement(0, date, weight, 0f, 0f, 0f))
+                        syncService.insert(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
                     }
                 } else {
                     Timber.d("openScale sync userId and openScale userId mismatched")
                 }
             } else if (mode == "update") {
                 val userId = intent.getIntExtra("userId", 0)
-                val weight = intent.getFloatExtra("weight", 0.0f)
+                val weight = roundFloat(intent.getFloatExtra("weight", 0.0f))
+                val fat = roundFloat(intent.getFloatExtra("fat", 0.0f))
+                val water = roundFloat(intent.getFloatExtra("water", 0.0f))
+                val muscle = roundFloat(intent.getFloatExtra("muscle", 0.0f))
                 val date = Date(intent.getLongExtra("date", 0L))
 
-                Timber.d("SyncService update command received for userId: $userId weight: $weight date: $date")
+                Timber.d("SyncService update command received for userId: $userId date: $date weight: $weight fat: $fat water: $water muscle: $muscle")
 
                 if (userId == openScaleUserId) {
                     CoroutineScope(Dispatchers.Main).launch {
-                        syncService.update(OpenScaleMeasurement(0, date, weight, 0f, 0f, 0f))
+                        syncService.update(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
                     }
                 } else {
                     Timber.d("openScale sync userId and openScale userId mismatched")
@@ -146,6 +157,12 @@ class SyncService : Service() {
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun roundFloat(number: Float): Float {
+        val bigDecimal = BigDecimal(number.toDouble())
+        val rounded = bigDecimal.setScale(2, RoundingMode.HALF_UP)
+        return rounded.toFloat()
     }
 
     private fun showNotification() {

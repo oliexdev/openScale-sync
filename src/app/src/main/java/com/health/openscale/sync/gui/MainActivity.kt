@@ -437,7 +437,7 @@ class MainActivity : AppCompatActivity() {
                         )
                     } else {
                         Text(
-                            text = "Fully sync",
+                            text = "Full sync",
                             color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                         )
                     }
@@ -445,7 +445,7 @@ class MainActivity : AppCompatActivity() {
                 icon = {
                     if (syncService.viewModel().syncRunning.value) {
                         CircularProgressIndicator(
-                            modifier = Modifier.padding(8.dp),
+                            modifier = Modifier.size(24.dp),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     } else {
