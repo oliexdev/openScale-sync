@@ -44,8 +44,8 @@ platform :android do
         )
     end
 
-    desc "Deploy a new version to Google Play"
-    lane :deployRelease do
+    desc "Generate oss version"
+    lane :oss do |options|
         gradle(
             task: "clean", 
             project_dir: 'src/'
@@ -53,7 +53,20 @@ platform :android do
         gradle(
             task: "assemble",
             project_dir: 'src/',
-            build_type: "Release"
+            build_type: "oss"
+        )
+    end
+
+    desc "Deploy a new version to Google Play"
+    lane :deployOSS do
+        gradle(
+            task: "clean", 
+            project_dir: 'src/'
+        )
+        gradle(
+            task: "assemble",
+            project_dir: 'src/',
+            build_type: "OSS"
         )
         upload_to_play_store
     end
