@@ -40,7 +40,7 @@ private val LightColorScheme = lightColorScheme(
         primary = Color(0xff0099cc),
         secondary = Color(0xff0099cc),
         tertiary = Color(0xFFFFFBFE),
-)
+    )
 
 private val Typography = Typography(
     bodyLarge = TextStyle(

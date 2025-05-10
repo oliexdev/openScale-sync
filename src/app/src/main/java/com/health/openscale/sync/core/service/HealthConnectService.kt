@@ -51,7 +51,7 @@ class HealthConnectService(
 ) : ServiceInterface(context) {
     private val viewModel: HealthConnectViewModel = HealthConnectViewModel(sharedPreferences)//ViewModelProvider(context)[HealthConnectViewModel::class.java]
     private lateinit var healthConnectSync : HealthConnectSync
-    private lateinit var healthConnectClient: HealthConnectClient
+    private var healthConnectClient: HealthConnectClient? = null
     private lateinit var healthConnectRequestPermissions : ActivityResultLauncher<Set<String>>
 
     private val requiredPermissions = setOf(
@@ -64,7 +64,7 @@ class HealthConnectService(
         PermissionController.createRequestPermissionResultContract()
 
     override suspend fun init() {
-        healthConnectClient = detectHealthConnect()!!
+        healthConnectClient = detectHealthConnect()
     }
 
     override fun viewModel(): ViewModelInterface {
@@ -125,23 +125,27 @@ class HealthConnectService(
     }
 
     suspend fun checkAllPermissionsGranted() {
-        val granted = healthConnectClient.permissionController.getGrantedPermissions()
-        if (granted.containsAll(requiredPermissions)) {
-            viewModel.setAllPermissionsGranted(true)
-            healthConnectSync = HealthConnectSync(healthConnectClient)
-            setDebugMessage("health connect permissions already granted")
-        } else {
-            setDebugMessage("health connect permissions not all granted")
-            viewModel.setAllPermissionsGranted(false)
+        if (healthConnectClient != null) {
+            val granted = healthConnectClient!!.permissionController.getGrantedPermissions()
+            if (granted.containsAll(requiredPermissions)) {
+                viewModel.setAllPermissionsGranted(true)
+                healthConnectSync = HealthConnectSync(healthConnectClient!!)
+                setDebugMessage("health connect permissions already granted")
+            } else {
+                setDebugMessage("health connect permissions not all granted")
+                viewModel.setAllPermissionsGranted(false)
+            }
         }
     }
 
     suspend fun requestPermissions() {
-        val granted = healthConnectClient.permissionController.getGrantedPermissions()
-        if (granted.containsAll(requiredPermissions)) {
-            setDebugMessage("health connect permissions already granted")
-        } else {
-            healthConnectRequestPermissions.launch(requiredPermissions)
+        if (healthConnectClient != null) {
+            val granted = healthConnectClient!!.permissionController.getGrantedPermissions()
+            if (granted.containsAll(requiredPermissions)) {
+                setDebugMessage("health connect permissions already granted")
+            } else {
+                healthConnectRequestPermissions.launch(requiredPermissions)
+            }
         }
     }
 

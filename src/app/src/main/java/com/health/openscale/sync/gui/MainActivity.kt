@@ -151,7 +151,9 @@ class MainActivity : AppCompatActivity() {
             for (syncService in syncServiceList) {
                 syncService.openScaleService = openScaleService
                 syncService.openScaleDataService = openScaleDataService
-                syncService.init()
+                if (syncService.viewModel().syncEnabled.value) {
+                    syncService.init()
+                }
             }
         }
 
@@ -505,7 +507,7 @@ class MainActivity : AppCompatActivity() {
                             Text(
                                 "Last sync never",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onPrimary else Color.Gray
+                                color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                             )
                         } else {
                             val dateFormat = DateFormat.getDateFormat(applicationContext)
@@ -514,7 +516,7 @@ class MainActivity : AppCompatActivity() {
                             Text(
                                 "Last sync $timeDateFormat",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onPrimary else Color.Gray
+                                color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                             )
                         }
                     }

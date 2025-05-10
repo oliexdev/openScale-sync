@@ -179,7 +179,7 @@ class OpenScaleDataProvider(
                 }
 
                 if (id != null && dateTime != null && weight != null && fat != null && water != null && muscle != null) {
-                    var measurement = OpenScaleMeasurement(
+                    val measurement = OpenScaleMeasurement(
                         id,
                         dateTime,
                         weight,
@@ -189,7 +189,6 @@ class OpenScaleDataProvider(
                     )
 
                     measurements.add(measurement)
-                    Timber.d("Measurement by provide $measurement")
                 } else {
                     Timber.e("Not all required parameters are set")
                 }

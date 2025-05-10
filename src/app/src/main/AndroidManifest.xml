@@ -23,6 +23,7 @@
         android:icon="@mipmap/ic_launcher_openscale_sync"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.OpenScaleSync">
 
