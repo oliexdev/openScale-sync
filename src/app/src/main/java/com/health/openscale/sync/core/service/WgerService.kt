@@ -92,37 +92,39 @@ class WgerService(
     }
 
     private suspend fun connectWger() {
-        try {
-            val client = OkHttpClient.Builder().addInterceptor { chain ->
-                val newRequest = chain.request().newBuilder()
-                    .addHeader(
-                        "Authorization",
-                        "Token " + viewModel.wgerApiToken.value
-                    )
+        if (viewModel.syncEnabled.value) {
+            try {
+                val client = OkHttpClient.Builder().addInterceptor { chain ->
+                    val newRequest = chain.request().newBuilder()
+                        .addHeader(
+                            "Authorization",
+                            "Token " + viewModel.wgerApiToken.value
+                        )
+                        .build()
+                    chain.proceed(newRequest)
+                }.build()
+
+                wgerRetrofit = Retrofit.Builder()
+                    .client(client)
+                    .baseUrl(viewModel.wgerServer.value!!)
+                    .addConverterFactory(GsonConverterFactory.create())
                     .build()
-                chain.proceed(newRequest)
-            }.build()
 
-            wgerRetrofit = Retrofit.Builder()
-                .client(client)
-                .baseUrl(viewModel.wgerServer.value!!)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build()
+                wgerSync = WgerSync(wgerRetrofit)
+                val wgerApi: WgerSync.WgerApi = wgerRetrofit.create(WgerSync.WgerApi::class.java)
+                val wgerWeightEntryList = wgerApi.weightEntryList()
 
-            wgerSync = WgerSync(wgerRetrofit)
-            val wgerApi : WgerSync.WgerApi = wgerRetrofit.create(WgerSync.WgerApi::class.java)
-            val wgerWeightEntryList = wgerApi.weightEntryList()
-
-            if (wgerWeightEntryList.count >= 0) {
-                viewModel.setAllPermissionsGranted(true)
-                viewModel.setConnectAvailable(true)
-                viewModel.setErrorMessage("")
-                setInfoMessage("Successful connected to wger")
-            } else {
-                setErrorMessage("Can't connect to wger")
+                if (wgerWeightEntryList.count >= 0) {
+                    viewModel.setAllPermissionsGranted(true)
+                    viewModel.setConnectAvailable(true)
+                    viewModel.setErrorMessage("")
+                    setInfoMessage("Successful connected to wger")
+                } else {
+                    setErrorMessage("Can't connect to wger")
+                }
+            } catch (ex: Exception) {
+                setErrorMessage("$ex.message")
             }
-        } catch (ex: Exception) {
-            setErrorMessage("$ex.message")
         }
     }
 

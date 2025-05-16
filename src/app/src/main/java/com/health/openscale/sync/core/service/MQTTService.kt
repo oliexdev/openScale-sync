@@ -23,8 +23,11 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,7 +46,9 @@ import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.MQTTSync
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Date
 import kotlin.text.Charsets.UTF_8
 
@@ -93,31 +98,37 @@ class MQTTService(
         }
     }
 
-    private fun connectMQTT() {
+    private suspend fun connectMQTT() {
         if (viewModel.syncEnabled.value) {
+            viewModel.setMQTTConnecting(true)
             try {
-                mqttClient = MqttClient.builder()
-                    .useMqttVersion5()
-                    .serverHost(viewModel.mqttServer.value.toString())
-                    .serverPort(8883)
-                    .identifier("openScaleSync")
-                    .sslWithDefaultConfig()
-                    .buildBlocking()
+                withContext(Dispatchers.IO) {
+                    mqttClient = MqttClient.builder()
+                        .useMqttVersion5()
+                        .serverHost(viewModel.mqttServer.value.toString())
+                        .serverPort(viewModel.mqttPort.value.toString().toInt())
+                        .identifier("openScaleSync")
+                        .sslWithDefaultConfig()
+                        .buildBlocking()
 
-                mqttClient.connectWith()
-                    .simpleAuth()
-                    .username(viewModel.mqttUsername.value.toString())
-                    .password(UTF_8.encode(viewModel.mqttPassword.value.toString()))
-                    .applySimpleAuth()
-                    .send()
+                    mqttClient.connectWith()
+                        .simpleAuth()
+                        .username(viewModel.mqttUsername.value.toString())
+                        .password(UTF_8.encode(viewModel.mqttPassword.value.toString()))
+                        .applySimpleAuth()
+                        .send()
 
-                setInfoMessage("Successful connected to MQTT broker")
-                mqttSync = MQTTSync(mqttClient)
-                viewModel.setConnectAvailable(true)
-                viewModel.setAllPermissionsGranted(true)
-                viewModel.setErrorMessage("")
+                    setInfoMessage("Successful connected to MQTT broker")
+                    mqttSync = MQTTSync(mqttClient)
+                    viewModel.setConnectAvailable(true)
+                    viewModel.setAllPermissionsGranted(true)
+                    viewModel.setErrorMessage("")
+
+                    viewModel.setMQTTConnecting(false)
+                }
             } catch (result: Exception) {
                 setErrorMessage("${result.message}")
+                viewModel.setMQTTConnecting(false)
             }
         }
     }
@@ -225,14 +236,26 @@ class MQTTService(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                val mqttConnectingState by viewModel.mqttConnecting.observeAsState(false)
+
                 Button(onClick = {
-                    activity.lifecycleScope.launch {
-                        connectMQTT()
+                    if (!mqttConnectingState) {
+                        activity.lifecycleScope.launch {
+                            connectMQTT()
+                        }
                     }
                 },
                     enabled = viewModel.syncEnabled.value)
                 {
-                    Text(text = "Connect to MQTT broker")
+                    if (mqttConnectingState) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Text(text = " Connecting ...")
+                    } else {
+                        Text(text = "Connect to MQTT broker")
+                    }
                 }
 
                 val errorMessage by viewModel.errorMessage.observeAsState()

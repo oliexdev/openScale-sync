@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -35,6 +36,7 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.provider.OpenScaleProvider
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.Date
 
@@ -81,7 +83,9 @@ abstract class ServiceInterface (
 
     @Composable
     private fun composeBasicSettings(activity: ComponentActivity) {
-            Column (
+        val coroutineScope = rememberCoroutineScope()
+
+        Column (
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -91,6 +95,12 @@ abstract class ServiceInterface (
                         checked = viewModel().syncEnabled.value,
                         onCheckedChange = {
                             viewModel().setSyncEnabled(it)
+
+                            if (it) {
+                                coroutineScope.launch {
+                                    init()
+                                }
+                            }
                         },
                         modifier = Modifier.padding(end = 8.dp)
                     )
