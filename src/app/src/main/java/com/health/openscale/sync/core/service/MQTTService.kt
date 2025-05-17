@@ -21,9 +21,11 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,10 +38,12 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.MQTTViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
@@ -118,7 +122,7 @@ class MQTTService(
                         .applySimpleAuth()
                         .send()
 
-                    setInfoMessage("Successful connected to MQTT broker")
+                    setInfoMessage(context.getString(R.string.mqtt_broker_successful_connected_text))
                     mqttSync = MQTTSync(mqttClient)
                     viewModel.setConnectAvailable(true)
                     viewModel.setAllPermissionsGranted(true)
@@ -155,7 +159,7 @@ class MQTTService(
                     onValueChange = {
                         viewModel.setMQTTServer(it)
                     },
-                    label = { Text("Server Name") },
+                    label = { Text(stringResource(id = R.string.mqtt_server_name_title)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     )
@@ -183,7 +187,7 @@ class MQTTService(
                             viewModel.setMQTTPort(0)
                         }
                     },
-                    label = { Text("Port Number") },
+                    label = { Text(stringResource(id = R.string.mqtt_server_port_number_title)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number
                     )
@@ -204,7 +208,7 @@ class MQTTService(
                     onValueChange = {
                         viewModel.setMQTTUsername(it)
                     },
-                    label = { Text("Username") },
+                    label = { Text(stringResource(id = R.string.mqtt_username_title)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     )
@@ -225,7 +229,7 @@ class MQTTService(
                     onValueChange = {
                         viewModel.setMQTTPassword(it)
                     },
-                    label = { Text("Password") },
+                    label = { Text(stringResource(id = R.string.mqtt_password_title)) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
@@ -252,9 +256,10 @@ class MQTTService(
                             modifier = Modifier.size(24.dp),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
-                        Text(text = " Connecting ...")
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = stringResource(id = R.string.mqtt_connecting_text))
                     } else {
-                        Text(text = "Connect to MQTT broker")
+                        Text(text = stringResource(id = R.string.mqtt_connect_to_mqtt_broker_button))
                     }
                 }
 

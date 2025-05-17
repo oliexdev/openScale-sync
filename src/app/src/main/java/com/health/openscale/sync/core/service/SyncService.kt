@@ -180,11 +180,11 @@ class SyncService : Service() {
     }
 
     private fun createNotificationChannel(notificationManager: NotificationManager): String {
-        val channelId = resources.getString(R.string.app_name)
+        val channelId = "openScale sync"
 
         val channel = NotificationChannel(
             channelId,
-            resources.getString(R.string.app_name) + " service",
+            "openScale sync service",
             NotificationManager.IMPORTANCE_DEFAULT
         )
         channel.importance = NotificationManager.IMPORTANCE_DEFAULT

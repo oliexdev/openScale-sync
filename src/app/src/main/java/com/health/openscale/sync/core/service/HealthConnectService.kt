@@ -21,6 +21,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
+import android.text.format.DateFormat
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -38,6 +40,7 @@ import androidx.health.connect.client.records.BodyWaterMassRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.lifecycleScope
+import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.HealthConnectViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
@@ -74,40 +77,40 @@ class HealthConnectService(
     override suspend fun sync(measurements: List<OpenScaleMeasurement>) {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            setInfoMessage("Health Connect full sync")
             healthConnectSync.fullSync(measurements)
+            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_full_synced_info, measurements.size))
         }
     }
 
     override suspend fun insert(measurement: OpenScaleMeasurement) {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            setInfoMessage("Health Connect insert")
             healthConnectSync.insert(measurement)
+            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_inserted_info, measurement.weight, DateFormat.getDateFormat(context).format(measurement.date)))
         }
     }
 
     override suspend fun delete(date: Date) {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            setInfoMessage("Health Connect delete")
             healthConnectSync.delete(date)
+            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_deleted_info, DateFormat.getDateFormat(context).format(date)))
         }
     }
 
     override suspend fun clear() {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            setInfoMessage("Health Connect clear")
             healthConnectSync.clear()
+            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_cleared_info))
         }
     }
 
     override suspend fun update(measurement: OpenScaleMeasurement) {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            setInfoMessage("Health Connect update")
             healthConnectSync.update(measurement)
+            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_updated_info, measurement.weight, DateFormat.getDateFormat(context).format(measurement.date)))
         }
     }
 
@@ -154,13 +157,13 @@ class HealthConnectService(
         val availabilityStatus = HealthConnectClient.getSdkStatus(context)
 
         if (availabilityStatus == HealthConnectClient.SDK_UNAVAILABLE) {
-            setErrorMessage("HealthConnect not available")
+            setErrorMessage(context.getString(R.string.health_connect_not_available_text))
             viewModel.setConnectAvailable(false)
             return null
         }
 
         if (availabilityStatus == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
-            setErrorMessage("HealthConnect not installed or has to be updated. Consider redirecting to appstore")
+            setErrorMessage(context.getString(R.string.health_connect_not_installed_or_update_required_error))
             viewModel.setConnectAvailable(false)
             return null
         }
@@ -189,12 +192,12 @@ class HealthConnectService(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Health Connect is not available on this device.")
+                    Text(stringResource(id = R.string.health_connect_not_available_text))
                     Button(enabled = viewModel.syncEnabled.value,
                         onClick = {
                         openAppStore(activity)
                     }) {
-                        Text(text = "Get HealthConnect")
+                        Text(text = stringResource(id = R.string.health_connect_get_health_connect_button))
                     }
                 }
             }
@@ -203,14 +206,14 @@ class HealthConnectService(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Permissions to HealthConnect not granted")
+                    Text(stringResource(id = R.string.health_connect_permission_not_granted))
                     Button(enabled = viewModel.syncEnabled.value,
                         onClick = {
                         activity.lifecycleScope.launch {
                             requestPermissions()
                         }
                     }) {
-                        Text(text = "Request HealthConnect permissions")
+                        Text(text = stringResource(id = R.string.health_connect_request_permissions_button))
                     }
                 }
             }

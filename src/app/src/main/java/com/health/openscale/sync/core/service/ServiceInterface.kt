@@ -30,8 +30,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
@@ -105,7 +107,7 @@ abstract class ServiceInterface (
                         modifier = Modifier.padding(end = 8.dp)
                     )
 
-                    Text("Enable sync service")
+                    Text(stringResource(id = R.string.sync_service_enable_sync_service_button))
                 }
             }
         }

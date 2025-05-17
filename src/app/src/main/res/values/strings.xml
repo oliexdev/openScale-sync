@@ -1,15 +1,51 @@
 <resources>
-    <string name="app_name">openScale sync</string>
+    <string name="title_overview">Overview</string>
+    <string name="title_health_connect">Health Connect</string>
+    <string name="title_mqtt">MQTT</string>
+    <string name="title_wger">Wger</string>
+    <string name="title_about">About</string>
 
-    <string name="customactivityoncrash_error_activity_error_occurred_explanation">An unexpected error occurred.\n\nPlease create a new issue including the error details on\nhttps://github.com/oliexdev/openScale/issues</string>
-    <string name="customactivityoncrash_error_activity_restart_app">Restart app</string>
-    <string name="customactivityoncrash_error_activity_close_app">Close app</string>
-    <string name="customactivityoncrash_error_activity_error_details">Error details</string>
-    <string name="customactivityoncrash_error_activity_error_details_title">Error details</string>
-    <string name="customactivityoncrash_error_activity_error_details_close">Close</string>
-    <string name="customactivityoncrash_error_activity_error_details_copy">Copy to clipboard</string>
-    <string name="customactivityoncrash_error_activity_error_details_copied">Copied to clipboard</string>
-    <string name="customactivityoncrash_error_activity_error_details_clipboard_label">Error info</string>
+    <string name="about_title_maintainer">Maintainer</string>
+    <string name="about_title_website">Website</string>
+    <string name="about_title_license">License</string>
 
+    <string name="sync_service_syncing_text">Syncing …</string>
+    <string name="sync_service_full_sync_button">Full sync</string>
+    <string name="sync_service_last_sync_never_text">Last sync never</string>
+    <string name="sync_service_last_sync_formatted_text">Last sync %1$s</string>
+    <string name="sync_service_enable_sync_service_button">Enable sync service</string>
+    <string name="sync_service_full_synced_info">"%1$d measurements synced</string>
+    <string name="sync_service_measurement_inserted_info">"%1$f kg (date: %2$s) measurement inserted</string>
+    <string name="sync_service_measurement_deleted_info">"%1$s measurement deleted</string>
+    <string name="sync_service_measurement_cleared_info">"all measurements cleared</string>
+    <string name="sync_service_measurement_updated_info">"%1$f kg (date: %2$s) measurement updated</string>
+
+    <string name="open_scale_user_text">openScale user</string>
+    <string name="open_scale_not_available_error">openScale is not available on this device</string>
+    <string name="open_scale_get_open_scale_button">Get openScale</string>
+    <string name="open_scale_no_user_found_error">openScale user not found</string>
+    <string name="open_scale_user_select_placeholder">Select openScale user</string>
+    <string name="open_scale_permission_not_granted">openScale permission not granted</string>
+    <string name="open_scale_request_permissions_button">Request openScale permissions</string>
+
+    <string name="health_connect_get_health_connect_button">Get Health Connect</string>
+    <string name="health_connect_not_available_text">Health Connect not available</string>
+    <string name="health_connect_request_permissions_button">Request Health Connect permissions</string>
+    <string name="health_connect_permission_not_granted">Health Connect permission not granted</string>
+    <string name="health_connect_not_installed_or_update_required_error">"Health Connect not installed or has to be updated</string>
+
+    <string name="mqtt_broker_successful_connected_text">MQTT broker successful connected</string>
+    <string name="mqtt_server_name_title">Server name</string>
+    <string name="mqtt_server_port_number_title">Server port number</string>
+    <string name="mqtt_username_title">Username</string>
+    <string name="mqtt_password_title">Password</string>
+    <string name="mqtt_connecting_text">Connecting …</string>
+    <string name="mqtt_connect_to_mqtt_broker_button">Connect to MQTT broker</string>
+
+    <string name="wger_successful_connected_text">Wger successful connected</string>
+    <string name="wger_not_successful_connected_error">Cannot connect to Wger</string>
+    <string name="wger_server_name_title">Server name</string>
+    <string name="wger_api_token_title">Wger Api token</string>
+    <string name="wger_connect_to_wger_button">Connect to Wger</string>
 
 </resources>

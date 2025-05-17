@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="title_overview">Übersicht</string>
+    <string name="title_health_connect">Health Connect</string>
+    <string name="title_mqtt">MQTT</string>
+    <string name="title_wger">Wger</string>
+    <string name="title_about">Über</string>
+
+    <string name="about_title_maintainer">Hauptentwickler</string>
+    <string name="about_title_website">Webseite</string>
+    <string name="about_title_license">Lizenz</string>
+
+    <string name="sync_service_syncing_text">Synchronisiere …</string>
+    <string name="sync_service_full_sync_button">Vollständige Synchronisation</string>
+    <string name="sync_service_last_sync_never_text">Letzte Synchronisation: Nie</string>
+    <string name="sync_service_last_sync_formatted_text">Letzte Synchronisation: %1$s</string>
+    <string name="sync_service_enable_sync_service_button">Synchronisationsdienst aktivieren</string>
+    <string name="sync_service_full_synced_info">%1$d Messungen synchronisiert</string>
+    <string name="sync_service_measurement_inserted_info">%1$f kg (Datum: %2$s) Messung eingefügt</string>
+    <string name="sync_service_measurement_deleted_info">Messung für %1$s gelöscht</string>
+    <string name="sync_service_measurement_cleared_info">Alle Messungen gelöscht</string>
+    <string name="sync_service_measurement_updated_info">%1$f kg (Datum: %2$s) Messung aktualisiert</string>
+
+    <string name="open_scale_user_text">openScale Benutzer</string>
+    <string name="open_scale_not_available_error">openScale ist auf diesem Gerät nicht verfügbar.</string>
+    <string name="open_scale_get_open_scale_button">openScale herunterladen</string>
+    <string name="open_scale_no_user_found_error">Kein openScale-Benutzer gefunden. Bitte erstellen Sie ein Profil in der openScale-App.</string>
+    <string name="open_scale_user_select_placeholder">openScale-Benutzer auswählen</string>
+    <string name="open_scale_permission_not_granted">openScale-Berechtigung nicht erteilt.</string>
+    <string name="open_scale_request_permissions_button">openScale-Berechtigungen anfordern</string>
+
+    <string name="health_connect_get_health_connect_button">Health Connect herunterladen</string>
+    <string name="health_connect_not_available_text">Health Connect nicht verfügbar.</string>
+    <string name="health_connect_request_permissions_button">Health Connect-Berechtigungen anfordern</string>
+    <string name="health_connect_permission_not_granted">Health Connect-Berechtigung nicht erteilt.</string>
+    <string name="health_connect_not_installed_or_update_required_error">Health Connect ist nicht installiert oder muss aktualisiert werden. Bitte prüfen Sie den Play Store.</string>
+
+    <string name="mqtt_broker_successful_connected_text">Erfolgreich mit MQTT-Broker verbunden.</string>
+    <string name="mqtt_server_name_title">Servername</string>
+    <string name="mqtt_server_port_number_title">Server-Portnummer</string>
+    <string name="mqtt_username_title">Benutzername</string>
+    <string name="mqtt_password_title">Passwort</string>
+    <string name="mqtt_connecting_text">Verbinde …</string>
+    <string name="mqtt_connect_to_mqtt_broker_button">Mit MQTT-Broker verbinden</string>
+
+    <string name="wger_successful_connected_text">Erfolgreich mit Wger verbunden.</string>
+    <string name="wger_not_successful_connected_error">Verbindung zu Wger fehlgeschlagen.</string>
+    <string name="wger_server_name_title">Servername</string>
+    <string name="wger_api_token_title">Wger API-Token</string>
+    <string name="wger_connect_to_wger_button">Mit Wger verbinden</string>
+</resources>

@@ -33,9 +33,11 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.model.WgerViewModel
@@ -118,9 +120,9 @@ class WgerService(
                     viewModel.setAllPermissionsGranted(true)
                     viewModel.setConnectAvailable(true)
                     viewModel.setErrorMessage("")
-                    setInfoMessage("Successful connected to wger")
+                    setInfoMessage(context.getString(R.string.wger_successful_connected_text))
                 } else {
-                    setErrorMessage("Can't connect to wger")
+                    setErrorMessage(context.getString(R.string.wger_not_successful_connected_error))
                 }
             } catch (ex: Exception) {
                 setErrorMessage("$ex.message")
@@ -150,7 +152,7 @@ class WgerService(
                     onValueChange = {
                         viewModel.setWgerServer(it)
                     },
-                    label = { Text("Server Name") },
+                    label = { Text(stringResource(id = R.string.wger_server_name_title)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     )
@@ -171,7 +173,7 @@ class WgerService(
                     onValueChange = {
                         viewModel.setWgerApiToken(it)
                     },
-                    label = { Text("Wger Api Token") },
+                    label = { Text(stringResource(id = R.string.wger_api_token_title)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     )
@@ -188,7 +190,7 @@ class WgerService(
                 },
                     enabled = viewModel.syncEnabled.value)
                 {
-                    Text(text = "Connect to Wger")
+                    Text(text = stringResource(id = R.string.wger_connect_to_wger_button))
                 }
 
                 val errorMessage by viewModel.errorMessage.observeAsState()

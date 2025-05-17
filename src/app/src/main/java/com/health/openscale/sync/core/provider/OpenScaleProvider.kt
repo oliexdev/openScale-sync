@@ -43,7 +43,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
+import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
@@ -106,10 +108,10 @@ class OpenScaleProvider (
                 return viewModel.openScaleUsers.value.first()
             }
         } catch (e: NoSuchElementException) {
-            viewModel.setErrorMessage("Cannot find any openScale user")
+            viewModel.setErrorMessage(context.getString(R.string.open_scale_no_user_found_error))
         }
 
-        return OpenScaleUser(Int.MAX_VALUE, "<none found>")
+        return OpenScaleUser(Int.MAX_VALUE, context.getString(R.string.open_scale_user_select_placeholder))
     }
 
     @Composable
@@ -122,19 +124,19 @@ class OpenScaleProvider (
                 UserSelect()
             } else {
                 if (!viewModel.connectAvailable.value) {
-                    Text(text = "openScale is not available on this device.")
+                    Text(text = stringResource(id = R.string.open_scale_not_available_error))
                     Button(onClick = {
                         openAppStore(activity)
                     }){
-                        Text("Get openScale")
+                        Text(stringResource(id = R.string.open_scale_get_open_scale_button))
                     }
                 }
                 else if (!viewModel.allPermissionsGranted.value)  {
-                    Text(text = "Permission to openScale not granted")
+                    Text(text = stringResource(id = R.string.open_scale_permission_not_granted))
                     Button(onClick = {
                         requestPermissions()
                     }){
-                        Text("Request openScale permission")
+                        Text(stringResource(id = R.string.open_scale_request_permissions_button))
                     }
                 }
             }
@@ -173,7 +175,7 @@ class OpenScaleProvider (
             val selectedOpenScale by viewModel.openScaleSelectedUser.observeAsState()
 
             TextField(
-                label = { Text("openScale user") },
+                label = { Text(stringResource(id = R.string.open_scale_user_text)) },
                 value = selectedOpenScale?.username ?: "",
                 onValueChange = {},
                 readOnly = true,

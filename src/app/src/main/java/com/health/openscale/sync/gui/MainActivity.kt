@@ -73,6 +73,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -109,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var openScaleService: OpenScaleProvider
     private lateinit var openScaleDataService: OpenScaleDataProvider
     private lateinit var syncServiceList : List<ServiceInterface>
-    private val currentTitle = MutableLiveData("Overview")
+    private val currentTitle = MutableLiveData<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -118,6 +119,7 @@ class MainActivity : AppCompatActivity() {
             plant(DebugTree())
         }
 
+        currentTitle.value = getString(R.string.title_overview)
         val sharedPreferences: SharedPreferences = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
 
         sharedPreferences.edit().putString("packageName", detectPackage()).apply()
@@ -205,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                         TopAppBar(
                             title = { Text(text = title.toString()) },
                             navigationIcon = {
-                                if (title == "Overview") {
+                                if (title == getString(R.string.title_overview)) {
                                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                         Icon(
                                             imageVector = Icons.Filled.Menu,
@@ -237,7 +239,7 @@ class MainActivity : AppCompatActivity() {
                         NavHost(navController = navController, startDestination = "overview") {
                             composable("overview") {
                                 HomeScreen(activity)
-                                currentTitle.value = "Overview"
+                                currentTitle.value = stringResource(id = R.string.title_overview)
                             }
                             for (syncService in syncServiceList) {
                                 composable(
@@ -251,7 +253,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             composable("about") {
                                 AboutScreen()
-                                currentTitle.value = "About"
+                                currentTitle.value = stringResource(id = R.string.title_about)
                             }
                         }
                     }
@@ -271,13 +273,13 @@ class MainActivity : AppCompatActivity() {
             Row {
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowUp,
-                    contentDescription = "to",
+                    contentDescription = "arrowUp",
                     modifier = Modifier.size(32.dp)
                 )
 
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = "to",
+                    contentDescription = "arrowDown",
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -305,13 +307,13 @@ class MainActivity : AppCompatActivity() {
             Column (
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text("Maintainer", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.about_title_maintainer), style = MaterialTheme.typography.titleMedium)
                 Text("olie.xdev <olie.xdev@googlemail.com>", style = MaterialTheme.typography.bodyMedium)
             }
             Column (
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text("Website", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.about_title_website), style = MaterialTheme.typography.titleMedium)
                 val annotatedString = buildAnnotatedString {
                     val linkText = "https://github.com/oliexdev/openScale-sync"
                     withStyle(
@@ -331,7 +333,7 @@ class MainActivity : AppCompatActivity() {
             Column (
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text("License", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(id = R.string.about_title_license), style = MaterialTheme.typography.titleMedium)
                 Text("GPLv3", style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -351,18 +353,18 @@ class MainActivity : AppCompatActivity() {
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground),
-                    contentDescription = "App Icon",
+                    contentDescription = "openScale sync",
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "openScale sync")
             }
             NavigationDrawerItem(
-                label = { Text("Overview") },
+                label = { Text(stringResource(id = R.string.title_overview)) },
                 icon = {
                     Icon(
                         imageVector = Icons.Filled.Home,
-                        contentDescription = "Overview"
+                        contentDescription = stringResource(id = R.string.title_overview)
                     )
                 },
                 selected = false,
@@ -393,11 +395,11 @@ class MainActivity : AppCompatActivity() {
             HorizontalDivider()
 
             NavigationDrawerItem(
-                label = { Text("About") },
+                label = { Text(stringResource(id = R.string.title_about)) },
                 icon = {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_about),
-                        contentDescription = "About"
+                        contentDescription = stringResource(R.string.title_about)
                     )
                 },
                 selected = false,
@@ -434,12 +436,12 @@ class MainActivity : AppCompatActivity() {
                 text = {
                     if (syncService.viewModel().syncRunning.value) {
                         Text(
-                            text = "Syncing ...",
+                            text = stringResource(id = R.string.sync_service_syncing_text),
                             color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                         )
                     } else {
                         Text(
-                            text = "Full sync",
+                            text = stringResource(id = R.string.sync_service_full_sync_button),
                             color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                         )
                     }
@@ -453,7 +455,7 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Full sync",
+                            contentDescription = stringResource(R.string.sync_service_full_sync_button),
                             tint = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                         )
                     }
@@ -505,7 +507,7 @@ class MainActivity : AppCompatActivity() {
                         val lastSync by syncService.viewModel().lastSync.observeAsState()
                         if (lastSync?.toEpochMilli() == 0L) {
                             Text(
-                                "Last sync never",
+                                stringResource(id = R.string.sync_service_last_sync_never_text),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                             )
@@ -514,7 +516,7 @@ class MainActivity : AppCompatActivity() {
                             val timeFormat = DateFormat.getTimeFormat(applicationContext)
                             val timeDateFormat = dateFormat.format(Date.from(lastSync)) + " " + timeFormat.format(Date.from(lastSync))
                             Text(
-                                "Last sync $timeDateFormat",
+                                stringResource(id = R.string.sync_service_last_sync_formatted_text, timeDateFormat),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
                             )
