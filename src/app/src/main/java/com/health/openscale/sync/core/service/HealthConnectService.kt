@@ -66,7 +66,7 @@ class HealthConnectService(
         PermissionController.createRequestPermissionResultContract()
 
     override suspend fun init() {
-        healthConnectClient = detectHealthConnect()
+        detectHealthConnect()
     }
 
     override fun viewModel(): ViewModelInterface {
@@ -74,118 +74,151 @@ class HealthConnectService(
     }
 
     override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
-        checkAllPermissionsGranted()
-
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return healthConnectSync.fullSync(measurements)
+        if (!checkAllPermissionsGranted()) {
+            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
         }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        return healthConnectSync.fullSync(measurements)
     }
 
     override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        checkAllPermissionsGranted()
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return healthConnectSync.insert(measurement)
+        if (!checkAllPermissionsGranted()) {
+            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
         }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        return healthConnectSync.insert(measurement)
     }
 
     override suspend fun delete(date: Date) : SyncResult<Unit> {
-        checkAllPermissionsGranted()
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return healthConnectSync.delete(date)
+        if (!checkAllPermissionsGranted()) {
+            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
         }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        return healthConnectSync.delete(date)
     }
 
     override suspend fun clear() : SyncResult<Unit> {
-        checkAllPermissionsGranted()
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return healthConnectSync.clear()
+        if (!checkAllPermissionsGranted()) {
+            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
         }
-
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        return healthConnectSync.clear()
     }
 
     override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        checkAllPermissionsGranted()
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return healthConnectSync.update(measurement)
+        if (!checkAllPermissionsGranted()) {
+            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
         }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        return healthConnectSync.update(measurement)
     }
 
     override fun registerActivityResultLauncher(activity: ComponentActivity) {
         healthConnectRequestPermissions = activity.registerForActivityResult(healthConnectPermissionContract) { granted ->
-            activity.lifecycle.coroutineScope.launch { checkAllPermissionsGranted() }
+            activity.lifecycle.coroutineScope.launch {
+                checkAllPermissionsGranted()
 
-            setDebugMessage(granted.toString())
-            if (granted.containsAll(requiredPermissions)) {
-                setDebugMessage("health connect permissions granted")
-            } else {
-                setDebugMessage("health connect lack of required permissions")
+                setDebugMessage(granted.toString())
+                if (granted.containsAll(requiredPermissions)) {
+                    setDebugMessage("health connect permissions granted")
+                } else {
+                    setDebugMessage("health connect lack of required permissions")
+                    viewModel.setAllPermissionsGranted(false)
+                }
             }
         }
     }
 
     suspend fun checkAllPermissionsGranted() : Boolean {
-        if (healthConnectClient != null) {
-            val granted = healthConnectClient!!.permissionController.getGrantedPermissions()
+        val currentClient = healthConnectClient
+        if (currentClient == null) {
+            viewModel.setAllPermissionsGranted(false)
+            viewModel.setConnectAvailable(false)
+            return false
+        }
+
+        if (!viewModel.connectAvailable.value) {
+            viewModel.setConnectAvailable(false)
+        }
+
+        try {
+
+        val granted = currentClient.permissionController.getGrantedPermissions()
             if (granted.containsAll(requiredPermissions)) {
                 viewModel.setAllPermissionsGranted(true)
-                healthConnectSync = HealthConnectSync(healthConnectClient!!)
-                setDebugMessage("health connect permissions already granted")
+
+                if (!this::healthConnectSync.isInitialized) {
+                    healthConnectSync = HealthConnectSync(currentClient)
+                    setDebugMessage("HealthConnectSync initialized")
+                }
+
+                setDebugMessage("All Health Connect permissions are granted")
                 return true
             } else {
-                setDebugMessage("health connect permissions not all granted")
+                setDebugMessage("Not all required Health Connect permissions are granted. Granted: $granted, Required: $requiredPermissions")
                 viewModel.setAllPermissionsGranted(false)
+                return false
             }
+        } catch (e: Exception) {
+            setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
+            viewModel.setAllPermissionsGranted(false)
+            return false
         }
 
         return false
     }
 
     suspend fun requestPermissions() {
-        if (healthConnectClient != null) {
-            val granted = healthConnectClient!!.permissionController.getGrantedPermissions()
-            if (granted.containsAll(requiredPermissions)) {
-                setDebugMessage("health connect permissions already granted")
-            } else {
-                healthConnectRequestPermissions.launch(requiredPermissions)
+        val currentClient = healthConnectClient
+        if (currentClient == null) {
+            viewModel.setConnectAvailable(false)
+            return
+        }
+
+        if (!this::healthConnectRequestPermissions.isInitialized) {
+            setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, "ActivityResultLauncher not initialized"))
+            return
+        }
+
+        try {
+            if (checkAllPermissionsGranted()) {
+                return
             }
+
+            healthConnectRequestPermissions.launch(requiredPermissions)
+        } catch (e: Exception) {
+            setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
         }
     }
 
     suspend fun detectHealthConnect(): HealthConnectClient? {
-        setDebugMessage("Detect health connect")
-        val availabilityStatus = HealthConnectClient.getSdkStatus(context)
+        try {
+            val availabilityStatus = HealthConnectClient.getSdkStatus(context)
 
-        if (availabilityStatus == HealthConnectClient.SDK_UNAVAILABLE) {
-            setErrorMessage(context.getString(R.string.health_connect_not_available_text))
+            when(availabilityStatus) {
+                HealthConnectClient.SDK_AVAILABLE -> {
+                    viewModel.setConnectAvailable(true)
+                    healthConnectClient = HealthConnectClient.getOrCreate(context)
+                    checkAllPermissionsGranted()
+                    return healthConnectClient
+                }
+                else -> {
+                    setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Health Connect is not available"))
+                    viewModel.setConnectAvailable(false)
+                    viewModel.setAllPermissionsGranted(false)
+                    healthConnectClient = null
+                    return null
+                }
+
+            }
+        } catch (e:Exception) {
+            setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
             viewModel.setConnectAvailable(false)
+            viewModel.setAllPermissionsGranted(false)
+            healthConnectClient = null
             return null
         }
 
-        if (availabilityStatus == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
-            setErrorMessage(context.getString(R.string.health_connect_not_installed_or_update_required_error))
-            viewModel.setConnectAvailable(false)
-            return null
-        }
-
-        setDebugMessage("Health Connect available")
-
-        viewModel.setConnectAvailable(true)
-
-        healthConnectClient = HealthConnectClient.getOrCreate(context)
-
-        checkAllPermissionsGranted()
-
-        return healthConnectClient
-
+        return null
     }
 
     @Composable
