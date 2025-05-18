@@ -74,39 +74,45 @@ class HealthConnectService(
     }
 
     override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
-        if (!checkAllPermissionsGranted()) {
-            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        val permissionResult = checkAllPermissionsGranted()
+        if (permissionResult is SyncResult.Failure) {
+            return permissionResult
         }
 
         return healthConnectSync.fullSync(measurements)
     }
 
     override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        if (!checkAllPermissionsGranted()) {
-            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        val permissionResult = checkAllPermissionsGranted()
+        if (permissionResult is SyncResult.Failure) {
+            return permissionResult
         }
 
         return healthConnectSync.insert(measurement)
     }
 
     override suspend fun delete(date: Date) : SyncResult<Unit> {
-        if (!checkAllPermissionsGranted()) {
-            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        val permissionResult = checkAllPermissionsGranted()
+        if (permissionResult is SyncResult.Failure) {
+            return permissionResult
         }
 
         return healthConnectSync.delete(date)
     }
 
     override suspend fun clear() : SyncResult<Unit> {
-        if (!checkAllPermissionsGranted()) {
-            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        val permissionResult = checkAllPermissionsGranted()
+        if (permissionResult is SyncResult.Failure) {
+            return permissionResult
         }
+
         return healthConnectSync.clear()
     }
 
     override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        if (!checkAllPermissionsGranted()) {
-            return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        val permissionResult = checkAllPermissionsGranted()
+        if (permissionResult is SyncResult.Failure) {
+            return permissionResult
         }
 
         return healthConnectSync.update(measurement)
@@ -128,43 +134,41 @@ class HealthConnectService(
         }
     }
 
-    suspend fun checkAllPermissionsGranted() : Boolean {
+    suspend fun checkAllPermissionsGranted() : SyncResult<Unit> {
         val currentClient = healthConnectClient
         if (currentClient == null) {
             viewModel.setAllPermissionsGranted(false)
             viewModel.setConnectAvailable(false)
-            return false
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Health Connect is not available")
         }
 
         if (!viewModel.connectAvailable.value) {
             viewModel.setConnectAvailable(false)
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Health Connect is not available")
         }
 
         try {
+            val granted = currentClient.permissionController.getGrantedPermissions()
 
-        val granted = currentClient.permissionController.getGrantedPermissions()
             if (granted.containsAll(requiredPermissions)) {
                 viewModel.setAllPermissionsGranted(true)
 
                 if (!this::healthConnectSync.isInitialized) {
                     healthConnectSync = HealthConnectSync(currentClient)
+                    clearErrorMessage()
                     setDebugMessage("HealthConnectSync initialized")
                 }
 
                 setDebugMessage("All Health Connect permissions are granted")
-                return true
+                return SyncResult.Success(Unit)
             } else {
-                setDebugMessage("Not all required Health Connect permissions are granted. Granted: $granted, Required: $requiredPermissions")
                 viewModel.setAllPermissionsGranted(false)
-                return false
+                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Not all required Health Connect permissions are granted. Granted: $granted, Required: $requiredPermissions")
             }
         } catch (e: Exception) {
-            setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
             viewModel.setAllPermissionsGranted(false)
-            return false
+            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
         }
-
-        return false
     }
 
     suspend fun requestPermissions() {
@@ -180,7 +184,7 @@ class HealthConnectService(
         }
 
         try {
-            if (checkAllPermissionsGranted()) {
+            if (checkAllPermissionsGranted() is SyncResult.Success) {
                 return
             }
 

@@ -136,7 +136,7 @@ class MQTTService(
                     mqttSync = MQTTSync(mqttClient)
                     viewModel.setConnectAvailable(true)
                     viewModel.setAllPermissionsGranted(true)
-                    viewModel.setErrorMessage("")
+                    clearErrorMessage()
 
                     viewModel.setMQTTConnecting(false)
                 }

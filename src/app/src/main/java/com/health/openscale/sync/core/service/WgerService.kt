@@ -129,7 +129,7 @@ class WgerService(
                 if (wgerWeightEntryList.count >= 0) {
                     viewModel.setAllPermissionsGranted(true)
                     viewModel.setConnectAvailable(true)
-                    viewModel.setErrorMessage("")
+                    clearErrorMessage()
                     setInfoMessage(context.getString(R.string.wger_successful_connected_text))
                 } else {
                     setErrorMessage(context.getString(R.string.wger_not_successful_connected_error))

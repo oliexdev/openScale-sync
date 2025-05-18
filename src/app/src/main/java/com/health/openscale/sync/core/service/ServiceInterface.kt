@@ -71,6 +71,7 @@ abstract class ServiceInterface (
     fun setErrorMessage(message : String) {
         val fullMessage = viewModel().getName() + ": " + message
         viewModel().setErrorMessage(fullMessage)
+        Toast.makeText(context, fullMessage, Toast.LENGTH_SHORT).show()
         Timber.e("[ERROR] $fullMessage")
     }
 
@@ -109,6 +110,10 @@ abstract class ServiceInterface (
         val fullMessage = viewModel().getName() + ": " + message
         viewModel().setDebugMessage(fullMessage)
         Timber.d("[DEBUG] $fullMessage")
+    }
+
+    fun clearErrorMessage() {
+        viewModel().setErrorMessage("")
     }
 
     open fun registerActivityResultLauncher(activity: ComponentActivity) {
