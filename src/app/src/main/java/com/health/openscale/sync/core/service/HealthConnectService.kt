@@ -21,7 +21,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
-import android.text.format.DateFormat
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.layout.Column
@@ -74,44 +73,50 @@ class HealthConnectService(
         return viewModel
     }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>) {
+    override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         checkAllPermissionsGranted()
+
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            healthConnectSync.fullSync(measurements)
-            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_full_synced_info, measurements.size))
+            return healthConnectSync.fullSync(measurements)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun insert(measurement: OpenScaleMeasurement) {
+    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            healthConnectSync.insert(measurement)
-            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_inserted_info, measurement.weight, DateFormat.getDateFormat(context).format(measurement.date)))
+            return healthConnectSync.insert(measurement)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun delete(date: Date) {
+    override suspend fun delete(date: Date) : SyncResult<Unit> {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            healthConnectSync.delete(date)
-            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_deleted_info, DateFormat.getDateFormat(context).format(date)))
+            return healthConnectSync.delete(date)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun clear() {
+    override suspend fun clear() : SyncResult<Unit> {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            healthConnectSync.clear()
-            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_cleared_info))
+            return healthConnectSync.clear()
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun update(measurement: OpenScaleMeasurement) {
+    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         checkAllPermissionsGranted()
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            healthConnectSync.update(measurement)
-            setInfoMessage(context.getString(R.string.title_health_connect) + " " + context.getString(R.string.sync_service_measurement_updated_info, measurement.weight, DateFormat.getDateFormat(context).format(measurement.date)))
+            return healthConnectSync.update(measurement)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
     override fun registerActivityResultLauncher(activity: ComponentActivity) {
@@ -127,18 +132,21 @@ class HealthConnectService(
         }
     }
 
-    suspend fun checkAllPermissionsGranted() {
+    suspend fun checkAllPermissionsGranted() : Boolean {
         if (healthConnectClient != null) {
             val granted = healthConnectClient!!.permissionController.getGrantedPermissions()
             if (granted.containsAll(requiredPermissions)) {
                 viewModel.setAllPermissionsGranted(true)
                 healthConnectSync = HealthConnectSync(healthConnectClient!!)
                 setDebugMessage("health connect permissions already granted")
+                return true
             } else {
                 setDebugMessage("health connect permissions not all granted")
                 viewModel.setAllPermissionsGranted(false)
             }
         }
+
+        return false
     }
 
     suspend fun requestPermissions() {

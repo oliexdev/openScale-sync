@@ -73,33 +73,43 @@ class MQTTService(
         return viewModel
     }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>) {
+    override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            mqttSync.fullSync(measurements)
+            return mqttSync.fullSync(measurements)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
-    override suspend fun insert(measurement: OpenScaleMeasurement) {
+    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            mqttSync.insert(measurement)
+            return mqttSync.insert(measurement)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun delete(date: Date) {
+    override suspend fun delete(date: Date) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            mqttSync.delete(date)
+            return mqttSync.delete(date)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun clear() {
+    override suspend fun clear() : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            mqttSync.clear()
+            return mqttSync.clear()
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun update(measurement: OpenScaleMeasurement) {
+    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            mqttSync.update(measurement)
+            return mqttSync.update(measurement)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
     private suspend fun connectMQTT() {

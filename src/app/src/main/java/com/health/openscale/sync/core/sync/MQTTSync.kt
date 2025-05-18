@@ -18,42 +18,51 @@
 package com.health.openscale.sync.core.sync
 
 import com.google.gson.GsonBuilder
-
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.service.SyncResult
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish
-import timber.log.Timber
-
 import java.util.Date
 
 class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     private val gson = GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mmZ").create()
 
-    fun fullSync(measurements: List<OpenScaleMeasurement>) {
+    fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
+        var failureCount = 0
+
         measurements.forEach { measurement ->
-            publishMeasurement(measurement, "openScaleSync/measurements/insert")
+            val syncResult = publishMeasurement(measurement, "openScaleSync/measurements/insert")
+
+            if (syncResult is SyncResult.Failure) {
+                failureCount++
+            }
+        }
+
+        if (failureCount > 0) {
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"$failureCount of ${measurements.size} measurements failed to sync",null)
+        } else {
+            return SyncResult.Success(Unit)
         }
     }
 
-    fun insert(measurement: OpenScaleMeasurement) {
-        publishMeasurement(measurement, "openScaleSync/measurements/insert")
+    fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
+        return publishMeasurement(measurement, "openScaleSync/measurements/insert")
     }
 
-    fun delete(date: Date) {
-
+    fun delete(date: Date) : SyncResult<Unit> {
         val message = mapOf("dateTime" to gson.toJsonTree(date))
-        publishMessage(message, "openScaleSync/measurements/delete")
+        return publishMessage(message, "openScaleSync/measurements/delete")
     }
 
-    fun clear() {
-        publishMessage(true, "openScaleSync/measurements/clear")
+    fun clear() : SyncResult<Unit> {
+        return publishMessage(true, "openScaleSync/measurements/clear")
     }
 
-    fun update(measurement: OpenScaleMeasurement) {
-        publishMeasurement(measurement, "openScaleSync/measurements/update")
+    fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
+        return publishMeasurement(measurement, "openScaleSync/measurements/update")
     }
 
-    private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String) {
+    private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String) : SyncResult<Unit> {
         val payload = gson.toJson(measurement).toByteArray()
         val publish = Mqtt5Publish.builder()
             .topic(topic)
@@ -61,14 +70,13 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             .build()
         val result = mqttClient.publish(publish)
         if (result.error.isPresent) {
-            Timber.e("Publishing failed ${measurement.date} to $topic")
-            Timber.e("Error: ${result.error.get()}")
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"Publishing failed ${measurement.date} to $topic" ,result.error.get())
         } else {
-            Timber.d("Publishing success ${measurement.date} to $topic")
+            return SyncResult.Success(Unit)
         }
     }
 
-    private fun publishMessage(message: Map<String, Any>, topic: String) {
+    private fun publishMessage(message: Map<String, Any>, topic: String) : SyncResult<Unit> {
         val payload = gson.toJson(message).toByteArray()
         val publish = Mqtt5Publish.builder()
             .topic(topic)
@@ -76,24 +84,22 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             .build()
         val result = mqttClient.publish(publish)
         if (result.error.isPresent) {
-            Timber.e("Publishing failed ${message.values} to $topic")
-            Timber.e("Error: ${result.error.get()}")
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"Publishing failed ${message.values} to $topic" ,result.error.get())
         } else {
-            Timber.d("Publishing success ${message.values} to $topic")
+            return SyncResult.Success(Unit)
         }
     }
 
-    private fun publishMessage(value : Boolean, topic: String) {
+    private fun publishMessage(value : Boolean, topic: String) : SyncResult<Unit> {
         val publish = Mqtt5Publish.builder()
             .topic(topic)
             .payload(value.toString().toByteArray())
             .build()
         val result = mqttClient.publish(publish)
         if (result.error.isPresent) {
-            Timber.e("Publishing failed $value to $topic")
-            Timber.e("Error: ${result.error.get()}")
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"Publishing failed $value to $topic" ,result.error.get())
         } else {
-            Timber.d("Publishing success　$value to $topic")
+            return SyncResult.Success(Unit)
         }
     }
 }

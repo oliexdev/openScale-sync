@@ -30,41 +30,36 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Mass
 import androidx.health.connect.client.units.Percentage
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
-import timber.log.Timber
+import com.health.openscale.sync.core.service.SyncResult
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Date
 import kotlin.reflect.KClass
 
 class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : SyncInterface(){
-    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) {
-        Timber.d("Writing ${measurements.size} measurements to HealthConnect")
-
+    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         val records = mutableListOf<Record>()
 
-        measurements.forEach {
-            val weightRecord = buildWeightRecord(it)
+        measurements.forEach { measurement ->
+            val weightRecord = buildWeightRecord(measurement)
             records.add(weightRecord)
 
-            val waterRecord = buildWaterRecord(it)
+            val waterRecord = buildWaterRecord(measurement)
             records.add(waterRecord)
 
-            val fatRecord = buildFatRecord(it)
+            val fatRecord = buildFatRecord(measurement)
             records.add(fatRecord)
         }
 
-        Timber.d("Converted the ${measurements.size} measurements to ${records.size} records")
-
         try {
             healthConnectClient.insertRecords(records)
+            return SyncResult.Success(Unit)
         } catch (e: Exception) {
-            Timber.e( e.toString())
-        } finally {
-            Timber.d("Writing ${records.size} measurements done")
+            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
         }
     }
 
-    suspend fun insert(measurement: OpenScaleMeasurement) {
+    suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         val records = mutableListOf<Record>()
 
         val weightRecord = buildWeightRecord(measurement)
@@ -78,14 +73,13 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
 
         try {
             healthConnectClient.insertRecords(records)
+            return SyncResult.Success(Unit)
         } catch (e: Exception) {
-            Timber.e(e.toString())
-        } finally {
-            Timber.d("Writing measurements done")
+            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
         }
     }
 
-    suspend fun delete(date: Date) {
+    suspend fun delete(date: Date) : SyncResult<Unit> {
         val localDate = date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
         val startOfDay = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
         val endOfDay = localDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
@@ -105,13 +99,14 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
                     BodyWaterMassRecord::class,
                     timeRange
                 )
-            Timber.d("Successfully deleted records for date: $date")
+
+            return SyncResult.Success(Unit)
         } catch (e: Exception) {
-            Timber.e("Error deleting records for date: $date, error: ${e.message}")
+            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
         }
     }
 
-    suspend fun clear() {
+    suspend fun clear() : SyncResult<Unit> {
         val localDate = Date().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
         val startOfDay = localDate.minusYears(10).atStartOfDay(ZoneId.systemDefault()).toInstant()
         val endOfDay = localDate.plusYears(10).atStartOfDay(ZoneId.systemDefault()).toInstant()
@@ -131,13 +126,14 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
                 BodyWaterMassRecord::class,
                 timeRange
             )
-            Timber.d("Successfully deleted all records")
+
+            return SyncResult.Success(Unit)
         } catch (e: Exception) {
-            Timber.e("Error deleting all records, error: ${e.message}")
+            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
         }
     }
 
-    suspend fun update(measurement: OpenScaleMeasurement) {
+    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         val records = mutableListOf<Record>()
 
         try {
@@ -157,13 +153,13 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
 
             if (records.isNotEmpty()) {
                 healthConnectClient.insertRecords(records)
-                Timber.d("Successfully updated records for measurement: ${measurement.id}")
+                return SyncResult.Success(Unit)
             } else {
-                Timber.e("No records found to update for measurement: ${measurement.id}")
+                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"No records found to update for measurement: ${measurement.id}")
             }
 
         } catch (e: Exception) {
-            Timber.e("Error updating records for measurement: ${measurement.id}, error: ${e.message}", e)
+            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
         }
     }
 

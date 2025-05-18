@@ -42,6 +42,16 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.Date
 
+sealed class SyncResult<out T> {
+    data class Success<T>(val data: T) : SyncResult<T>()
+    data class Failure(val errorType: ErrorType, val message: String? = null, val cause: Throwable? = null) : SyncResult<Nothing>()
+
+    enum class ErrorType {
+        PERMISSION_DENIED,
+        API_ERROR,
+        UNKNOWN_ERROR
+    }
+}
 
 abstract class ServiceInterface (
     private val context: Context
@@ -52,26 +62,53 @@ abstract class ServiceInterface (
 
     abstract suspend fun init()
     abstract fun viewModel() : ViewModelInterface
-    abstract suspend fun sync(measurements: List<OpenScaleMeasurement>)
-    abstract suspend fun insert(measurement: OpenScaleMeasurement)
-    abstract suspend fun delete(date: Date)
-    abstract suspend fun clear()
-    abstract suspend fun update(measurement: OpenScaleMeasurement)
+    abstract suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit>
+    abstract suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit>
+    abstract suspend fun delete(date: Date) : SyncResult<Unit>
+    abstract suspend fun clear() : SyncResult<Unit>
+    abstract suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit>
 
     fun setErrorMessage(message : String) {
-        viewModel().setErrorMessage(message)
-        Timber.e("ERROR: $message")
+        val fullMessage = viewModel().getName() + ": " + message
+        viewModel().setErrorMessage(fullMessage)
+        Timber.e("[ERROR] $fullMessage")
+    }
+
+    fun setErrorMessage(failure: SyncResult.Failure) {
+        var fullMessage : String
+
+        when (failure.errorType) {
+            SyncResult.ErrorType.PERMISSION_DENIED -> {
+                fullMessage = context.getString(R.string.sync_service_permission_error)
+            }
+            SyncResult.ErrorType.API_ERROR -> {
+                fullMessage = context.getString(R.string.sync_service_api_error)
+            }
+            SyncResult.ErrorType.UNKNOWN_ERROR -> {
+                fullMessage = context.getString(R.string.sync_service_unknown_error)
+            }
+        }
+
+        if (failure.message != null) {
+            fullMessage += " (" + failure.message + ")"
+        } else if (failure.cause != null) {
+            fullMessage += " (" + failure.cause.message + ")"
+        }
+
+        setErrorMessage(fullMessage)
     }
 
     fun setInfoMessage(message : String) {
-        viewModel().setInfoMessage(message)
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        Timber.i("INFO: $message")
+        val fullMessage = viewModel().getName() + ": " + message
+        viewModel().setInfoMessage(fullMessage)
+        Toast.makeText(context, fullMessage, Toast.LENGTH_SHORT).show()
+        Timber.i("[INFO] $fullMessage")
     }
 
     fun setDebugMessage(message : String) {
-        viewModel().setDebugMessage(message)
-        Timber.d("DEBUG: $message")
+        val fullMessage = viewModel().getName() + ": " + message
+        viewModel().setDebugMessage(fullMessage)
+        Timber.d("[DEBUG] $fullMessage")
     }
 
     open fun registerActivityResultLauncher(activity: ComponentActivity) {

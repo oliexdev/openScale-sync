@@ -95,6 +95,7 @@ import com.health.openscale.sync.core.provider.OpenScaleProvider
 import com.health.openscale.sync.core.service.HealthConnectService
 import com.health.openscale.sync.core.service.MQTTService
 import com.health.openscale.sync.core.service.ServiceInterface
+import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.service.WgerService
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
@@ -425,8 +426,16 @@ class MainActivity : AppCompatActivity() {
                         lifecycleScope.launch {
                             syncService.viewModel().setSyncRunning(true)
                             openScaleDataService.checkVersion()
-                            syncService.sync(openScaleDataService.getMeasurements(openScaleService.getSelectedUser()))
-                            syncService.viewModel().setLastSync(Instant.now())
+                            val measurements = openScaleDataService.getMeasurements(openScaleService.getSelectedUser())
+                            val syncResult = syncService.sync(measurements)
+
+                            if (syncResult is SyncResult.Success) {
+                                syncService.viewModel().setLastSync(Instant.now())
+                                syncService.setInfoMessage(getString(R.string.sync_service_full_synced_info, measurements.size))
+                            } else {
+                                syncService.setErrorMessage(syncResult as SyncResult.Failure)
+                            }
+
                             syncService.viewModel().setSyncRunning(false)
                         }
                     }

@@ -26,6 +26,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
@@ -116,7 +117,13 @@ class SyncService : Service() {
 
                 if (userId == openScaleUserId) {
                     CoroutineScope(Dispatchers.Main).launch {
-                        syncService.insert(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
+                        val syncResult = syncService.insert(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
+
+                        if (syncResult is SyncResult.Success) {
+                            syncService.setInfoMessage(getString(R.string.sync_service_measurement_inserted_info, weight, DateFormat.getDateFormat(applicationContext).format(date)))
+                        } else {
+                            syncService.setErrorMessage(syncResult as SyncResult.Failure)
+                        }
                     }
                 } else {
                     Timber.d("openScale sync userId and openScale userId mismatched")
@@ -133,7 +140,13 @@ class SyncService : Service() {
 
                 if (userId == openScaleUserId) {
                     CoroutineScope(Dispatchers.Main).launch {
-                        syncService.update(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
+                        val syncResult = syncService.update(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
+
+                        if (syncResult is SyncResult.Success) {
+                            syncService.setInfoMessage(getString(R.string.sync_service_measurement_updated_info, weight, DateFormat.getDateFormat(applicationContext).format(date)))
+                        } else {
+                            syncService.setErrorMessage(syncResult as SyncResult.Failure)
+                        }
                     }
                 } else {
                     Timber.d("openScale sync userId and openScale userId mismatched")
@@ -144,13 +157,25 @@ class SyncService : Service() {
                 Timber.d("SyncService delete command received for date: $date")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    syncService.delete(date)
+                    val syncResult = syncService.delete(date)
+
+                    if (syncResult is SyncResult.Success) {
+                        syncService.setInfoMessage(getString(R.string.sync_service_measurement_deleted_info,DateFormat.getDateFormat(applicationContext).format(date)))
+                    } else {
+                        syncService.setErrorMessage(syncResult as SyncResult.Failure)
+                    }
                 }
             } else if (mode == "clear") {
                 Timber.d("SyncService clear command received")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    syncService.clear()
+                    val syncResult =syncService.clear()
+
+                    if (syncResult is SyncResult.Success) {
+                        syncService.setInfoMessage(getString(R.string.sync_service_measurement_cleared_info))
+                    } else {
+                        syncService.setErrorMessage(syncResult as SyncResult.Failure)
+                    }
                 }
             }
         }

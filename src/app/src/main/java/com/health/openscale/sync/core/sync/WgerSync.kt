@@ -21,6 +21,7 @@ package com.health.openscale.sync.core.sync
 import android.text.format.DateFormat
 import com.google.gson.annotations.SerializedName
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.service.SyncResult
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.http.DELETE
@@ -37,7 +38,9 @@ import java.util.Date
 class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
     private val wgerApi : WgerApi = wgerRetrofit.create(WgerApi::class.java)
 
-    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) {
+    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
+        var failureCount = 0
+
         measurements.forEach { measurement ->
             val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
 
@@ -45,30 +48,36 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
                 val response: Response<Unit> = wgerApi.insert(wgerDateFormat, measurement.weight)
                 if (!response.isSuccessful) {
                     Timber.d("wger $wgerDateFormat insert response error ${response.errorBody()?.string()}")
+                    failureCount++
                 }
             } catch (e: Exception) {
-                Timber.e("wger $wgerDateFormat insert failure ${e.message}")
+                return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
             }
         }
-        Timber.d("wger full sync completed")
+
+        if (failureCount > 0) {
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"$failureCount of ${measurements.size} measurements failed to sync",null)
+        } else {
+            return SyncResult.Success(Unit)
+        }
     }
 
-    suspend fun insert(measurement: OpenScaleMeasurement) {
+    suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
             try {
                 val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
 
                 val response: Response<Unit> = wgerApi.insert(wgerDateFormat, measurement.weight)
                 if (response.isSuccessful) {
-                    Timber.d("wger $wgerDateFormat successful inserted")
+                    return SyncResult.Success(Unit)
                 } else {
-                    Timber.d("wger $wgerDateFormat insert response error ${response.errorBody()?.string()}")
+                    return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger $wgerDateFormat insert response error ${response.errorBody()?.string()}")
                 }
             } catch (e: Exception) {
-                Timber.e("wger insert failure ${e.message}")
+                return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
             }
     }
 
-    suspend fun delete(date: Date) {
+    suspend fun delete(date: Date) : SyncResult<Unit> {
         val wgerDateFormat = DateFormat.format("yyyy-MM-dd", date).toString()
 
         try {
@@ -77,20 +86,19 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
                 val wgerId = wgerWeightEntryList.results[0].id
                 val response: Response<Unit> = wgerApi.delete(wgerId)
                 if (response.isSuccessful) {
-                    Timber.d("wger $wgerId successful deleted")
+                    return SyncResult.Success(Unit)
                 } else {
-                    Timber.d("wger delete response error ${response.errorBody()?.string()}}")
+                    return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger delete response error ${response.errorBody()?.string()}}")
                 }
             } else {
-                Timber.d("no weight entry found for date: $wgerDateFormat")
+                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"no weight entry found for date: $wgerDateFormat")
             }
         } catch (e: Exception) {
-            Timber.e("wger delete failure ${e.message}")
+            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
         }
     }
 
-    suspend fun clear() {
-        Timber.d("wger clear started")
+    suspend fun clear() : SyncResult<Unit> {
             try {
                 var wgerWeightEntryList = wgerApi.weightEntryList()
 
@@ -98,20 +106,20 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
                     wgerWeightEntryList.results?.forEach { wgerWeightEntry ->
                         val response: Response<Unit> = wgerApi.delete(wgerWeightEntry.id)
                         if (!response.isSuccessful) {
-                            Timber.d("wger delete response error ${response.errorBody()?.string()}}")
+                            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger delete response error ${response.errorBody()?.string()}}")
                         }
                     }
 
                     wgerWeightEntryList = wgerApi.weightEntryList()
                 } while (wgerWeightEntryList.count != 0L)
 
-                Timber.d("wger successful cleared")
+                return SyncResult.Success(Unit)
             } catch (e: Exception) {
-                Timber.e("wger clear failure ${e.message}")
+                return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
             }
     }
 
-    suspend fun update(measurement: OpenScaleMeasurement) {
+    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
             try {
                 val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
 
@@ -120,15 +128,15 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
                     val wgerId = wgerWeightEntryList.results[0].id
                     val response: Response<Unit> = wgerApi.update(wgerId, wgerDateFormat, measurement.weight)
                     if (response.isSuccessful) {
-                        Timber.d("wger $wgerId successful updated")
+                        return SyncResult.Success(Unit)
                     } else {
-                        Timber.d("wger delete response error ${response.errorBody()?.string()}}")
+                        return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger delete response error ${response.errorBody()?.string()}}")
                     }
                 } else {
-                    Timber.d("no weight entry found for date: $wgerDateFormat")
+                    return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"no weight entry found for date: $wgerDateFormat")
                 }
             } catch (e: Exception) {
-                Timber.e("wger update failure ${e.message}")
+                return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
             }
     }
 

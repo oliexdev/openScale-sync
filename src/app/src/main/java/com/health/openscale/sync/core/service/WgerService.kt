@@ -64,33 +64,43 @@ class WgerService(
         return viewModel
     }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>) {
+    override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            wgerSync.fullSync(measurements)
+            return wgerSync.fullSync(measurements)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
-    override suspend fun insert(measurement: OpenScaleMeasurement) {
+    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            wgerSync.insert(measurement)
+            return wgerSync.insert(measurement)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun delete(date: Date) {
+    override suspend fun delete(date: Date) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            wgerSync.delete(date)
+            return wgerSync.delete(date)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun clear() {
+    override suspend fun clear() : SyncResult<Unit>  {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            wgerSync.clear()
+            return wgerSync.clear()
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun update(measurement: OpenScaleMeasurement) {
+    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            wgerSync.update(measurement)
+            return wgerSync.update(measurement)
         }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
     private suspend fun connectWger() {
