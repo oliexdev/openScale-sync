@@ -38,6 +38,7 @@ import timber.log.Timber
 import timber.log.Timber.Forest.plant
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.Instant
 import java.util.Date
 
 class SyncService : Service() {
@@ -178,6 +179,8 @@ class SyncService : Service() {
                     }
                 }
             }
+
+            syncService.viewModel().setLastSync(Instant.now())
         }
 
         stopForeground(STOP_FOREGROUND_REMOVE)
