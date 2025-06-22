@@ -7,6 +7,7 @@
     <uses-permission android:name="com.health.openscale.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.pro.READ_WRITE_DATA" />
+    <uses-permission android:name="com.health.openscale.oss.READ_WRITE_DATA" />
     <uses-permission android:name="android.permission.health.WRITE_BODY_FAT" />
     <uses-permission android:name="android.permission.health.WRITE_BODY_WATER_MASS" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
@@ -15,6 +16,7 @@
         <package android:name="com.health.openscale" />
         <package android:name="com.health.openscale.light" />
         <package android:name="com.health.openscale.pro" />
+        <package android:name="com.health.openscale.oss" />
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
 

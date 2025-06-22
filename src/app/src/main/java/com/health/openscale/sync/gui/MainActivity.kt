@@ -171,6 +171,10 @@ class MainActivity : AppCompatActivity() {
             return "com.health.openscale"
         }
 
+        if (doesExist("com.health.openscale.oss")) {
+            return "com.health.openscale.oss"
+        }
+
         if (doesExist("com.health.openscale.light")) {
             return "com.health.openscale.light"
         }

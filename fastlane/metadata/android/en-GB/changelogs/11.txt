@@ -1,0 +1,2 @@
+* complete rewritten in Kotlin
+* small bug fixes after closed beta test

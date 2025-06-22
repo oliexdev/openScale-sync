@@ -191,7 +191,7 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     }
 
     private fun buildMetadata(measurement: OpenScaleMeasurement, type: String): Metadata {
-        return Metadata(
+        return Metadata.manualEntry(
             clientRecordId = measurement.id.toString() + "_" + type,
             clientRecordVersion = Instant.now().toEpochMilli()
         )
