@@ -116,6 +116,8 @@ class MQTTService(
         if (viewModel.syncEnabled.value) {
             viewModel.setMQTTConnecting(true)
             try {
+                var connectedSuccessfully = false
+
                 withContext(Dispatchers.IO) {
                     mqttClient = MqttClient.builder()
                         .useMqttVersion5()
@@ -132,8 +134,13 @@ class MQTTService(
                         .applySimpleAuth()
                         .send()
 
-                    setInfoMessage(context.getString(R.string.mqtt_broker_successful_connected_text))
                     mqttSync = MQTTSync(mqttClient)
+                    connectedSuccessfully = true
+                }
+
+                if (connectedSuccessfully) {
+                    setInfoMessage(context.getString(R.string.mqtt_broker_successful_connected_text))
+
                     viewModel.setConnectAvailable(true)
                     viewModel.setAllPermissionsGranted(true)
                     clearErrorMessage()
