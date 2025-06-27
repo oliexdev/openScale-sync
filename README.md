@@ -2,8 +2,8 @@
 
 Synchronize your openScale measurements with external services
 
-<!-- <a href="https://play.google.com/store/apps/details?id=com.health.openscale.sync" target="_blank">
-<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" alt="Get it on Google Play" height="80"/></a> -->
+<a href="https://play.google.com/store/apps/details?id=com.health.openscale.sync.oss" target="_blank">
+<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" alt="Get it on Google Play" height="80"/></a>
 
 # Summary :clipboard:
 * ***Seamless External Service Integration:*** Effortlessly synchronize data with external services like Health Connect, Wger, and MQTT (versions 3.1 and 5.0).
@@ -15,7 +15,7 @@ Synchronize your openScale measurements with external services
 * ***Intuitive User Interface:*** Enjoy a user-friendly graphical interface for effortless navigation and control.
   
 # Privacy :lock:
-This app has no ads and requests no unnecessary permissions. // TODO Link privacy info
+This app has no ads and requests no unnecessary permissions, see [privacy policy](https://github.com/oliexdev/openScale-sync/wiki/Privacy-Policy) for more details.
 
 # Questions & Issues :thinking:
 
