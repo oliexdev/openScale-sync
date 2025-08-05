@@ -114,7 +114,7 @@ class OpenScaleDataProvider(
                 Timber.d("openScale version $versionCode with content provider API version $apiVersion")
 
                     if (versionCode != null) {
-                        if (versionCode >= 43) {
+                        if (versionCode > 66) { // API version with real time support
                             return true
                         }
                     }

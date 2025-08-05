@@ -21,6 +21,11 @@ android {
         compose true
     }
 
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     signingConfigs {
         release {
             def keystorePropertiesFile = rootProject.file("../../openScale_sync.keystore")
@@ -67,7 +72,7 @@ android {
         oss {
             applicationIdSuffix ".oss"
             versionNameSuffix "-oss"
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.oss
         }
     }

@@ -39,9 +39,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
@@ -55,23 +57,33 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion.Blue
+import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -85,6 +97,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
+import androidx.navigation.activity
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -116,9 +129,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (BuildConfig.DEBUG) {
-            plant(DebugTree())
-        }
+        plant(DebugTree())
 
         currentTitle.value = getString(R.string.title_overview)
         val sharedPreferences: SharedPreferences = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
@@ -198,8 +209,25 @@ class MainActivity : AppCompatActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun composeMainView(activity: ComponentActivity) {
+        val snackbarHostState = remember { SnackbarHostState() }
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
+        val versionCheckPerformed = remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit,openScaleService.viewModel().allPermissionsGranted.value, openScaleService.viewModel().connectAvailable.value) {
+            if (!versionCheckPerformed.value && openScaleService.viewModel().allPermissionsGranted.value && openScaleService.viewModel().connectAvailable.value) {
+                val supportsRealtimeSync = openScaleDataService.checkVersion()
+                if (!supportsRealtimeSync) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = activity.getString(R.string.realtime_sync_update_required_snackbar_text),
+                                duration = SnackbarDuration.Long
+                            )
+                        }
+                }
+                versionCheckPerformed.value = true
+            }
+        }
 
         OpenScaleSyncTheme {
             ModalNavigationDrawer(
@@ -232,6 +260,25 @@ class MainActivity : AppCompatActivity() {
                                 containerColor = MaterialTheme.colorScheme.background
                             )
                         )
+                    },
+                    snackbarHost = { SnackbarHost(snackbarHostState) { snackbarData ->
+                            Snackbar(
+                                modifier = Modifier.padding(8.dp), // Padding around the snackbar.
+                                shape = RoundedCornerShape(8.dp), // Rounded corners for the snackbar.
+                                containerColor = MaterialTheme.colorScheme.primary, // Custom background color.
+                                contentColor = White,    // Custom text and icon color.
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Info,
+                                        contentDescription = "openScale sync",
+                                        tint = LocalContentColor.current // Uses the contentColor from Snackbar.
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(snackbarData.visuals.message)
+                                }
+                            }
+                        }
                     }
                 ){ paddingValues -> // Get the padding values from the Scaffold
                     Surface(

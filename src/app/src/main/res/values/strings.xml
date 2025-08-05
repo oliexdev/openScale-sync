@@ -48,4 +48,5 @@
     <string name="wger_api_token_title">Wger Api token</string>
     <string name="wger_connect_to_wger_button">Connect to Wger</string>
 
+    <string name="realtime_sync_update_required_snackbar_text">For Real-time synchronization, please update openScale to version 2.5.5 or to the latest developer version.</string>
 </resources>

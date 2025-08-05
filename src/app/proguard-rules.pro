@@ -21,3 +21,6 @@
 #-renamesourcefileattribute SourceFile
 -keepclassmembernames class io.netty.** { *; }
 -keepclassmembers class org.jctools.** { *; }
+-keep class * { *; }
+-keep interface * { *; }
+-keep enum * { *; }

@@ -157,7 +157,7 @@ class MQTTService(
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
         Column (
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
         ) {
             super.composeSettings(activity)
 

@@ -48,4 +48,6 @@
     <string name="wger_server_name_title">Servername</string>
     <string name="wger_api_token_title">Wger API-Token</string>
     <string name="wger_connect_to_wger_button">Mit Wger verbinden</string>
+
+    <string name="realtime_sync_update_required_snackbar_text">Für die Echtzeit-Synchronisation aktualisiere openScale bitte auf Version 2.5.5 oder die neueste Entwickler Version.</string>
 </resources>
