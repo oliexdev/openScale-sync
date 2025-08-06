@@ -39,6 +39,8 @@
     <string name="mqtt_server_port_number_title">Server port number</string>
     <string name="mqtt_username_title">Username</string>
     <string name="mqtt_password_title">Password</string>
+    <string name="mqtt_use_ssl_tls_title">Use SSL/TLS Encryption</string>
+    <string name="mqtt_ssl_disabled_warning">Warning: Disabling SSL/TLS sends data unencrypted. Recommended for trusted local networks only.</string>
     <string name="mqtt_connecting_text">Connecting …</string>
     <string name="mqtt_connect_to_mqtt_broker_button">Connect to MQTT broker</string>
 

@@ -20,7 +20,10 @@ package com.health.openscale.sync.core.service
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -31,6 +34,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +48,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.MQTTViewModel
@@ -53,6 +59,7 @@ import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.util.Date
 import kotlin.text.Charsets.UTF_8
 
@@ -119,15 +126,20 @@ class MQTTService(
                 var connectedSuccessfully = false
 
                 withContext(Dispatchers.IO) {
-                    mqttClient = MqttClient.builder()
+                    val clientBuilder = MqttClient.builder()
                         .useMqttVersion5()
                         .serverHost(viewModel.mqttServer.value.toString())
                         .serverPort(viewModel.mqttPort.value.toString().toInt())
                         .identifier("openScaleSync")
-                        .sslWithDefaultConfig()
-                        .buildBlocking()
 
-                    mqttClient.connectWith()
+                        if (viewModel.mqttUseSsl.value == true) {
+                            Timber.d("MQTT: SSL/TLS is enabled. Applying SSL configuration.")
+                            clientBuilder.sslWithDefaultConfig()
+                        }
+
+                        mqttClient = clientBuilder.buildBlocking()
+
+                        mqttClient.connectWith()
                         .simpleAuth()
                         .username(viewModel.mqttUsername.value.toString())
                         .password(UTF_8.encode(viewModel.mqttPassword.value.toString()))
@@ -157,7 +169,9 @@ class MQTTService(
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
         Column (
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
             super.composeSettings(activity)
 
@@ -253,6 +267,46 @@ class MQTTService(
                     )
                 )
             }
+
+            val useSslState by viewModel.mqttUseSsl.observeAsState(true)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        enabled = viewModel.syncEnabled.value,
+                        onClick = {
+                            if (viewModel.syncEnabled.value) {
+                                viewModel.setMqttUseSsl(!useSslState)
+                            }
+                        }
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(id = R.string.mqtt_use_ssl_tls_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (viewModel.syncEnabled.value) MaterialTheme.colorScheme.onSurface else Color.Gray
+                )
+                Switch(
+                    checked = useSslState,
+                    onCheckedChange = { newCheckedState ->
+                        viewModel.setMqttUseSsl(newCheckedState)
+                    },
+                    enabled = viewModel.syncEnabled.value
+                )
+            }
+
+            if (!useSslState && viewModel.syncEnabled.value) {
+                Text(
+                    text = stringResource(id = R.string.mqtt_ssl_disabled_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 8.dp, bottom = 8.dp, end = 8.dp)
+                )
+            }
+
             Column (
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally

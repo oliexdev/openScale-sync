@@ -40,6 +40,8 @@
     <string name="mqtt_server_port_number_title">Server-Portnummer</string>
     <string name="mqtt_username_title">Benutzername</string>
     <string name="mqtt_password_title">Passwort</string>
+    <string name="mqtt_use_ssl_tls_title">SSL/TLS-Verschlüsselung verwenden</string>
+    <string name="mqtt_ssl_disabled_warning">Warnung: Ohne SSL/TLS werden Daten unverschlüsselt gesendet. Nur für vertrauenswürdige lokale Netzwerke empfohlen.</string>
     <string name="mqtt_connecting_text">Verbinde …</string>
     <string name="mqtt_connect_to_mqtt_broker_button">Mit MQTT-Broker verbinden</string>
 
