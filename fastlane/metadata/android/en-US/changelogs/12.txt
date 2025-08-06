@@ -1,0 +1,5 @@
+* complete rewritten in Kotlin
+* show info if openScale version is too old for real time sync
+* build configuration updated to enhance compatibility with F-Droid
+* added option to disable SSL/TLS for MQTT connections
+* fixed correct threading for LiveData updates in MQTTService
