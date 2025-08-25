@@ -7,6 +7,14 @@
     <string name="about_title_website">Webseite</string>
     <string name="about_title_license">Lizenz</string>
 
+    <string name="logging_title">Logging</string>
+    <string name="logging_enabled_label">Aktiviert</string>
+    <string name="logging_export_button">Log exportieren</string>
+    <string name="log_new_file_created">Neue Logdatei erstellt</string>
+    <string name="log_saved_success">Logdatei erfolgreich gespeichert</string>
+    <string name="log_saved_canceled">Logdatei-Export abgebrochen</string>
+    <string name="logging_export_failed">Logdatei konnte nicht gespeichert werden</string>
+
     <string name="sync_service_syncing_text">Synchronisiere …</string>
     <string name="sync_service_full_sync_button">Vollständige Synchronisation</string>
     <string name="sync_service_last_sync_never_text">Letzte Synchronisation: Nie</string>

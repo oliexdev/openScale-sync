@@ -1,20 +1,3 @@
-/*
- *  Copyright (C) 2025  olie.xdev <olie.xdev@googlemail.com>
- *
- *     This program is free software: you can redistribute it and/or modify
- *     it under the terms of the GNU General Public License as published by
- *     the Free Software Foundation, either version 3 of the License, or
- *     (at your option) any later version.
- *
- *     This program is distributed in the hope that it will be useful,
- *     but WITHOUT ANY WARRANTY; without even the implied warranty of
- *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *     GNU General Public License for more details.
- *
- *     You should have received a copy of the GNU General Public License
- *     along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
- */
 package com.health.openscale.sync.core.service
 
 import android.app.Notification
@@ -30,6 +13,7 @@ import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.utils.LogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -42,21 +26,38 @@ import java.time.Instant
 import java.util.Date
 
 class SyncService : Service() {
-    private lateinit var syncServiceList : Array<ServiceInterface>
+    private lateinit var syncServiceList: Array<ServiceInterface>
     private lateinit var prefs: SharedPreferences
     private val ID_SERVICE = 5
 
-    override fun onBind(intent: Intent): IBinder? {
-        return null
-    }
+    override fun onBind(intent: Intent): IBinder? = null
 
-    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-        super.onStartCommand(intent, flags, startId)
-
-        showNotification() // Start foreground service immediately
+    override fun onCreate() {
+        super.onCreate()
 
         prefs = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
 
+        // Ensure at least a debug tree is available
+        if (Timber.forest().isEmpty()) {
+            plant(Timber.DebugTree())
+        }
+
+        // Initialize file logging if enabled (does not clear logs)
+        LogManager.init(applicationContext, prefs)
+
+        Timber.d("SyncService created (thread=%s)", Thread.currentThread().name)
+    }
+
+    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+        val t0 = System.nanoTime()
+        Timber.d(
+            "onStartCommand(startId=%d, flags=0x%X, thread=%s)",
+            startId, flags, Thread.currentThread().name
+        )
+
+        showNotification() // Required foreground service notification
+
+        // Prepare all sync backends
         syncServiceList = arrayOf(
             HealthConnectService(applicationContext, prefs),
             MQTTService(applicationContext, prefs),
@@ -64,140 +65,176 @@ class SyncService : Service() {
         )
 
         CoroutineScope(Dispatchers.Main).launch {
+            // Initialize only enabled services
             for (syncService in syncServiceList) {
+                val name = syncService.viewModel().getName()
                 if (syncService.viewModel().syncEnabled.value) {
-                    syncService.init()
+                    val t = System.nanoTime()
+                    runCatching { syncService.init() }
+                        .onSuccess {
+                            Timber.d("%s.init() ok in %d ms", name, (System.nanoTime() - t) / 1_000_000)
+                        }
+                        .onFailure { e -> Timber.e(e, "%s.init() failed", name) }
+                } else {
+                    Timber.d("%s [disabled]", name)
                 }
             }
-            delay(500) // wait a bit if all initialization are done before handle the intent
 
+            delay(500) // small delay to give init a chance to complete
             onHandleIntent(intent)
+
+            Timber.d("onStartCommand done in %d ms", (System.nanoTime() - t0) / 1_000_000)
         }
 
         return START_STICKY
     }
 
-    override fun onCreate() {
-        super.onCreate()
+    protected fun onHandleIntent(intent: Intent?) {
+        Timber.d("onHandleIntent extras: %s", intent.safeExtras())
 
-        if (Timber.forest().isEmpty()) {
-            plant(Timber.DebugTree())
-        }
-    }
+        val openScaleUserId = prefs.getInt("selectedOpenScaleUserId", -1)
+        Timber.d("selectedOpenScaleUserId=%d", openScaleUserId)
 
-    protected fun onHandleIntent(intent: Intent) {
-        Timber.d("openScale sync service handle intent started")
-
-        var mode: String? = "none"
-        var openScaleUserId = 0
-
-        try {
-            mode = intent.extras!!.getString("mode")
-            openScaleUserId = prefs.getInt("selectedOpenScaleUserId", -1)
-        } catch (ex: NullPointerException) {
-            Timber.e(ex.message)
+        val mode = intent?.extras?.getString("mode") ?: "none"
+        if (mode !in setOf("insert", "update", "delete", "clear")) {
+            Timber.w("Unknown mode='%s' -> ignoring", mode)
+            stopServiceCleanly()
+            return
         }
 
         for (syncService in syncServiceList) {
-            if (!syncService.viewModel().syncEnabled.value) {
-                Timber.d(syncService.viewModel().getName() + " [disabled]")
+            val vm = syncService.viewModel()
+            val name = vm.getName()
+
+            if (!vm.syncEnabled.value) {
+                Timber.d("%s [disabled]", name)
                 continue
             }
 
-            Timber.d(syncService.viewModel().getName()  + " [enabled]")
+            Timber.d("%s [enabled]", name)
 
-            if (mode == "insert") {
-                val userId = intent.getIntExtra("userId", 0)
-                val weight = roundFloat(intent.getFloatExtra("weight", 0.0f))
-                val fat = roundFloat(intent.getFloatExtra("fat", 0.0f))
-                val water = roundFloat(intent.getFloatExtra("water", 0.0f))
-                val muscle = roundFloat(intent.getFloatExtra("muscle", 0.0f))
-                val date = Date(intent.getLongExtra("date", 0L))
+            when (mode) {
+                "insert", "update" -> {
+                    // Read all extras safely, no NPEs
+                    val userId = intent?.getIntExtra("userId", 0) ?: 0
+                    val weight = roundFloat(intent?.getFloatExtra("weight", 0.0f) ?: 0f)
+                    val fat    = roundFloat(intent?.getFloatExtra("fat", 0.0f) ?: 0f)
+                    val water  = roundFloat(intent?.getFloatExtra("water", 0.0f) ?: 0f)
+                    val muscle = roundFloat(intent?.getFloatExtra("muscle", 0.0f) ?: 0f)
+                    val date   = Date(intent?.getLongExtra("date", 0L) ?: 0L)
 
-                Timber.d("SyncService insert command received for user Id: $userId date: $date weight: $weight fat: $fat water: $water muscle: $muscle")
+                    Timber.d(
+                        "SyncService %s userId=%d date=%s w=%.2f f=%.2f wa=%.2f m=%.2f",
+                        mode, userId, date, weight, fat, water, muscle
+                    )
 
-                if (userId == openScaleUserId) {
+                    if (userId == openScaleUserId) {
+                        CoroutineScope(Dispatchers.Main).launch {
+                            val m = OpenScaleMeasurement(0, date, weight, fat, water, muscle)
+                            val t = System.nanoTime()
+                            val res = runCatching {
+                                if (mode == "insert") syncService.insert(m) else syncService.update(m)
+                            }.onFailure { e -> Timber.e(e, "%s.%s() threw", name, mode) }
+                                .getOrNull()
+
+                            val ms = (System.nanoTime() - t) / 1_000_000
+                            when (res) {
+                                is SyncResult.Success -> {
+                                    vm.setLastSync(Instant.now())
+                                    val fmt = DateFormat.getDateFormat(applicationContext).format(date)
+                                    val msg = if (mode == "insert")
+                                        getString(R.string.sync_service_measurement_inserted_info, weight, fmt)
+                                    else
+                                        getString(R.string.sync_service_measurement_updated_info, weight, fmt)
+                                    syncService.setInfoMessage(msg)
+                                    Timber.d("%s.%s() success in %d ms", name, mode, ms)
+                                }
+                                is SyncResult.Failure -> {
+                                    syncService.setErrorMessage(res)
+                                    Timber.e("(%s.%s) %s in %d ms", name, mode, res.message, ms)
+                                }
+                                null -> {
+                                    Timber.w("%s.%s() returned null in %d ms", name, mode, ms)
+                                }
+                            }
+                        }
+                    } else {
+                        Timber.w("userId mismatch: intent=%d, selected=%d -> skipping", userId, openScaleUserId)
+                    }
+                }
+
+                "delete" -> {
+                    val date = Date(intent?.getLongExtra("date", 0L) ?: 0L)
+                    Timber.d("SyncService delete for date=%s", date)
+
                     CoroutineScope(Dispatchers.Main).launch {
-                        val syncResult = syncService.insert(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
-
-                        if (syncResult is SyncResult.Success) {
-                            syncService.setInfoMessage(getString(R.string.sync_service_measurement_inserted_info, weight, DateFormat.getDateFormat(applicationContext).format(date)))
-                        } else {
-                            syncService.setErrorMessage(syncResult as SyncResult.Failure)
+                        val res = runCatching { syncService.delete(date) }
+                            .onFailure { e -> Timber.e(e, "%s.delete() threw", name) }
+                            .getOrNull()
+                        when (res) {
+                            is SyncResult.Success -> {
+                                vm.setLastSync(Instant.now())
+                                val fmt = DateFormat.getDateFormat(applicationContext).format(date)
+                                syncService.setInfoMessage(getString(R.string.sync_service_measurement_deleted_info, fmt))
+                                Timber.d("%s.delete() success", name)
+                            }
+                            is SyncResult.Failure -> {
+                                syncService.setErrorMessage(res)
+                                Timber.e("(%s.delete) %s", name, res.message)
+                            }
+                            null -> {
+                                Timber.w("%s.delete() returned null", name)
+                            }
                         }
                     }
-                } else {
-                    Timber.d("openScale sync userId and openScale userId mismatched")
                 }
-            } else if (mode == "update") {
-                val userId = intent.getIntExtra("userId", 0)
-                val weight = roundFloat(intent.getFloatExtra("weight", 0.0f))
-                val fat = roundFloat(intent.getFloatExtra("fat", 0.0f))
-                val water = roundFloat(intent.getFloatExtra("water", 0.0f))
-                val muscle = roundFloat(intent.getFloatExtra("muscle", 0.0f))
-                val date = Date(intent.getLongExtra("date", 0L))
 
-                Timber.d("SyncService update command received for userId: $userId date: $date weight: $weight fat: $fat water: $water muscle: $muscle")
+                "clear" -> {
+                    Timber.d("SyncService clear command received")
 
-                if (userId == openScaleUserId) {
                     CoroutineScope(Dispatchers.Main).launch {
-                        val syncResult = syncService.update(OpenScaleMeasurement(0, date, weight, fat, water, muscle))
-
-                        if (syncResult is SyncResult.Success) {
-                            syncService.setInfoMessage(getString(R.string.sync_service_measurement_updated_info, weight, DateFormat.getDateFormat(applicationContext).format(date)))
-                        } else {
-                            syncService.setErrorMessage(syncResult as SyncResult.Failure)
+                        val res = runCatching { syncService.clear() }
+                            .onFailure { e -> Timber.e(e, "%s.clear() threw", name) }
+                            .getOrNull()
+                        when (res) {
+                            is SyncResult.Success -> {
+                                vm.setLastSync(Instant.now())
+                                syncService.setInfoMessage(getString(R.string.sync_service_measurement_cleared_info))
+                                Timber.d("%s.clear() success", name)
+                            }
+                            is SyncResult.Failure -> {
+                                syncService.setErrorMessage(res)
+                                Timber.e("(%s.clear) %s", name, res.message)
+                            }
+                            null -> {
+                                Timber.w("%s.clear() returned null", name)
+                            }
                         }
-                    }
-                } else {
-                    Timber.d("openScale sync userId and openScale userId mismatched")
-                }
-            } else if (mode == "delete") {
-                val date = Date(intent.getLongExtra("date", 0L))
-
-                Timber.d("SyncService delete command received for date: $date")
-
-                CoroutineScope(Dispatchers.Main).launch {
-                    val syncResult = syncService.delete(date)
-
-                    if (syncResult is SyncResult.Success) {
-                        syncService.setInfoMessage(getString(R.string.sync_service_measurement_deleted_info,DateFormat.getDateFormat(applicationContext).format(date)))
-                    } else {
-                        syncService.setErrorMessage(syncResult as SyncResult.Failure)
-                    }
-                }
-            } else if (mode == "clear") {
-                Timber.d("SyncService clear command received")
-
-                CoroutineScope(Dispatchers.Main).launch {
-                    val syncResult =syncService.clear()
-
-                    if (syncResult is SyncResult.Success) {
-                        syncService.setInfoMessage(getString(R.string.sync_service_measurement_cleared_info))
-                    } else {
-                        syncService.setErrorMessage(syncResult as SyncResult.Failure)
                     }
                 }
             }
-
-            syncService.viewModel().setLastSync(Instant.now())
         }
 
+        stopServiceCleanly()
+    }
+
+    private fun stopServiceCleanly() {
+        Timber.d("Stopping foreground + self")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     private fun roundFloat(number: Float): Float {
-        val bigDecimal = BigDecimal(number.toDouble())
-        val rounded = bigDecimal.setScale(2, RoundingMode.HALF_UP)
-        return rounded.toFloat()
+        val n = if (number.isFinite()) number else 0f
+        val big = BigDecimal(n.toDouble()).setScale(2, RoundingMode.HALF_UP)
+        return big.toFloat()
     }
 
+    /** Creates required foreground notification for service */
     private fun showNotification() {
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val channelId = createNotificationChannel(notificationManager)
-        val notificationBuilder = NotificationCompat.Builder(this, channelId)
-        val notification = notificationBuilder
+        val notification = NotificationCompat.Builder(this, channelId)
             .setOngoing(true)
             .setSmallIcon(R.drawable.ic_launcher_openscale_sync)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -207,28 +244,62 @@ class SyncService : Service() {
         startForeground(ID_SERVICE, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
+    /** Registers a notification channel if not yet existing */
     private fun createNotificationChannel(notificationManager: NotificationManager): String {
         val channelId = "openScale sync"
-
         val channel = NotificationChannel(
             channelId,
             "openScale sync service",
             NotificationManager.IMPORTANCE_DEFAULT
-        )
-        channel.importance = NotificationManager.IMPORTANCE_DEFAULT
-        channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        ).apply {
+            importance = NotificationManager.IMPORTANCE_DEFAULT
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        }
         notificationManager.createNotificationChannel(channel)
-
         return channelId
     }
 
-} /*
-    Intent insertIntent = new Intent();
-    insertIntent.setComponent(new ComponentName("com.health.openscale.sync", "com.health.openscale.sync.core.service.SyncService"));
-            insertIntent.putExtra("mode", "insert");
-            insertIntent.putExtra("userId", scaleMeasurement.getUserId());
-            insertIntent.putExtra("weight", scaleMeasurement.getWeight());
-            insertIntent.putExtra("date", scaleMeasurement.getDateTime().getTime());
-            ContextCompat.startForegroundService(context, insertIntent);
-*/
+    // ------- Intent debugging (extras only, safe) -------
 
+    private val REDACT_KEYS = setOf(
+        "token","auth","password","secret","apikey","api_key","authorization","bearer"
+    )
+
+    /**
+     * Safe summary of intent extras.
+     * - Redacts sensitive keys
+     * - Truncates long strings
+     * - Limits number of items
+     */
+    private fun Intent?.safeExtras(): String {
+        if (this == null) return "extras=null"
+        val b = extras ?: return "extras=null"
+        if (b.isEmpty) return "extras={}"
+        val keys = runCatching { b.keySet().sorted() }.getOrElse { emptyList() }
+        val parts = mutableListOf<String>()
+
+        fun trunc(v: Any?): String {
+            val s = v?.toString() ?: "null"
+            return if (s.length > 256) s.take(256) + "…(${s.length})" else s
+        }
+
+        for (k in keys) {
+            val raw = runCatching { b.get(k) }.getOrNull()
+            val entry = when {
+                REDACT_KEYS.any { k.contains(it, ignoreCase = true) } -> "$k=«redacted»"
+                raw is ByteArray      -> "$k=byte[${raw.size}]"
+                raw is IntArray       -> "$k=int[${raw.size}]"
+                raw is LongArray      -> "$k=long[${raw.size}]"
+                raw is FloatArray     -> "$k=float[${raw.size}]"
+                raw is DoubleArray    -> "$k=double[${raw.size}]"
+                raw is BooleanArray   -> "$k=bool[${raw.size}]"
+                raw is Array<*>       -> "$k=array[${raw.size}]"
+                else                  -> "$k=${trunc(raw)}"
+            }
+            parts += entry
+            if (parts.size >= 20) { parts += "…+${keys.size - 20} more"; break }
+        }
+
+        return "extras={${parts.joinToString(", ")}}"
+    }
+}

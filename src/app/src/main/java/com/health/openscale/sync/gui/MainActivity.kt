@@ -17,13 +17,17 @@
  */
 package com.health.openscale.sync.gui
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.text.format.DateFormat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -54,6 +58,7 @@ import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,11 +73,13 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -110,6 +117,7 @@ import com.health.openscale.sync.core.service.MQTTService
 import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.service.WgerService
+import com.health.openscale.sync.core.utils.LogManager
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -125,6 +133,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var openScaleDataService: OpenScaleDataProvider
     private lateinit var syncServiceList : List<ServiceInterface>
     private val currentTitle = MutableLiveData<String>()
+    private var snackbarHostStateRef: SnackbarHostState? = null
+
+    private lateinit var saveLogLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,6 +146,8 @@ class MainActivity : AppCompatActivity() {
         val sharedPreferences: SharedPreferences = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
 
         sharedPreferences.edit().putString("packageName", detectPackage()).apply()
+
+        LogManager.init(this, sharedPreferences)
 
         openScaleDataService = OpenScaleDataProvider(this, sharedPreferences)
         openScaleService = OpenScaleProvider(this, openScaleDataService, sharedPreferences)
@@ -171,6 +184,45 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        saveLogLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val uri = result.data?.data
+                if (uri == null) {
+                    lifecycleScope.launch {
+                        snackbarHostStateRef?.showSnackbar(
+                            message = getString(R.string.logging_export_failed),
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                    return@registerForActivityResult
+                }
+
+                val ok = runCatching {
+                    contentResolver.openOutputStream(uri)?.use { output ->
+                        LogManager.logFile(this).inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    } ?: error("No OutputStream")
+                }.isSuccess
+
+                lifecycleScope.launch {
+                    snackbarHostStateRef?.showSnackbar(
+                        message = if (ok) getString(R.string.log_saved_success)
+                        else getString(R.string.logging_export_failed),
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            } else {
+                lifecycleScope.launch {
+                    snackbarHostStateRef?.showSnackbar(
+                        message = getString(R.string.log_saved_canceled),
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        }
+
+
         setContent {
             composeMainView(this)
         }
@@ -184,6 +236,10 @@ class MainActivity : AppCompatActivity() {
 
         if (doesExist("com.health.openscale.oss")) {
             return "com.health.openscale.oss"
+        }
+
+        if (doesExist("com.health.openscale.beta")) {
+            return "com.health.openscale.beta"
         }
 
         if (doesExist("com.health.openscale.light")) {
@@ -213,6 +269,13 @@ class MainActivity : AppCompatActivity() {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val versionCheckPerformed = remember { mutableStateOf(false) }
+
+        snackbarHostStateRef = snackbarHostState
+
+        DisposableEffect(snackbarHostState) {
+            snackbarHostStateRef = snackbarHostState
+            onDispose { snackbarHostStateRef = null }
+        }
 
         LaunchedEffect(Unit,openScaleService.viewModel().allPermissionsGranted.value, openScaleService.viewModel().connectAvailable.value) {
             if (!versionCheckPerformed.value && openScaleService.viewModel().allPermissionsGranted.value && openScaleService.viewModel().connectAvailable.value) {
@@ -388,8 +451,79 @@ class MainActivity : AppCompatActivity() {
                 Text(stringResource(id = R.string.about_title_license), style = MaterialTheme.typography.titleMedium)
                 Text("GPLv3", style = MaterialTheme.typography.bodyMedium)
             }
+
+            LoggingCard()
         }
     }
+
+    @Composable
+    fun LoggingCard() {
+        val ctx = this@MainActivity
+        val prefs = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
+        val scope = rememberCoroutineScope()
+
+        val loggingEnabled = remember { mutableStateOf(LogManager.isEnabled(prefs)) }
+        val hasFile = remember { mutableStateOf(LogManager.hasLogFile(ctx)) }
+
+        LaunchedEffect(loggingEnabled.value) {
+            hasFile.value = LogManager.hasLogFile(ctx)
+        }
+
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text(stringResource(id = R.string.logging_title), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.padding(top = 12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(id = R.string.logging_enabled_label))
+                        Spacer(Modifier.width(12.dp))
+                        Switch(
+                            checked = loggingEnabled.value,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    LogManager.clearLog(ctx)
+                                    scope.launch {
+                                        snackbarHostStateRef?.showSnackbar(
+                                            message = ctx.getString(R.string.log_new_file_created),
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                }
+                                LogManager.setEnabled(ctx, prefs, checked)
+                                loggingEnabled.value = checked
+                                hasFile.value = LogManager.hasLogFile(ctx)
+                            }
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    FilledTonalButton(
+                        enabled = hasFile.value,
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TITLE, "openscale_sync_log.txt")
+                            }
+                            (ctx as MainActivity).saveLogLauncher.launch(intent)
+                        }
+                    ) {
+                        Text(stringResource(id = R.string.logging_export_button))
+                    }
+                }
+            }
+        }
+    }
+
 
     @Composable
     fun navigationDrawerSheet(drawerState : DrawerState, scope : CoroutineScope) {

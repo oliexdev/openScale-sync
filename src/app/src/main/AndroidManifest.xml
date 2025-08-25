@@ -5,18 +5,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="com.health.openscale.READ_WRITE_DATA" />
+    <uses-permission android:name="com.health.openscale.oss.READ_WRITE_DATA" />
+    <uses-permission android:name="com.health.openscale.beta.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.pro.READ_WRITE_DATA" />
-    <uses-permission android:name="com.health.openscale.oss.READ_WRITE_DATA" />
     <uses-permission android:name="android.permission.health.WRITE_BODY_FAT" />
     <uses-permission android:name="android.permission.health.WRITE_BODY_WATER_MASS" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
 
     <queries>
         <package android:name="com.health.openscale" />
+        <package android:name="com.health.openscale.oss" />
+        <package android:name="com.health.openscale.beta" />
         <package android:name="com.health.openscale.light" />
         <package android:name="com.health.openscale.pro" />
-        <package android:name="com.health.openscale.oss" />
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
 
@@ -67,6 +69,17 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Log file provider -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

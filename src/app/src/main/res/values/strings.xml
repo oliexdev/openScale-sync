@@ -6,6 +6,14 @@
     <string name="about_title_website">Website</string>
     <string name="about_title_license">License</string>
 
+    <string name="logging_title">Logging</string>
+    <string name="logging_enabled_label">Enabled</string>
+    <string name="logging_export_button">Export log</string>
+    <string name="log_new_file_created">New log file created</string>
+    <string name="log_saved_success">Log file saved successfully</string>
+    <string name="log_saved_canceled">Log file export canceled</string>
+    <string name="logging_export_failed">Log file could not be saved</string>
+
     <string name="sync_service_syncing_text">Syncing …</string>
     <string name="sync_service_full_sync_button">Full sync</string>
     <string name="sync_service_last_sync_never_text">Last sync never</string>
