@@ -1,0 +1,2 @@
+* introduces logging capabilities
+* added support for syncing with openScale 3.0 beta build.

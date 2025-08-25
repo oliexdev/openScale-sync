@@ -64,7 +64,7 @@ platform :android do
             project_dir: 'src/'
         )
         gradle(
-            task: "assemble",
+            task: "bundle",
             project_dir: 'src/',
             build_type: "OSS"
         )
