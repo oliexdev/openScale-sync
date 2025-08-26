@@ -66,6 +66,7 @@ class OpenScaleProvider (
         if (viewModel.allPermissionsGranted.value) {
             viewModel.setOpenScaleUsers(openScaleDataService.getUsers())
             viewModel.selectOpenScaleUser(getSelectedUser())
+            openScaleDataService.saveSelectedUserId(getSelectedUser().id)
         }
     }
 
