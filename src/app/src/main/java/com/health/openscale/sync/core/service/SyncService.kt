@@ -128,34 +128,38 @@ class SyncService : Service() {
                         mode, userId, date, weight, fat, water, muscle
                     )
 
-                    CoroutineScope(Dispatchers.Main).launch {
-                        val m = OpenScaleMeasurement(0, date, weight, fat, water, muscle)
-                        val t = System.nanoTime()
-                        val res = runCatching {
-                            if (mode == "insert") syncService.insert(m) else syncService.update(m)
-                        }.onFailure { e -> Timber.e(e, "%s.%s() threw", name, mode) }
-                            .getOrNull()
+                    if (userId == openScaleUserId) {
+                        CoroutineScope(Dispatchers.Main).launch {
+                            val m = OpenScaleMeasurement(0, date, weight, fat, water, muscle)
+                            val t = System.nanoTime()
+                            val res = runCatching {
+                                if (mode == "insert") syncService.insert(m) else syncService.update(m)
+                            }.onFailure { e -> Timber.e(e, "%s.%s() threw", name, mode) }
+                                .getOrNull()
 
-                        val ms = (System.nanoTime() - t) / 1_000_000
-                        when (res) {
-                            is SyncResult.Success -> {
-                                vm.setLastSync(Instant.now())
-                                val fmt = DateFormat.getDateFormat(applicationContext).format(date)
-                                val msg = if (mode == "insert")
-                                    getString(R.string.sync_service_measurement_inserted_info, weight, fmt)
-                                else
-                                    getString(R.string.sync_service_measurement_updated_info, weight, fmt)
-                                syncService.setInfoMessage(msg)
-                                Timber.d("%s.%s() success in %d ms", name, mode, ms)
-                            }
-                            is SyncResult.Failure -> {
-                                syncService.setErrorMessage(res)
-                                Timber.e("(%s.%s) %s in %d ms", name, mode, res.message, ms)
-                            }
-                            null -> {
-                                Timber.w("%s.%s() returned null in %d ms", name, mode, ms)
+                            val ms = (System.nanoTime() - t) / 1_000_000
+                            when (res) {
+                                is SyncResult.Success -> {
+                                    vm.setLastSync(Instant.now())
+                                    val fmt = DateFormat.getDateFormat(applicationContext).format(date)
+                                    val msg = if (mode == "insert")
+                                        getString(R.string.sync_service_measurement_inserted_info, weight, fmt)
+                                    else
+                                        getString(R.string.sync_service_measurement_updated_info, weight, fmt)
+                                    syncService.setInfoMessage(msg)
+                                    Timber.d("%s.%s() success in %d ms", name, mode, ms)
+                                }
+                                is SyncResult.Failure -> {
+                                    syncService.setErrorMessage(res)
+                                    Timber.e("(%s.%s) %s in %d ms", name, mode, res.message, ms)
+                                }
+                                null -> {
+                                    Timber.w("%s.%s() returned null in %d ms", name, mode, ms)
+                                }
                             }
                         }
+                    } else {
+                        Timber.w("userId mismatch: intent=%d, selected=%d -> skipping", userId, openScaleUserId)
                     }
                 }
 
