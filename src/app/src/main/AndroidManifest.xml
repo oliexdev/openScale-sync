@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="com.health.openscale.READ_WRITE_DATA" />
+    <uses-permission android:name="com.health.openscale.debug.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.oss.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.beta.READ_WRITE_DATA" />
     <uses-permission android:name="com.health.openscale.light.READ_WRITE_DATA" />
@@ -15,6 +16,7 @@
 
     <queries>
         <package android:name="com.health.openscale" />
+        <package android:name="com.health.openscale.debug" />
         <package android:name="com.health.openscale.oss" />
         <package android:name="com.health.openscale.beta" />
         <package android:name="com.health.openscale.light" />

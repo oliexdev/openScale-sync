@@ -234,6 +234,10 @@ class MainActivity : AppCompatActivity() {
             return "com.health.openscale"
         }
 
+        if (doesExist("com.health.openscale.debug")) {
+            return "com.health.openscale.debug"
+        }
+
         if (doesExist("com.health.openscale.oss")) {
             return "com.health.openscale.oss"
         }
