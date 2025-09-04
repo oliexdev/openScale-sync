@@ -30,6 +30,7 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     private val _mqttConnecting = MutableLiveData<Boolean>(false)
 
     private val _mqttUseSsl = MutableLiveData<Boolean>(sharedPreferences.getBoolean("mqtt_use_ssl", true))
+    private val _mqttUseDiscovery = MutableLiveData<Boolean>(sharedPreferences.getBoolean("mqtt_use_discovery", true))
 
     override fun getName(): String {
         return "MQTT"
@@ -73,5 +74,12 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     fun setMqttUseSsl(useSsl: Boolean) {
         _mqttUseSsl.value = useSsl
         sharedPreferences.edit().putBoolean("mqtt_use_ssl", useSsl).apply()
+    }
+
+    val mqttUseDiscovery: LiveData<Boolean> = _mqttUseDiscovery
+
+    fun setMqttUseDiscovery(useDiscovery: Boolean) {
+        _mqttUseDiscovery.value = useDiscovery
+        sharedPreferences.edit().putBoolean("mqtt_use_discovery", useDiscovery).apply()
     }
 }
