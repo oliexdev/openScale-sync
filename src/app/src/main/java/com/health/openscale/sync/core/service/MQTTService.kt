@@ -48,7 +48,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.health.openscale.sync.BuildConfig
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.MQTTViewModel
@@ -56,6 +58,7 @@ import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.MQTTSync
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
+import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -145,6 +148,24 @@ class MQTTService(
                         .password(UTF_8.encode(viewModel.mqttPassword.value.toString()))
                         .applySimpleAuth()
                         .send()
+
+                    if(viewModel.mqttUseDiscovery.value == true) {
+                        val payload = JsonParser.parseReader(
+                            context.resources.openRawResource(
+                                R.raw.homeassistant_payload
+                            ).bufferedReader()
+                        ).asJsonObject
+
+                        payload["origin"].asJsonObject.addProperty(
+                            "sw_version",
+                            BuildConfig.VERSION_NAME)
+                        val bytes = Gson().toJson(payload).toByteArray()
+
+                        mqttClient.publish(Mqtt5Publish.builder()
+                            .topic("homeassistant/device/openscale/config")
+                            .payload(bytes)
+                            .build())
+                    }
 
                     mqttSync = MQTTSync(mqttClient)
                     connectedSuccessfully = true
@@ -304,6 +325,36 @@ class MQTTService(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(start = 8.dp, bottom = 8.dp, end = 8.dp)
+                )
+            }
+
+            val useDiscoveryState by viewModel.mqttUseDiscovery.observeAsState(true)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        enabled = viewModel.syncEnabled.value,
+                        onClick = {
+                            if (viewModel.syncEnabled.value) {
+                                viewModel.setMqttUseDiscovery(!useDiscoveryState)
+                            }
+                        }
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(id = R.string.mqtt_use_discovery_tite),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (viewModel.syncEnabled.value) MaterialTheme.colorScheme.onSurface else Color.Gray
+                )
+                Switch(
+                    checked = useDiscoveryState,
+                    onCheckedChange = { newCheckedState ->
+                        viewModel.setMqttUseDiscovery(newCheckedState)
+                    },
+                    enabled = viewModel.syncEnabled.value
                 )
             }
 

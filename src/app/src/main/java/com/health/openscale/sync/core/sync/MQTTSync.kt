@@ -30,7 +30,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         var failureCount = 0
 
-        measurements.forEach { measurement ->
+        measurements.sortedBy { measurements -> measurements.id }.forEach { measurement ->
             val syncResult = publishMeasurement(measurement, "openScaleSync/measurements/insert")
 
             if (syncResult is SyncResult.Failure) {

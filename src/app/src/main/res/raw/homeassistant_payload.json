@@ -1,0 +1,60 @@
+{
+  "device": {
+    "name": "openScale",
+    "manufacturer": "oliexdev",
+    "identifiers": "openscale"
+  },
+  "origin": {
+    "name": "openScale sync",
+    "sw_version": "not_specified",
+    "support_url": "https://github.com/oliexdev/openScale-sync"
+  },
+  "components": {
+    "openscale_weight": {
+      "name": "Weight",
+      "platform": "sensor",
+      "device_class": "weight",
+      "unit_of_measurement": "kg",
+      "value_template": "{{ value_json.weight }}",
+      "unique_id": "openscale_weight"
+    },
+    "openscale_fat": {
+      "name": "Body fat",
+      "platform": "sensor",
+      "unit_of_measurement": "%",
+      "value_template": "{{ value_json.fat }}",
+      "unique_id": "openscale_fat"
+    },
+    "openscale_muscle": {
+      "name": "Muscle",
+      "platform": "sensor",
+      "unit_of_measurement": "%",
+      "value_template": "{{ value_json.muscle }}",
+      "unique_id": "openscale_muscle"
+    },
+    "openscale_water": {
+      "name": "Total body water",
+      "platform": "sensor",
+      "device_class": "moisture",
+      "unit_of_measurement": "%",
+      "value_template": "{{ value_json.water }}",
+      "unique_id": "openscale_water"
+    },
+    "openscale_measurement_date": {
+      "name": "Measurement date",
+      "platform": "sensor",
+      "entity_category": "diagnostic",
+      "device_class": "timestamp",
+      "value_template": "{{ value_json.date }}",
+      "unique_id": "openscale_date"
+    },
+    "openscale_measurement_id": {
+      "name": "Measurement id",
+      "platform": "sensor",
+      "entity_category": "diagnostic",
+      "value_template": "{{ value_json.id }}",
+      "unique_id": "openscale_id"
+    }
+  },
+  "state_topic": "openScaleSync/measurements/insert"
+}
