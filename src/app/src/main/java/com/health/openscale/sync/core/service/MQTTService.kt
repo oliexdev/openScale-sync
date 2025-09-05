@@ -122,6 +122,14 @@ class MQTTService(
         return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
+    fun current(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
+        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
+            return mqttSync.current(measurement)
+        }
+
+        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+    }
+
     private suspend fun connectMQTT() {
         if (viewModel.syncEnabled.value) {
             viewModel.setMQTTConnecting(true)

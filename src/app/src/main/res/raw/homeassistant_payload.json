@@ -56,5 +56,5 @@
       "unique_id": "openscale_id"
     }
   },
-  "state_topic": "openScaleSync/measurements/insert"
+  "state_topic": "openScaleSync/measurements/current"
 }
