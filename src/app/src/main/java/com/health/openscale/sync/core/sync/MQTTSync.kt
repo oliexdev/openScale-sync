@@ -29,8 +29,9 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
 
     fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         var failureCount = 0
+        val measurements = measurements.sortedBy { measurements -> measurements.date }
 
-        measurements.sortedBy { measurements -> measurements.id }.forEach { measurement ->
+        measurements.forEach { measurement ->
             val syncResult = publishMeasurement(measurement, "openScaleSync/measurements/insert")
 
             if (syncResult is SyncResult.Failure) {
@@ -38,8 +39,14 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             }
         }
 
-        if (failureCount > 0) {
-            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"$failureCount of ${measurements.size} measurements failed to sync",null)
+
+        val updateCurrentResult = measurements.lastOrNull()?.let {
+            current(it)
+        }
+        val updateCurrentFailure = updateCurrentResult != null && updateCurrentResult is SyncResult.Failure
+
+        if (failureCount > 0 || updateCurrentFailure) {
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"$failureCount of ${measurements.size} measurements failed to sync, ${if(updateCurrentFailure) 1 else 0} update failure",null)
         } else {
             return SyncResult.Success(Unit)
         }
@@ -60,6 +67,10 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
 
     fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         return publishMeasurement(measurement, "openScaleSync/measurements/update")
+    }
+
+    fun current(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
+        return publishMeasurement(measurement, "openScaleSync/measurements/current")
     }
 
     private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String) : SyncResult<Unit> {

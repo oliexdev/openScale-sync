@@ -24,6 +24,7 @@
     <string name="sync_service_measurement_deleted_info">"%1$s measurement deleted</string>
     <string name="sync_service_measurement_cleared_info">"all measurements cleared</string>
     <string name="sync_service_measurement_updated_info">"%1$f kg (date: %2$s) measurement updated</string>
+    <string name="sync_service_measurement_current_info">"%1$f kg (date: %2$s) is most recent measurement</string>
     <string name="sync_service_unknown_error">Unknown error</string>
     <string name="sync_service_api_error">Api error</string>
     <string name="sync_service_permission_error">Permission denied</string>

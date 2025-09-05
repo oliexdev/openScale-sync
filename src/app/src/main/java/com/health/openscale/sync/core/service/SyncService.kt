@@ -13,6 +13,8 @@ import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleUser
+import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.utils.LogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -208,6 +210,37 @@ class SyncService : Service() {
                             }
                             null -> {
                                 Timber.w("%s.clear() returned null", name)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (syncService is MQTTService) {
+                Timber.d("SyncService updating MQTT `current` measurement")
+
+                val openScaleDataService = OpenScaleDataProvider(this, prefs)
+                val measurements = openScaleDataService.getMeasurements(OpenScaleUser(openScaleUserId, ""))
+
+                measurements.maxByOrNull { m -> m.date }?.let {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        val res = runCatching { syncService.current(it) }
+                            .onFailure { e -> Timber.e(e, "%s.current() threw", name) }
+                            .getOrNull()
+                        when (res) {
+                            is SyncResult.Success -> {
+                                vm.setLastSync(Instant.now())
+                                val fmt = DateFormat.getDateFormat(applicationContext).format(it.date)
+                                val msg = getString(R.string.sync_service_measurement_current_info, it.weight, fmt)
+                                syncService.setInfoMessage(msg)
+                                Timber.d("%s.current() success", name)
+                            }
+                            is SyncResult.Failure -> {
+                                syncService.setErrorMessage(res)
+                                Timber.e("(%s.current) %s", name, res.message)
+                            }
+                            null -> {
+                                Timber.w("%s.current() returned null", name)
                             }
                         }
                     }
