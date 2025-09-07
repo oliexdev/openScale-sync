@@ -35,7 +35,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,9 +47,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import com.google.gson.Gson
-import com.google.gson.JsonParser
-import com.health.openscale.sync.BuildConfig
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.MQTTViewModel
@@ -58,7 +54,6 @@ import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.MQTTSync
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
-import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,43 +78,77 @@ class MQTTService(
         return viewModel
     }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return mqttSync.fullSync(measurements)
+    // Centralized function to ensure client is connected before performing an operation
+    private suspend fun <T> ensureConnectedAndExecute(
+        operationName: String,
+        action: suspend (mqttSyncInstance: MQTTSync) -> SyncResult<T>
+    ): SyncResult<T> {
+        if (!viewModel.syncEnabled.value) {
+            return SyncResult.Failure(
+                SyncResult.ErrorType.API_ERROR,
+                "MQTT Sync service is not enabled."
+            )
         }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+        // Check if client is initialized and connected
+        if (!::mqttClient.isInitialized || !mqttClient.state.isConnected) {
+            Timber.w("MQTTService: Client for '$operationName' not initialized or not connected. Attempting to reconnect...")
+            connectMQTT() // Attempt to establish or re-establish the connection
+
+            // After attempting to connect, check the status again
+            if (!::mqttClient.isInitialized || !mqttClient.state.isConnected) {
+                Timber.e("MQTTService: Failed to connect to MQTT broker for '$operationName'.")
+                viewModel.setConnectAvailable(false) // Update ViewModel
+                return SyncResult.Failure(
+                    SyncResult.ErrorType.API_ERROR,
+                    "Failed to connect to MQTT broker for $operationName."
+                )
+            }
+            Timber.i("MQTTService: Reconnect successful for '$operationName'.")
+        }
+
+        // At this point, mqttClient should be initialized and connected,
+        // and mqttSync should also be initialized.
+        if (!::mqttSync.isInitialized) {
+            // This case should ideally not happen if connectMQTT() correctly initializes mqttSync
+            Timber.e("MQTTService: mqttSync not initialized even after successful connection check for '$operationName'. This is unexpected.")
+            return SyncResult.Failure(
+                SyncResult.ErrorType.UNKNOWN_ERROR,
+                "Internal error: MQTT sync handler not initialized for $operationName."
+            )
+        }
+
+        return action(mqttSync)
     }
-    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return mqttSync.insert(measurement)
-        }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+    override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> {
+        return ensureConnectedAndExecute("fullSync") {syncHandler ->
+            syncHandler.fullSync(measurements)
+        }
     }
 
-    override suspend fun delete(date: Date) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return mqttSync.delete(date)
+    override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> {
+        return ensureConnectedAndExecute("insert") { syncHandler ->
+            syncHandler.insert(measurement)
         }
-
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun clear() : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return mqttSync.clear()
+    override suspend fun delete(date: Date): SyncResult<Unit> {
+        return ensureConnectedAndExecute("delete") { syncHandler ->
+            syncHandler.delete(date)
         }
-
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
 
-    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return mqttSync.update(measurement)
+    override suspend fun clear(): SyncResult<Unit> {
+        return ensureConnectedAndExecute("clear") { syncHandler ->
+            syncHandler.clear()
         }
+    }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+    override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> {
+        return ensureConnectedAndExecute("update") { syncHandler ->
+            syncHandler.update(measurement)
+        }
     }
 
     fun current(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
@@ -131,67 +160,97 @@ class MQTTService(
     }
 
     private suspend fun connectMQTT() {
-        if (viewModel.syncEnabled.value) {
-            viewModel.setMQTTConnecting(true)
-            try {
-                var connectedSuccessfully = false
+        if (!viewModel.syncEnabled.value) {
+            viewModel.setConnectAvailable(false)
+            // Consider explicitly disconnecting if the client is already initialized and connected
+            // if (::mqttClient.isInitialized && mqttClient.state.isConnected) {
+            //     withContext(Dispatchers.IO) { try { mqttClient.disconnect() } catch (e: Exception) { Timber.e(e, "Error disconnecting previous client.") } }
+            // }
+            return
+        }
 
-                withContext(Dispatchers.IO) {
-                    val clientBuilder = MqttClient.builder()
-                        .useMqttVersion5()
-                        .serverHost(viewModel.mqttServer.value.toString())
-                        .serverPort(viewModel.mqttPort.value.toString().toInt())
-                        .identifier("openScaleSync")
+        viewModel.setMQTTConnecting(true)
+        viewModel.setConnectAvailable(false) // Assume not connected until success
+        clearErrorMessage()
 
-                        if (viewModel.mqttUseSsl.value == true) {
-                            Timber.d("MQTT: SSL/TLS is enabled. Applying SSL configuration.")
-                            clientBuilder.sslWithDefaultConfig()
+        try {
+            withContext(Dispatchers.IO) {
+                // Step 1: Build the client and assign to the class member
+                // If this fails, mqttClient might remain uninitialized or hold an old instance.
+                val clientBuilder = MqttClient.builder()
+                    .useMqttVersion5()
+                    .serverHost(viewModel.mqttServer.value.toString())
+                    .serverPort(viewModel.mqttPort.value.toString().toIntOrNull() ?: 1883)
+                    .identifier("openScaleSync")
+
+                if (viewModel.mqttUseSsl.value == true) {
+                    clientBuilder.sslWithDefaultConfig()
+                }
+
+                // Assign directly to the class member.
+                // If buildBlocking() throws, the catch block outside withContext will handle it.
+                // If a previous mqttClient existed, it's overwritten here.
+                mqttClient = clientBuilder.buildBlocking()
+                Timber.d("MQTTService: Client built. State: ${mqttClient.state}")
+
+
+                // Step 2: Connect the class member client
+                // If this fails, mqttClient is built but not connected.
+                mqttClient.connectWith()
+                    .simpleAuth()
+                    .username(viewModel.mqttUsername.value.toString())
+                    .password(UTF_8.encode(viewModel.mqttPassword.value.toString()))
+                    .applySimpleAuth()
+                    .send() // This will throw an exception on failure.
+
+                Timber.d("MQTTService: Client connected. State: ${mqttClient.state}")
+
+                // If we reach here, mqttClient is successfully built and connected.
+                // Now, initialize or re-initialize mqttSync with the connected client.
+                mqttSync = MQTTSync(mqttClient) // Initialize/Re-initialize the main mqttSync instance
+
+                // Step 3: Home Assistant Discovery (if enabled)
+                // This now uses the initialized this.mqttSync and its this.mqttClient
+                if (viewModel.mqttUseDiscovery.value == true) {
+                    Timber.d("MQTTService: Home Assistant discovery is enabled. Preparing payload...")
+                    try {
+                        val inputStream = context.resources.openRawResource(R.raw.homeassistant_payload)
+                        val jsonPayloadString = inputStream.bufferedReader().use { it.readText() }
+
+                        // Call the method on the now initialized mqttSync instance
+                        val discoveryResult = mqttSync.publishHomeAssistantDiscovery(
+                            jsonPayloadString = jsonPayloadString
+                        )
+
+                        if (discoveryResult is SyncResult.Failure) {
+                            Timber.w("MQTTService: Home Assistant Discovery publish failed: ${discoveryResult.message}")
+                            // Decide if this non-critical error should be shown to the user or just logged.
                         }
-
-                        mqttClient = clientBuilder.buildBlocking()
-
-                        mqttClient.connectWith()
-                        .simpleAuth()
-                        .username(viewModel.mqttUsername.value.toString())
-                        .password(UTF_8.encode(viewModel.mqttPassword.value.toString()))
-                        .applySimpleAuth()
-                        .send()
-
-                    if(viewModel.mqttUseDiscovery.value == true) {
-                        val payload = JsonParser.parseReader(
-                            context.resources.openRawResource(
-                                R.raw.homeassistant_payload
-                            ).bufferedReader()
-                        ).asJsonObject
-
-                        payload["origin"].asJsonObject.addProperty(
-                            "sw_version",
-                            BuildConfig.VERSION_NAME)
-                        val bytes = Gson().toJson(payload).toByteArray()
-
-                        mqttClient.publish(Mqtt5Publish.builder()
-                            .topic("homeassistant/device/openscale/config")
-                            .payload(bytes)
-                            .build())
+                    } catch (e: Exception) {
+                        Timber.e(e, "MQTTService: Error during Home Assistant discovery preparation or publish.")
                     }
-
-                    mqttSync = MQTTSync(mqttClient)
-                    connectedSuccessfully = true
                 }
-
-                if (connectedSuccessfully) {
-                    setInfoMessage(context.getString(R.string.mqtt_broker_successful_connected_text))
-
-                    viewModel.setConnectAvailable(true)
-                    viewModel.setAllPermissionsGranted(true)
-                    clearErrorMessage()
-
-                    viewModel.setMQTTConnecting(false)
-                }
-            } catch (result: Exception) {
-                setErrorMessage("${result.message}")
-                viewModel.setMQTTConnecting(false)
+                // All steps successful within withContext(Dispatchers.IO)
             }
+
+            // If withContext completed without throwing, connection and setup were successful.
+            setInfoMessage(context.getString(R.string.mqtt_broker_successful_connected_text))
+            viewModel.setConnectAvailable(true)
+            clearErrorMessage()
+
+        } catch (e: Exception) {
+            Timber.e(e, "MQTT Connection or Setup Error in connectMQTT")
+            val errorMsg = when (e) {
+                is java.net.UnknownHostException -> "Broker not found: ${viewModel.mqttServer.value}"
+                is java.net.ConnectException -> "Connection refused by broker: ${viewModel.mqttServer.value}:${viewModel.mqttPort.value}"
+                // MqttClientStateException could be thrown by connectWith().send() if client is in a wrong state
+                is com.hivemq.client.mqtt.exceptions.MqttClientStateException -> "MQTT client state error: ${e.message}"
+                else -> "MQTT Connection failed: ${e.localizedMessage ?: "Unknown error"}"
+            }
+            setErrorMessage(errorMsg)
+            viewModel.setConnectAvailable(false) // Explicitly set to false on any error
+        } finally {
+            viewModel.setMQTTConnecting(false)
         }
     }
 
