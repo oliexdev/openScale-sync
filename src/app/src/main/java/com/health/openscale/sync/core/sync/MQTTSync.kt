@@ -17,6 +17,7 @@
  */
 package com.health.openscale.sync.core.sync
 
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.health.openscale.sync.BuildConfig
@@ -34,7 +35,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
         var failureCount = 0
 
         measurements.sortedBy { measurements -> measurements.date.time }.forEach { measurement ->
-            val syncResult = publishMeasurement(measurement, "openScaleSync/measurements/insert")
+            val syncResult = publishMeasurement(measurement, "openScaleSync/measurements/all")
 
             if (syncResult is SyncResult.Failure) {
                 failureCount++
@@ -63,6 +64,14 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
 
     fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         return publishMeasurement(measurement, "openScaleSync/measurements/update")
+    }
+
+    fun publishLastMeasurement(measurement: OpenScaleMeasurement?): SyncResult<Unit> {
+        return if (measurement != null) {
+            publishMeasurement(measurement, "openScaleSync/measurements/last")
+        } else {
+            publishMessage(mapOf<String, Any>(), "openScaleSync/measurements/last")
+        }
     }
 
     fun publishHomeAssistantDiscovery(

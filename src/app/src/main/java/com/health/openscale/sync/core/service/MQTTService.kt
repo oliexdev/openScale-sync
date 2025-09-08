@@ -51,6 +51,7 @@ import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.MQTTViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
+import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.sync.MQTTSync
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
@@ -123,31 +124,67 @@ class MQTTService(
 
     override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> {
         return ensureConnectedAndExecute("fullSync") {syncHandler ->
-            syncHandler.fullSync(measurements)
+            val result = syncHandler.fullSync(measurements)
+            if (result is SyncResult.Success) {
+                measurements.maxByOrNull { it.date }?.let { publishLastMeasurement(it) }
+            }
+            result
         }
     }
 
     override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> {
         return ensureConnectedAndExecute("insert") { syncHandler ->
-            syncHandler.insert(measurement)
+            val result = syncHandler.insert(measurement)
+            if (result is SyncResult.Success) {
+                publishLastMeasurement(measurement)
+            }
+            result
         }
     }
 
     override suspend fun delete(date: Date): SyncResult<Unit> {
         return ensureConnectedAndExecute("delete") { syncHandler ->
-            syncHandler.delete(date)
+            val result = syncHandler.delete(date)
+            if (result is SyncResult.Success) {
+                val lastDate = viewModel.lastPublishedDate.value
+                if (lastDate != null && date.time >= lastDate) {
+                    publishLastMeasurement(null)
+                }
+            }
+            result
         }
     }
 
     override suspend fun clear(): SyncResult<Unit> {
         return ensureConnectedAndExecute("clear") { syncHandler ->
-            syncHandler.clear()
+            val result = syncHandler.clear()
+            if (result is SyncResult.Success) {
+                publishLastMeasurement(null)
+            }
+            result
         }
     }
 
     override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> {
         return ensureConnectedAndExecute("update") { syncHandler ->
-            syncHandler.update(measurement)
+            val result = syncHandler.update(measurement)
+            if (result is SyncResult.Success) {
+                publishLastMeasurement(measurement)
+            }
+            result
+        }
+    }
+
+    private fun publishLastMeasurement(measurement: OpenScaleMeasurement?) {
+        if (measurement != null) {
+            val lastDate = viewModel.lastPublishedDate.value
+            if (lastDate == null || measurement.date.time >= lastDate) {
+                mqttSync.publishLastMeasurement(measurement)
+                viewModel.setLastPublishedDate(measurement.date.time)
+            }
+        } else {
+            mqttSync.publishLastMeasurement(null)
+            viewModel.setLastPublishedDate(0L)
         }
     }
 

@@ -32,6 +32,8 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     private val _mqttUseSsl = MutableLiveData<Boolean>(sharedPreferences.getBoolean("mqtt_use_ssl", true))
     private val _mqttUseDiscovery = MutableLiveData<Boolean>(sharedPreferences.getBoolean("mqtt_use_discovery", true))
 
+    private val _lastPublishedDate = MutableLiveData<Long>(sharedPreferences.getLong("last_published_date", 0L))
+
     override fun getName(): String {
         return "MQTT"
     }
@@ -81,5 +83,12 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     fun setMqttUseDiscovery(useDiscovery: Boolean) {
         _mqttUseDiscovery.value = useDiscovery
         sharedPreferences.edit().putBoolean("mqtt_use_discovery", useDiscovery).apply()
+    }
+
+    val lastPublishedDate: LiveData<Long> = _lastPublishedDate
+
+    fun setLastPublishedDate(date: Long) {
+        _lastPublishedDate.value = date
+        sharedPreferences.edit().putLong("last_published_date", date).apply()
     }
 }
