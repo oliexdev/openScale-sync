@@ -68,9 +68,9 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
 
     fun publishLastMeasurement(measurement: OpenScaleMeasurement?): SyncResult<Unit> {
         return if (measurement != null) {
-            publishMeasurement(measurement, "openScaleSync/measurements/last")
+            publishMeasurement(measurement, "openScaleSync/measurements/last", true)
         } else {
-            publishMessage(mapOf<String, Any>(), "openScaleSync/measurements/last")
+            publishMessage(mapOf<String, Any>(), "openScaleSync/measurements/last", true)
         }
     }
 
@@ -135,11 +135,12 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
         }
     }
 
-    private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String) : SyncResult<Unit> {
+    private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String, retain : Boolean = false) : SyncResult<Unit> {
         val payload = gson.toJson(measurement).toByteArray()
         val publish = Mqtt5Publish.builder()
             .topic(topic)
             .payload(payload)
+            .retain(retain)
             .build()
         val result = mqttClient.publish(publish)
         if (result.error.isPresent) {
@@ -149,11 +150,12 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
         }
     }
 
-    private fun publishMessage(message: Map<String, Any>, topic: String) : SyncResult<Unit> {
+    private fun publishMessage(message: Map<String, Any>, topic: String, retain : Boolean = false) : SyncResult<Unit> {
         val payload = gson.toJson(message).toByteArray()
         val publish = Mqtt5Publish.builder()
             .topic(topic)
             .payload(payload)
+            .retain(retain)
             .build()
         val result = mqttClient.publish(publish)
         if (result.error.isPresent) {
@@ -163,10 +165,11 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
         }
     }
 
-    private fun publishMessage(value : Boolean, topic: String) : SyncResult<Unit> {
+    private fun publishMessage(value : Boolean, topic: String, retain : Boolean = false) : SyncResult<Unit> {
         val publish = Mqtt5Publish.builder()
             .topic(topic)
             .payload(value.toString().toByteArray())
+            .retain(retain)
             .build()
         val result = mqttClient.publish(publish)
         if (result.error.isPresent) {

@@ -15,21 +15,21 @@
       "platform": "sensor",
       "device_class": "weight",
       "unit_of_measurement": "kg",
-      "value_template": "{{ value_json.weight }}",
+      "value_template": "{{ value_json.weight | default(none) }}",
       "unique_id": "openscale_weight"
     },
     "openscale_fat": {
       "name": "Body fat",
       "platform": "sensor",
       "unit_of_measurement": "%",
-      "value_template": "{{ value_json.fat }}",
+      "value_template": "{{ value_json.fat | default(none) }}",
       "unique_id": "openscale_fat"
     },
     "openscale_muscle": {
       "name": "Muscle",
       "platform": "sensor",
       "unit_of_measurement": "%",
-      "value_template": "{{ value_json.muscle }}",
+      "value_template": "{{ value_json.muscle | default(none) }}",
       "unique_id": "openscale_muscle"
     },
     "openscale_water": {
@@ -37,7 +37,7 @@
       "platform": "sensor",
       "device_class": "moisture",
       "unit_of_measurement": "%",
-      "value_template": "{{ value_json.water }}",
+      "value_template": "{{ value_json.water | default(none) }}",
       "unique_id": "openscale_water"
     },
     "openscale_measurement_date": {
@@ -45,14 +45,14 @@
       "platform": "sensor",
       "entity_category": "diagnostic",
       "device_class": "timestamp",
-      "value_template": "{{ value_json.date }}",
+      "value_template": "{{ value_json.date | default(none) }}",
       "unique_id": "openscale_date"
     },
     "openscale_measurement_id": {
       "name": "Measurement id",
       "platform": "sensor",
       "entity_category": "diagnostic",
-      "value_template": "{{ value_json.id }}",
+      "value_template": "{{ value_json.id | default(none) }}",
       "unique_id": "openscale_id"
     }
   },
