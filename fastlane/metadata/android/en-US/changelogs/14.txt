@@ -1,0 +1,4 @@
+- Adds support for Home Assistant discovery messages.
+- Updates the Home Assistant payload to use `default(none)` for missing sensor values.
+- Refactors the MQTT connection process for improved robustness.
+- Sets MQTT messages to be retained, ensuring accurate sensor reporting in clients like Home Assistant.

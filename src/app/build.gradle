@@ -9,8 +9,8 @@ android {
         applicationId "com.health.openscale.sync"
         minSdkVersion 29
         targetSdkVersion 36
-        versionCode 13
-        versionName "0.4.3"
+        versionCode 14
+        versionName "0.4.4"
         archivesBaseName = "openScale-sync-$versionName"
         multiDexEnabled true
     }
