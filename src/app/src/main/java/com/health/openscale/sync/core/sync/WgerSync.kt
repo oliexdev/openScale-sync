@@ -33,21 +33,22 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 import timber.log.Timber
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.TimeZone
 
 class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
     private val wgerApi : WgerApi = wgerRetrofit.create(WgerApi::class.java)
+    private val wgerDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX").apply { timeZone = TimeZone.getDefault() }
 
     suspend fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         var failureCount = 0
 
         measurements.forEach { measurement ->
-            val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
-
             try {
-                val response: Response<Unit> = wgerApi.insert(wgerDateFormat, measurement.weight)
+                val response: Response<Unit> = wgerApi.insert(wgerDateFormat.format(measurement.date), measurement.weight)
                 if (!response.isSuccessful) {
-                    Timber.d("wger $wgerDateFormat insert response error ${response.errorBody()?.string()}")
+                    Timber.d("wger ${wgerDateFormat.format(measurement.date)} insert response error ${response.errorBody()?.string()}")
                     failureCount++
                 }
             } catch (e: Exception) {
@@ -64,13 +65,11 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
 
     suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
             try {
-                val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
-
-                val response: Response<Unit> = wgerApi.insert(wgerDateFormat, measurement.weight)
+                val response: Response<Unit> = wgerApi.insert(wgerDateFormat.format(measurement.date), measurement.weight)
                 if (response.isSuccessful) {
                     return SyncResult.Success(Unit)
                 } else {
-                    return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger $wgerDateFormat insert response error ${response.errorBody()?.string()}")
+                    return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger ${wgerDateFormat.format(measurement.date)} insert response error ${response.errorBody()?.string()}")
                 }
             } catch (e: Exception) {
                 return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
@@ -78,10 +77,8 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
     }
 
     suspend fun delete(date: Date) : SyncResult<Unit> {
-        val wgerDateFormat = DateFormat.format("yyyy-MM-dd", date).toString()
-
         try {
-            val wgerWeightEntryList = wgerApi.getWeightEntry(wgerDateFormat)
+            val wgerWeightEntryList = wgerApi.getWeightEntry(wgerDateFormat.format(date))
             if (wgerWeightEntryList.results?.isNotEmpty() == true) {
                 val wgerId = wgerWeightEntryList.results[0].id
                 val response: Response<Unit> = wgerApi.delete(wgerId)
@@ -91,7 +88,7 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
                     return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger delete response error ${response.errorBody()?.string()}}")
                 }
             } else {
-                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"no weight entry found for date: $wgerDateFormat")
+                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"no weight entry found for date: ${wgerDateFormat.format(date)}")
             }
         } catch (e: Exception) {
             return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
@@ -121,19 +118,17 @@ class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
 
     suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
             try {
-                val wgerDateFormat = DateFormat.format("yyyy-MM-dd", measurement.date).toString()
-
-                val wgerWeightEntryList = wgerApi.getWeightEntry(wgerDateFormat)
+                val wgerWeightEntryList = wgerApi.getWeightEntry(wgerDateFormat.format(measurement.date))
                 if (wgerWeightEntryList.results?.isNotEmpty() == true) {
                     val wgerId = wgerWeightEntryList.results[0].id
-                    val response: Response<Unit> = wgerApi.update(wgerId, wgerDateFormat, measurement.weight)
+                    val response: Response<Unit> = wgerApi.update(wgerId, wgerDateFormat.format(measurement.date), measurement.weight)
                     if (response.isSuccessful) {
                         return SyncResult.Success(Unit)
                     } else {
                         return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"wger delete response error ${response.errorBody()?.string()}}")
                     }
                 } else {
-                    return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"no weight entry found for date: $wgerDateFormat")
+                    return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"no weight entry found for date: ${wgerDateFormat.format(measurement.date)}")
                 }
             } catch (e: Exception) {
                 return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
