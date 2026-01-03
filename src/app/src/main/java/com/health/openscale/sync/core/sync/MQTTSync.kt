@@ -17,7 +17,6 @@
  */
 package com.health.openscale.sync.core.sync
 
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.health.openscale.sync.BuildConfig

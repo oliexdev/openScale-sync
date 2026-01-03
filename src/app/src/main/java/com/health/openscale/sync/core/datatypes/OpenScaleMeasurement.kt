@@ -23,6 +23,7 @@ import java.util.Date
 @Keep
 data class OpenScaleMeasurement(
     val id: Int,
+    val userId : Int,
     val date: Date,
     val weight: Float,
     val fat: Float,

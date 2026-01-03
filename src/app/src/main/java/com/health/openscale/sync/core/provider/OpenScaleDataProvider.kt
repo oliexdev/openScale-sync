@@ -150,6 +150,7 @@ class OpenScaleDataProvider(
                 var fat: Float? = null
                 var water: Float? = null
                 var muscle: Float? = null
+                val userId = openScaleUser.id
 
                 for (i in 0 until record.columnCount) {
                     if (record.getColumnName(i).equals("_ID")) {
@@ -181,6 +182,7 @@ class OpenScaleDataProvider(
                 if (id != null && dateTime != null && weight != null && fat != null && water != null && muscle != null) {
                     val measurement = OpenScaleMeasurement(
                         id,
+                        userId,
                         dateTime,
                         weight,
                         fat,
