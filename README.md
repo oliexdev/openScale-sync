@@ -7,6 +7,10 @@ Synchronize your openScale measurements with external services
 <a href="https://f-droid.org/repository/browse/?fdid=com.health.openscale.sync" target="_blank">
 <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80"/></a>
 
+> [!NOTE]
+> For the latest development state, install the latest [openScale-sync dev](https://github.com/oliexdev/openScale-sync/releases/tag/dev-build) build from the [GitHub release page](https://github.com/oliexdev/openScale-sync/releases).
+> Please be aware that the development version, may contain bugs, and will not receive automatic updates.
+
 > [!IMPORTANT]
 > Weight is synced in kilograms (kg). Body fat, muscle mass, and body water are all synced in percent (%). Conversions to other units must be handled by the receiving program.
 
