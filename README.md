@@ -7,6 +7,9 @@ Synchronize your openScale measurements with external services
 <a href="https://f-droid.org/repository/browse/?fdid=com.health.openscale.sync" target="_blank">
 <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80"/></a>
 
+> [!IMPORTANT]
+> Weight is synced in kilograms (kg). Body fat, muscle mass, and body water are all synced in percent (%). Conversions to other units must be handled by the receiving program.
+
 # Summary :clipboard:
 * ***Seamless External Service Integration:*** Effortlessly synchronize data with external services like Health Connect, Wger, and MQTT (versions 3.1 and 5.0).
 * ***Real-time Synchronization:*** Automatically synchronize data upon insertion, editing, deletion, or clearing of measurements within openScale.
