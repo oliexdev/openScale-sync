@@ -1,0 +1,50 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches:
+      'master'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: src
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu" # See 'Supported distributions' for available options
+          java-version: "21"
+      - name: Extract versionName from build.gradle
+        id: get_version
+        run: |
+          VERSION_NAME=$(grep "versionName \"" app/build.gradle | sed -n 's/.*versionName "\(.*\)".*/\1/p')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+      - name: Build APK
+        run: ./gradlew assembleDebug
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "dev-build"
+          prerelease: true
+          title: "openScale-sync development build"
+          files: |
+            src/app/build/outputs/apk/debug/openScale-sync-${{ steps.get_version.outputs.VERSION_NAME }}-debug.apk
