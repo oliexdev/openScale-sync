@@ -193,32 +193,41 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     private fun buildMetadata(measurement: OpenScaleMeasurement, type: String): Metadata {
         return Metadata.manualEntry(
             clientRecordId = measurement.id.toString() + "_" + type,
-            clientRecordVersion = Instant.now().toEpochMilli()
+            clientRecordVersion = measurement.date.time
         )
     }
 
     private fun buildWeightRecord(measurement: OpenScaleMeasurement): WeightRecord {
+        val measurementInstant = measurement.date.toInstant()
+        val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
+
         return WeightRecord(
-            time = measurement.date.toInstant(),
-            zoneOffset = null,
+            time = measurementInstant,
+            zoneOffset = zoneOffset,
             weight = Mass.kilograms(measurement.weight.toDouble()),
             metadata = buildMetadata(measurement, "weight")
         )
     }
 
     private fun buildWaterRecord(measurement: OpenScaleMeasurement): BodyWaterMassRecord {
+        val measurementInstant = measurement.date.toInstant()
+        val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
+
         return BodyWaterMassRecord(
-            time = measurement.date.toInstant(),
-            zoneOffset = null,
+            time = measurementInstant,
+            zoneOffset = zoneOffset,
             mass = Mass.kilograms(measurement.weight.toDouble() * measurement.water.toDouble() / 100),
             metadata = buildMetadata(measurement, "water")
         )
     }
 
     private fun buildFatRecord(measurement: OpenScaleMeasurement): BodyFatRecord {
+        val measurementInstant = measurement.date.toInstant()
+        val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
+
         return BodyFatRecord(
-            time = measurement.date.toInstant(),
-            zoneOffset = null,
+            time = measurementInstant,
+            zoneOffset = zoneOffset,
             percentage = Percentage(measurement.fat.toDouble()),
             metadata = buildMetadata(measurement, "fat")
         )
