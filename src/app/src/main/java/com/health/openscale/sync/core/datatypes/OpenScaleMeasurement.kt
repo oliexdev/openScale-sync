@@ -29,8 +29,5 @@ data class OpenScaleMeasurement(
     val fat: Float,
     val water: Float,
     val muscle: Float,
-    val bone: Float = 0f,
-    val lbm: Float = 0f,
-    val visceralFat: Float = 0f,
-    val waist: Float = 0f
+    val extraFields: Map<String, Float> = emptyMap()
 )

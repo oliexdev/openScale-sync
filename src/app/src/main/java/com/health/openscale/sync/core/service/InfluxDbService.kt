@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -179,15 +181,19 @@ class InfluxDbService(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    stringResource(R.string.influxdb_use_v2_title),
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
+                RadioButton(
                     enabled = viewModel.syncEnabled.value,
-                    checked = isV2State,
-                    onCheckedChange = { viewModel.setIsV2(it) }
+                    selected = !isV2State,
+                    onClick = { viewModel.setIsV2(false) }
                 )
+                Text("v1")
+                Spacer(modifier = Modifier.width(16.dp))
+                RadioButton(
+                    enabled = viewModel.syncEnabled.value,
+                    selected = isV2State,
+                    onClick = { viewModel.setIsV2(true) }
+                )
+                Text("v2")
             }
 
             if (isV2State) {

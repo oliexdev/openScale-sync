@@ -27,11 +27,12 @@ class InfluxDbSync(
     private val measurementName: String
 ) : SyncInterface() {
 
-    private fun toLineProtocol(m: OpenScaleMeasurement): String =
-        "$measurementName,source=openscale" +
-        " weight=${m.weight},body_fat=${m.fat},water=${m.water},muscle=${m.muscle}" +
-        ",bone=${m.bone},lbm=${m.lbm},visceral_fat=${m.visceralFat},waist=${m.waist}" +
-        " ${m.date.time * 1_000_000L}"
+    private fun toLineProtocol(m: OpenScaleMeasurement): String {
+        val extra = m.extraFields.entries.joinToString("") { ",${it.key}=${it.value}" }
+        return "$measurementName,source=openscale" +
+            " weight=${m.weight},body_fat=${m.fat},water=${m.water},muscle=${m.muscle}" +
+            "$extra ${m.date.time * 1_000_000L}"
+    }
 
     private fun Request.Builder.addAuth(): Request.Builder = when {
         isV2 -> addHeader("Authorization", "Token $token")

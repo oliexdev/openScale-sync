@@ -25,15 +25,16 @@ class WebhookSync(
         timeZone = TimeZone.getTimeZone("UTC")
     }
 
-    private fun measurementToMap(m: OpenScaleMeasurement): MutableMap<String, Any> = mutableMapOf(
-        "id" to m.id,
-        "userId" to m.userId,
-        "date" to dateFormat.format(m.date),
-        "weight" to m.weight,
-        "fat" to m.fat,
-        "water" to m.water,
-        "muscle" to m.muscle
-    )
+    private fun measurementToMap(m: OpenScaleMeasurement): MutableMap<String, Any> =
+        mutableMapOf<String, Any>(
+            "id" to m.id,
+            "userId" to m.userId,
+            "date" to dateFormat.format(m.date),
+            "weight" to m.weight,
+            "fat" to m.fat,
+            "water" to m.water,
+            "muscle" to m.muscle
+        ).also { map -> m.extraFields.forEach { (k, v) -> map[k] = v } }
 
     suspend fun fullSync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
         post(gson.toJson(mapOf(

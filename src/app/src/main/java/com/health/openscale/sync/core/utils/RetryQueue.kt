@@ -17,19 +17,20 @@ class RetryQueue(context: Context, serviceKey: String) {
         val weight: Float = 0f,
         val fat: Float = 0f,
         val water: Float = 0f,
-        val muscle: Float = 0f
+        val muscle: Float = 0f,
+        val extraFields: Map<String, Float> = emptyMap()
     ) {
-        fun toMeasurement() = OpenScaleMeasurement(id, userId, Date(dateMs), weight, fat, water, muscle)
+        fun toMeasurement() = OpenScaleMeasurement(id, userId, Date(dateMs), weight, fat, water, muscle, extraFields)
     }
 
     companion object {
         private const val MAX_SIZE = 500
 
         fun insert(m: OpenScaleMeasurement) =
-            PendingOp("insert", m.id, m.userId, m.date.time, m.weight, m.fat, m.water, m.muscle)
+            PendingOp("insert", m.id, m.userId, m.date.time, m.weight, m.fat, m.water, m.muscle, m.extraFields)
 
         fun update(m: OpenScaleMeasurement) =
-            PendingOp("update", m.id, m.userId, m.date.time, m.weight, m.fat, m.water, m.muscle)
+            PendingOp("update", m.id, m.userId, m.date.time, m.weight, m.fat, m.water, m.muscle, m.extraFields)
 
         fun delete(date: Date) = PendingOp("delete", dateMs = date.time)
 

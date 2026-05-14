@@ -120,26 +120,22 @@ class SyncService : Service() {
                 when (mode) {
                     "insert", "update" -> {
                         // Read all extras safely, no NPEs
-                        val id          = intent?.getIntExtra("id", 0) ?: 0
-                        val userId      = intent?.getIntExtra("userId", 0) ?: 0
-                        val weight      = roundFloat(intent?.getFloatExtra("weight", 0.0f) ?: 0f)
-                        val fat         = roundFloat(intent?.getFloatExtra("fat", 0.0f) ?: 0f)
-                        val water       = roundFloat(intent?.getFloatExtra("water", 0.0f) ?: 0f)
-                        val muscle      = roundFloat(intent?.getFloatExtra("muscle", 0.0f) ?: 0f)
-                        val bone        = roundFloat(intent?.getFloatExtra("bone", 0.0f) ?: 0f)
-                        val lbm         = roundFloat(intent?.getFloatExtra("lbm", 0.0f) ?: 0f)
-                        val visceralFat = roundFloat(intent?.getFloatExtra("visceral_fat", 0.0f) ?: 0f)
-                        val waist       = roundFloat(intent?.getFloatExtra("waist", 0.0f) ?: 0f)
-                        val date        = Date(intent?.getLongExtra("date", 0L) ?: 0L)
+                        val id     = intent?.getIntExtra("id", 0) ?: 0
+                        val userId = intent?.getIntExtra("userId", 0) ?: 0
+                        val weight = roundFloat(intent?.getFloatExtra("weight", 0.0f) ?: 0f)
+                        val fat    = roundFloat(intent?.getFloatExtra("fat", 0.0f) ?: 0f)
+                        val water  = roundFloat(intent?.getFloatExtra("water", 0.0f) ?: 0f)
+                        val muscle = roundFloat(intent?.getFloatExtra("muscle", 0.0f) ?: 0f)
+                        val date   = Date(intent?.getLongExtra("date", 0L) ?: 0L)
 
                         Timber.d(
-                            "SyncService %s id=%d userId=%d date=%s w=%.2f f=%.2f wa=%.2f m=%.2f bone=%.2f lbm=%.2f vf=%.2f waist=%.2f",
-                            mode, id, userId, date, weight, fat, water, muscle, bone, lbm, visceralFat, waist
+                            "SyncService %s id=%d userId=%d date=%s w=%.2f f=%.2f wa=%.2f m=%.2f",
+                            mode, id, userId, date, weight, fat, water, muscle
                         )
 
                         if (userId == openScaleUserId) {
                             launch {
-                                val m = OpenScaleMeasurement(id, userId, date, weight, fat, water, muscle, bone, lbm, visceralFat, waist)
+                                val m = OpenScaleMeasurement(id, userId, date, weight, fat, water, muscle)
                                 val t = System.nanoTime()
                                 val res = runCatching {
                                     if (mode == "insert") syncService.insert(m) else syncService.update(m)
@@ -294,6 +290,7 @@ class SyncService : Service() {
         }
 
         for (k in keys) {
+            @Suppress("DEPRECATION")
             val raw = runCatching { b.get(k) }.getOrNull()
             val entry = when {
                 REDACT_KEYS.any { k.contains(it, ignoreCase = true) } -> "$k=«redacted»"
