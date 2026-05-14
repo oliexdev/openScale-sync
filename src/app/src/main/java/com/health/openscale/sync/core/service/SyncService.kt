@@ -16,6 +16,7 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.utils.LogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -61,7 +62,9 @@ class SyncService : Service() {
         syncServiceList = arrayOf(
             HealthConnectService(applicationContext, prefs),
             MQTTService(applicationContext, prefs),
-            WgerService(applicationContext, prefs)
+            WgerService(applicationContext, prefs),
+            InfluxDbService(applicationContext, prefs),
+            WebhookService(applicationContext, prefs)
         )
 
         CoroutineScope(Dispatchers.Main).launch {
@@ -89,7 +92,7 @@ class SyncService : Service() {
         return START_STICKY
     }
 
-    protected fun onHandleIntent(intent: Intent?) {
+    private suspend fun onHandleIntent(intent: Intent?) {
         Timber.d("onHandleIntent extras: %s", intent.safeExtras())
 
         val openScaleUserId = prefs.getInt("selectedOpenScaleUserId", -1)
@@ -102,113 +105,119 @@ class SyncService : Service() {
             return
         }
 
-        for (syncService in syncServiceList) {
-            val vm = syncService.viewModel()
-            val name = vm.getName()
+        coroutineScope {
+            for (syncService in syncServiceList) {
+                val vm = syncService.viewModel()
+                val name = vm.getName()
 
-            if (!vm.syncEnabled.value) {
-                Timber.d("%s [disabled]", name)
-                continue
-            }
+                if (!vm.syncEnabled.value) {
+                    Timber.d("%s [disabled]", name)
+                    continue
+                }
 
-            Timber.d("%s [enabled]", name)
+                Timber.d("%s [enabled]", name)
 
-            when (mode) {
-                "insert", "update" -> {
-                    // Read all extras safely, no NPEs
-                    val id     = intent?.getIntExtra("id", 0) ?: 0
-                    val userId = intent?.getIntExtra("userId", 0) ?: 0
-                    val weight = roundFloat(intent?.getFloatExtra("weight", 0.0f) ?: 0f)
-                    val fat    = roundFloat(intent?.getFloatExtra("fat", 0.0f) ?: 0f)
-                    val water  = roundFloat(intent?.getFloatExtra("water", 0.0f) ?: 0f)
-                    val muscle = roundFloat(intent?.getFloatExtra("muscle", 0.0f) ?: 0f)
-                    val date   = Date(intent?.getLongExtra("date", 0L) ?: 0L)
+                when (mode) {
+                    "insert", "update" -> {
+                        // Read all extras safely, no NPEs
+                        val id          = intent?.getIntExtra("id", 0) ?: 0
+                        val userId      = intent?.getIntExtra("userId", 0) ?: 0
+                        val weight      = roundFloat(intent?.getFloatExtra("weight", 0.0f) ?: 0f)
+                        val fat         = roundFloat(intent?.getFloatExtra("fat", 0.0f) ?: 0f)
+                        val water       = roundFloat(intent?.getFloatExtra("water", 0.0f) ?: 0f)
+                        val muscle      = roundFloat(intent?.getFloatExtra("muscle", 0.0f) ?: 0f)
+                        val bone        = roundFloat(intent?.getFloatExtra("bone", 0.0f) ?: 0f)
+                        val lbm         = roundFloat(intent?.getFloatExtra("lbm", 0.0f) ?: 0f)
+                        val visceralFat = roundFloat(intent?.getFloatExtra("visceral_fat", 0.0f) ?: 0f)
+                        val waist       = roundFloat(intent?.getFloatExtra("waist", 0.0f) ?: 0f)
+                        val date        = Date(intent?.getLongExtra("date", 0L) ?: 0L)
 
-                    Timber.d(
-                        "SyncService %s id=%d userId=%d date=%s w=%.2f f=%.2f wa=%.2f m=%.2f",
-                        mode, id, userId, date, weight, fat, water, muscle
-                    )
+                        Timber.d(
+                            "SyncService %s id=%d userId=%d date=%s w=%.2f f=%.2f wa=%.2f m=%.2f bone=%.2f lbm=%.2f vf=%.2f waist=%.2f",
+                            mode, id, userId, date, weight, fat, water, muscle, bone, lbm, visceralFat, waist
+                        )
 
-                    if (userId == openScaleUserId) {
-                        CoroutineScope(Dispatchers.Main).launch {
-                            val m = OpenScaleMeasurement(id, userId, date, weight, fat, water, muscle)
-                            val t = System.nanoTime()
-                            val res = runCatching {
-                                if (mode == "insert") syncService.insert(m) else syncService.update(m)
-                            }.onFailure { e -> Timber.e(e, "%s.%s() threw", name, mode) }
+                        if (userId == openScaleUserId) {
+                            launch {
+                                val m = OpenScaleMeasurement(id, userId, date, weight, fat, water, muscle, bone, lbm, visceralFat, waist)
+                                val t = System.nanoTime()
+                                val res = runCatching {
+                                    if (mode == "insert") syncService.insert(m) else syncService.update(m)
+                                }.onFailure { e -> Timber.e(e, "%s.%s() threw", name, mode) }
+                                    .getOrNull()
+
+                                val ms = (System.nanoTime() - t) / 1_000_000
+                                when (res) {
+                                    is SyncResult.Success -> {
+                                        vm.setLastSync(Instant.now())
+                                        val fmt = DateFormat.getDateFormat(applicationContext).format(date)
+                                        val msg = if (mode == "insert")
+                                            getString(R.string.sync_service_measurement_inserted_info, weight, fmt)
+                                        else
+                                            getString(R.string.sync_service_measurement_updated_info, weight, fmt)
+                                        syncService.setInfoMessage(msg)
+                                        Timber.d("%s.%s() success in %d ms", name, mode, ms)
+                                    }
+                                    is SyncResult.Failure -> {
+                                        syncService.setErrorMessage(res)
+                                        Timber.e("(%s.%s) %s in %d ms", name, mode, res.message, ms)
+                                    }
+                                    null -> {
+                                        Timber.w("%s.%s() returned null in %d ms", name, mode, ms)
+                                    }
+                                }
+                            }
+                        } else {
+                            Timber.w("userId mismatch: intent=%d, selected=%d -> skipping", userId, openScaleUserId)
+                        }
+                    }
+
+                    "delete" -> {
+                        val date = Date(intent?.getLongExtra("date", 0L) ?: 0L)
+                        Timber.d("SyncService delete for date=%s", date)
+
+                        launch {
+                            val res = runCatching { syncService.delete(date) }
+                                .onFailure { e -> Timber.e(e, "%s.delete() threw", name) }
                                 .getOrNull()
-
-                            val ms = (System.nanoTime() - t) / 1_000_000
                             when (res) {
                                 is SyncResult.Success -> {
                                     vm.setLastSync(Instant.now())
                                     val fmt = DateFormat.getDateFormat(applicationContext).format(date)
-                                    val msg = if (mode == "insert")
-                                        getString(R.string.sync_service_measurement_inserted_info, weight, fmt)
-                                    else
-                                        getString(R.string.sync_service_measurement_updated_info, weight, fmt)
-                                    syncService.setInfoMessage(msg)
-                                    Timber.d("%s.%s() success in %d ms", name, mode, ms)
+                                    syncService.setInfoMessage(getString(R.string.sync_service_measurement_deleted_info, fmt))
+                                    Timber.d("%s.delete() success", name)
                                 }
                                 is SyncResult.Failure -> {
                                     syncService.setErrorMessage(res)
-                                    Timber.e("(%s.%s) %s in %d ms", name, mode, res.message, ms)
+                                    Timber.e("(%s.delete) %s", name, res.message)
                                 }
                                 null -> {
-                                    Timber.w("%s.%s() returned null in %d ms", name, mode, ms)
+                                    Timber.w("%s.delete() returned null", name)
                                 }
                             }
                         }
-                    } else {
-                        Timber.w("userId mismatch: intent=%d, selected=%d -> skipping", userId, openScaleUserId)
                     }
-                }
 
-                "delete" -> {
-                    val date = Date(intent?.getLongExtra("date", 0L) ?: 0L)
-                    Timber.d("SyncService delete for date=%s", date)
+                    "clear" -> {
+                        Timber.d("SyncService clear command received")
 
-                    CoroutineScope(Dispatchers.Main).launch {
-                        val res = runCatching { syncService.delete(date) }
-                            .onFailure { e -> Timber.e(e, "%s.delete() threw", name) }
-                            .getOrNull()
-                        when (res) {
-                            is SyncResult.Success -> {
-                                vm.setLastSync(Instant.now())
-                                val fmt = DateFormat.getDateFormat(applicationContext).format(date)
-                                syncService.setInfoMessage(getString(R.string.sync_service_measurement_deleted_info, fmt))
-                                Timber.d("%s.delete() success", name)
-                            }
-                            is SyncResult.Failure -> {
-                                syncService.setErrorMessage(res)
-                                Timber.e("(%s.delete) %s", name, res.message)
-                            }
-                            null -> {
-                                Timber.w("%s.delete() returned null", name)
-                            }
-                        }
-                    }
-                }
-
-                "clear" -> {
-                    Timber.d("SyncService clear command received")
-
-                    CoroutineScope(Dispatchers.Main).launch {
-                        val res = runCatching { syncService.clear() }
-                            .onFailure { e -> Timber.e(e, "%s.clear() threw", name) }
-                            .getOrNull()
-                        when (res) {
-                            is SyncResult.Success -> {
-                                vm.setLastSync(Instant.now())
-                                syncService.setInfoMessage(getString(R.string.sync_service_measurement_cleared_info))
-                                Timber.d("%s.clear() success", name)
-                            }
-                            is SyncResult.Failure -> {
-                                syncService.setErrorMessage(res)
-                                Timber.e("(%s.clear) %s", name, res.message)
-                            }
-                            null -> {
-                                Timber.w("%s.clear() returned null", name)
+                        launch {
+                            val res = runCatching { syncService.clear() }
+                                .onFailure { e -> Timber.e(e, "%s.clear() threw", name) }
+                                .getOrNull()
+                            when (res) {
+                                is SyncResult.Success -> {
+                                    vm.setLastSync(Instant.now())
+                                    syncService.setInfoMessage(getString(R.string.sync_service_measurement_cleared_info))
+                                    Timber.d("%s.clear() success", name)
+                                }
+                                is SyncResult.Failure -> {
+                                    syncService.setErrorMessage(res)
+                                    Timber.e("(%s.clear) %s", name, res.message)
+                                }
+                                null -> {
+                                    Timber.w("%s.clear() returned null", name)
+                                }
                             }
                         }
                     }

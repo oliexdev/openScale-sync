@@ -1,3 +1,7 @@
+# VS Code
+.vscode/
+.claude/
+
 # Built application files
 *.apk
 *.ap_

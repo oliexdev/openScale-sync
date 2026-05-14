@@ -150,44 +150,31 @@ class OpenScaleDataProvider(
                 var fat: Float? = null
                 var water: Float? = null
                 var muscle: Float? = null
+                var bone = 0f
+                var lbm = 0f
+                var visceralFat = 0f
+                var waist = 0f
                 val userId = openScaleUser.id
 
                 for (i in 0 until record.columnCount) {
-                    if (record.getColumnName(i).equals("_ID")) {
-                        id = record.getInt(i)
-                    }
-
-                    if (record.getColumnName(i).equals("datetime")) {
-                        val timestamp = record.getLong(i)
-                        dateTime = Date(timestamp)
-                    }
-
-                    if (record.getColumnName(i).equals("weight")) {
-                        weight = roundFloat(record.getFloat(i))
-                    }
-
-                    if (record.getColumnName(i).equals("fat")) {
-                        fat = roundFloat(record.getFloat(i))
-                    }
-
-                    if (record.getColumnName(i).equals("water")) {
-                        water = roundFloat(record.getFloat(i))
-                    }
-
-                    if (record.getColumnName(i).equals("muscle")) {
-                        muscle = roundFloat(record.getFloat(i))
+                    when (record.getColumnName(i)) {
+                        "_ID"          -> id = record.getInt(i)
+                        "datetime"     -> dateTime = Date(record.getLong(i))
+                        "weight"       -> weight = roundFloat(record.getFloat(i))
+                        "fat"          -> fat = roundFloat(record.getFloat(i))
+                        "water"        -> water = roundFloat(record.getFloat(i))
+                        "muscle"       -> muscle = roundFloat(record.getFloat(i))
+                        "bone"         -> bone = roundFloat(record.getFloat(i))
+                        "lbm"          -> lbm = roundFloat(record.getFloat(i))
+                        "visceral_fat" -> visceralFat = roundFloat(record.getFloat(i))
+                        "waist"        -> waist = roundFloat(record.getFloat(i))
                     }
                 }
 
                 if (id != null && dateTime != null && weight != null && fat != null && water != null && muscle != null) {
                     val measurement = OpenScaleMeasurement(
-                        id,
-                        userId,
-                        dateTime,
-                        weight,
-                        fat,
-                        water,
-                        muscle
+                        id, userId, dateTime, weight, fat, water, muscle,
+                        bone, lbm, visceralFat, waist
                     )
 
                     measurements.add(measurement)
