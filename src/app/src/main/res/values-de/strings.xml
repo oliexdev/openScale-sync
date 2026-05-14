@@ -61,4 +61,23 @@
     <string name="wger_connect_to_wger_button">Mit Wger verbinden</string>
 
     <string name="realtime_sync_update_required_snackbar_text">Für die Echtzeit-Synchronisation aktualisiere openScale bitte auf Version 2.5.5 oder die neueste Entwickler Version.</string>
+
+    <string name="influxdb_url_title">URL (z.B. http://192.168.1.100:8086)</string>
+    <string name="influxdb_use_v2_title">InfluxDB v2 API verwenden</string>
+    <string name="influxdb_org_title">Organisation</string>
+    <string name="influxdb_bucket_title">Bucket</string>
+    <string name="influxdb_token_title">Token</string>
+    <string name="influxdb_database_title">Datenbank</string>
+    <string name="influxdb_username_title">Benutzername</string>
+    <string name="influxdb_password_title">Passwort</string>
+    <string name="influxdb_measurement_title">Measurement-Name</string>
+    <string name="influxdb_connect_button">Verbindung testen</string>
+    <string name="influxdb_connecting_text">Verbinde …</string>
+    <string name="influxdb_connected_text">InfluxDB-Verbindung erfolgreich</string>
+    <string name="influxdb_url_empty_error">InfluxDB-URL darf nicht leer sein</string>
+
+    <string name="webhook_url_title">Webhook-URL</string>
+    <string name="webhook_auth_header_title">Autorisierungs-Header (optional)</string>
+
+    <string name="retry_queue_remaining">ausstehend in der Warteschlange</string>
 </resources>
