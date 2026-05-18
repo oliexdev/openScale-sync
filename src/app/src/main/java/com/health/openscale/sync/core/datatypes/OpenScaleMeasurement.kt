@@ -23,10 +23,11 @@ import java.util.Date
 @Keep
 data class OpenScaleMeasurement(
     val id: Int,
-    val userId : Int,
+    val userId: Int,
     val date: Date,
     val weight: Float,
     val fat: Float,
     val water: Float,
-    val muscle: Float
+    val muscle: Float,
+    val extraFields: Map<String, Float> = emptyMap()
 )

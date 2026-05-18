@@ -150,47 +150,31 @@ class OpenScaleDataProvider(
                 var fat: Float? = null
                 var water: Float? = null
                 var muscle: Float? = null
+                val extraFields = mutableMapOf<String, Float>()
                 val userId = openScaleUser.id
 
                 for (i in 0 until record.columnCount) {
-                    if (record.getColumnName(i).equals("_ID")) {
-                        id = record.getInt(i)
-                    }
-
-                    if (record.getColumnName(i).equals("datetime")) {
-                        val timestamp = record.getLong(i)
-                        dateTime = Date(timestamp)
-                    }
-
-                    if (record.getColumnName(i).equals("weight")) {
-                        weight = roundFloat(record.getFloat(i))
-                    }
-
-                    if (record.getColumnName(i).equals("fat")) {
-                        fat = roundFloat(record.getFloat(i))
-                    }
-
-                    if (record.getColumnName(i).equals("water")) {
-                        water = roundFloat(record.getFloat(i))
-                    }
-
-                    if (record.getColumnName(i).equals("muscle")) {
-                        muscle = roundFloat(record.getFloat(i))
+                    val col = record.getColumnName(i)
+                    when (col) {
+                        "_ID"      -> id = record.getInt(i)
+                        "datetime" -> dateTime = Date(record.getLong(i))
+                        "weight"   -> weight = roundFloat(record.getFloat(i))
+                        "fat"      -> fat = roundFloat(record.getFloat(i))
+                        "water"    -> water = roundFloat(record.getFloat(i))
+                        "muscle"   -> muscle = roundFloat(record.getFloat(i))
+                        else -> {
+                            val type = record.getType(i)
+                            if (type == android.database.Cursor.FIELD_TYPE_FLOAT ||
+                                type == android.database.Cursor.FIELD_TYPE_INTEGER) {
+                                val value = roundFloat(record.getFloat(i))
+                                if (value != 0f) extraFields[col] = value
+                            }
+                        }
                     }
                 }
 
                 if (id != null && dateTime != null && weight != null && fat != null && water != null && muscle != null) {
-                    val measurement = OpenScaleMeasurement(
-                        id,
-                        userId,
-                        dateTime,
-                        weight,
-                        fat,
-                        water,
-                        muscle
-                    )
-
-                    measurements.add(measurement)
+                    measurements.add(OpenScaleMeasurement(id, userId, dateTime, weight, fat, water, muscle, extraFields))
                 } else {
                     Timber.e("Not all required parameters are set")
                 }

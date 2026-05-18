@@ -113,9 +113,11 @@ import com.health.openscale.sync.R
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.provider.OpenScaleProvider
 import com.health.openscale.sync.core.service.HealthConnectService
+import com.health.openscale.sync.core.service.InfluxDbService
 import com.health.openscale.sync.core.service.MQTTService
 import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
+import com.health.openscale.sync.core.service.WebhookService
 import com.health.openscale.sync.core.service.WgerService
 import com.health.openscale.sync.core.utils.LogManager
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
@@ -167,7 +169,9 @@ class MainActivity : AppCompatActivity() {
         syncServiceList = listOf(
             HealthConnectService(applicationContext, sharedPreferences),
             MQTTService(applicationContext, sharedPreferences),
-            WgerService(applicationContext, sharedPreferences)
+            WgerService(applicationContext, sharedPreferences),
+            InfluxDbService(applicationContext, sharedPreferences),
+            WebhookService(applicationContext, sharedPreferences)
         )
 
         for (syncService in syncServiceList) {
@@ -518,7 +522,7 @@ class MainActivity : AppCompatActivity() {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TITLE, "openscale_sync_log.txt")
                             }
-                            (ctx as MainActivity).saveLogLauncher.launch(intent)
+                            ctx.saveLogLauncher.launch(intent)
                         }
                     ) {
                         Text(stringResource(id = R.string.logging_export_button))
