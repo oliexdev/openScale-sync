@@ -3,6 +3,7 @@ package com.health.openscale.sync.core.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -31,6 +32,7 @@ class SyncService : Service() {
     private lateinit var syncServiceList: List<ServiceInterface>
     private lateinit var prefs: SharedPreferences
     private val ID_SERVICE = 5
+    private val ID_RETRY = 6
 
     override fun onBind(intent: Intent): IBinder? = null
 
@@ -216,7 +218,37 @@ class SyncService : Service() {
             }
         }
 
+        // Headless feedback: surface unsynced (queued) measurements as a notification,
+        // auto-cleared once every backend's retry queue is empty again.
+        updateRetryNotification(syncServiceList.sumOf { it.pendingRetryCount() })
+
         stopServiceCleanly()
+    }
+
+    /** Posts (or clears) a notification reflecting how many ops are waiting in the retry queues. */
+    private fun updateRetryNotification(pending: Int) {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        if (pending <= 0) {
+            notificationManager.cancel(ID_RETRY)
+            return
+        }
+        val channelId = createNotificationChannel(notificationManager)
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val contentIntent = launchIntent?.let {
+            PendingIntent.getActivity(
+                this, 0, it,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_launcher_openscale_sync)
+            .setContentTitle(getString(R.string.sync_retry_notification_title))
+            .setContentText(getString(R.string.sync_retry_notification_text, pending))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(contentIntent)
+            .build()
+        notificationManager.notify(ID_RETRY, notification)
     }
 
     private fun stopServiceCleanly() {

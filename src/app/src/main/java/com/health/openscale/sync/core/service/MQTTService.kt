@@ -24,14 +24,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -41,10 +36,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
@@ -53,6 +46,8 @@ import com.health.openscale.sync.core.model.MQTTViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.sync.MQTTSync
+import com.health.openscale.sync.gui.components.LocalSnackbar
+import com.health.openscale.sync.gui.components.SecretOutlinedTextField
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import kotlinx.coroutines.Dispatchers
@@ -281,13 +276,19 @@ class MQTTService(
 
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
-        Column (
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+        val showMessage = LocalSnackbar.current
+        val mqttConnectingState by viewModel.mqttConnecting.observeAsState(false)
+        DetailScaffold(
+            activity = activity,
+            testConnecting = mqttConnectingState,
+            onTest = {
+                activity.lifecycleScope.launch {
+                    connectMQTT()
+                    if (viewModel.errorMessage.value.isNullOrEmpty())
+                        showMessage(context.getString(R.string.service_connection_successful))
+                }
+            }
         ) {
-            super.composeSettings(activity)
-
             Column (
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -366,20 +367,14 @@ class MQTTService(
             ) {
                 val passwordState by viewModel.mqttPassword.observeAsState("")
 
-                OutlinedTextField(
+                SecretOutlinedTextField(
+                    value = passwordState,
+                    onValueChange = { viewModel.setMQTTPassword(it) },
+                    label = stringResource(id = R.string.mqtt_password_title),
                     enabled = viewModel.syncEnabled.value,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    value = passwordState,
-                    onValueChange = {
-                        viewModel.setMQTTPassword(it)
-                    },
-                    label = { Text(stringResource(id = R.string.mqtt_password_title)) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                    )
+                        .padding(bottom = 8.dp)
                 )
             }
 
@@ -402,7 +397,7 @@ class MQTTService(
                 Text(
                     text = stringResource(id = R.string.mqtt_use_ssl_tls_title),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (viewModel.syncEnabled.value) MaterialTheme.colorScheme.onSurface else Color.Gray
+                    color = if (viewModel.syncEnabled.value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Switch(
                     checked = useSslState,
@@ -441,7 +436,7 @@ class MQTTService(
                 Text(
                     text = stringResource(id = R.string.mqtt_use_discovery_tite),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (viewModel.syncEnabled.value) MaterialTheme.colorScheme.onSurface else Color.Gray
+                    color = if (viewModel.syncEnabled.value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Switch(
                     checked = useDiscoveryState,
@@ -452,39 +447,6 @@ class MQTTService(
                 )
             }
 
-            Column (
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val mqttConnectingState by viewModel.mqttConnecting.observeAsState(false)
-
-                Button(onClick = {
-                    if (!mqttConnectingState) {
-                        activity.lifecycleScope.launch {
-                            connectMQTT()
-                        }
-                    }
-                },
-                    enabled = viewModel.syncEnabled.value)
-                {
-                    if (mqttConnectingState) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(text = stringResource(id = R.string.mqtt_connecting_text))
-                    } else {
-                        Text(text = stringResource(id = R.string.mqtt_connect_to_mqtt_broker_button))
-                    }
-                }
-
-                val errorMessage by viewModel.errorMessage.observeAsState()
-
-                if (errorMessage != null && errorMessage != "" && viewModel.syncEnabled.value) {
-                    Text("$errorMessage", color = MaterialTheme.colorScheme.error)
-                }
-            }
         }
     }
 

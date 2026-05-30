@@ -20,19 +20,17 @@ package com.health.openscale.sync.core.service
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -42,6 +40,8 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.model.WgerViewModel
 import com.health.openscale.sync.core.sync.WgerSync
+import com.health.openscale.sync.gui.components.LocalSnackbar
+import com.health.openscale.sync.gui.components.SecretOutlinedTextField
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -131,74 +131,38 @@ class WgerService(
 
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
-        Column (
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        val showMessage = LocalSnackbar.current
+        DetailScaffold(
+            activity = activity,
+            testConnecting = false,
+            onTest = {
+                activity.lifecycleScope.launch {
+                    connectWger()
+                    if (viewModel.errorMessage.value.isNullOrEmpty())
+                        showMessage(context.getString(R.string.service_connection_successful))
+                }
+            }
         ) {
-            super.composeSettings(activity)
-
-            Column (
+            val serverNameState by viewModel.wgerServer.observeAsState("")
+            OutlinedTextField(
+                enabled = viewModel.syncEnabled.value,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val serverNameState by viewModel.wgerServer.observeAsState("")
+                value = serverNameState,
+                onValueChange = { viewModel.setWgerServer(it) },
+                label = { Text(stringResource(id = R.string.wger_server_name_title)) },
+                placeholder = { Text(stringResource(id = R.string.wger_server_name_hint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+            )
 
-                OutlinedTextField(
-                    enabled = viewModel.syncEnabled.value,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    value = serverNameState,
-                    onValueChange = {
-                        viewModel.setWgerServer(it)
-                    },
-                    label = { Text(stringResource(id = R.string.wger_server_name_title)) },
-                    placeholder = { Text(stringResource(id = R.string.wger_server_name_hint)) },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text
-                    )
-                )
-            }
-            Column (
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val wgerApiTokenState by viewModel.wgerApiToken.observeAsState("")
-
-                OutlinedTextField(
-                    enabled = viewModel.syncEnabled.value,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    value = wgerApiTokenState,
-                    onValueChange = {
-                        viewModel.setWgerApiToken(it)
-                    },
-                    label = { Text(stringResource(id = R.string.wger_api_token_title)) },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text
-                    )
-                )
-            }
-            Column (
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Button(onClick = {
-                    activity.lifecycleScope.launch {
-                        connectWger()
-                    }
-                },
-                    enabled = viewModel.syncEnabled.value)
-                {
-                    Text(text = stringResource(id = R.string.wger_connect_to_wger_button))
-                }
-
-                val errorMessage by viewModel.errorMessage.observeAsState()
-
-                if (errorMessage != null && errorMessage != "" && viewModel.syncEnabled.value) {
-                    Text("$errorMessage", color = MaterialTheme.colorScheme.error)
-                }
-            }
+            val wgerApiTokenState by viewModel.wgerApiToken.observeAsState("")
+            SecretOutlinedTextField(
+                value = wgerApiTokenState,
+                onValueChange = { viewModel.setWgerApiToken(it) },
+                label = stringResource(id = R.string.wger_api_token_title),
+                enabled = viewModel.syncEnabled.value,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 

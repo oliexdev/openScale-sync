@@ -38,26 +38,25 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -74,11 +73,14 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,6 +88,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -97,7 +100,6 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -117,6 +119,7 @@ import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.utils.LogManager
+import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -291,7 +294,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
+        var onboardingDone by remember { mutableStateOf(prefs.getBoolean("onboardingCompleted", false)) }
+
         OpenScaleSyncTheme {
+            if (!onboardingDone) {
+                OnboardingScreen(activity) {
+                    prefs.edit().putBoolean("onboardingCompleted", true).apply()
+                    onboardingDone = true
+                }
+                return@OpenScaleSyncTheme
+            }
+            CompositionLocalProvider(
+                LocalSnackbar provides { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+            ) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = { navigationDrawerSheet(drawerState, scope) }
@@ -299,8 +315,24 @@ class MainActivity : AppCompatActivity() {
                 Scaffold(
                     topBar = {
                         val title by currentTitle.observeAsState()
+                        val service = title?.let { t -> syncServiceList.firstOrNull { it.viewModel().getName() == t } }
                         TopAppBar(
-                            title = { Text(text = title.toString()) },
+                            title = {
+                                if (service != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            painter = painterResource(service.viewModel().getIcon()),
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(text = service.viewModel().getName())
+                                    }
+                                } else {
+                                    Text(text = title.toString())
+                                }
+                            },
                             navigationIcon = {
                                 if (title == getString(R.string.title_overview)) {
                                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -318,6 +350,18 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                                              },
+                            actions = {
+                                if (service != null) {
+                                    Switch(
+                                        checked = service.viewModel().syncEnabled.value,
+                                        onCheckedChange = {
+                                            service.viewModel().setSyncEnabled(it)
+                                            if (it) scope.launch { service.init() }
+                                        },
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                }
+                            },
                             colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = MaterialTheme.colorScheme.background
                             )
@@ -359,7 +403,6 @@ class MainActivity : AppCompatActivity() {
                                 composable(
                                     syncService.viewModel().getName()
                                 ) {
-                                    fullSyncFloatingButton(syncService)
                                     syncService.composeSettings(activity)
                                     currentTitle.value = syncService.viewModel().getName()
                                 }
@@ -373,45 +416,253 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+            }
         }
     }
 
     @Composable
     fun HomeScreen(activity: ComponentActivity) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            openScaleService.composeSettings(activity)
-
-            Row {
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowUp,
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp)
-                )
-
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 256.dp),
-                modifier = Modifier.fillMaxSize()
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
             ) {
-                items(syncServiceList) { item ->
-                    SyncServiceGridItem(item)
+                // Source: openScale connection + user selector
+                openScaleService.composeSettings(activity)
+
+                Spacer(Modifier.height(8.dp))
+                OverallStatusBanner()
+                Spacer(Modifier.height(16.dp))
+
+                Text(
+                    stringResource(R.string.dashboard_services_header),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                syncServiceList.forEach { SyncServiceStatusRow(it) }
+            }
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                GlobalSyncButton()
+            }
+        }
+    }
+
+    /** Single-glance answer to "is my data flowing?" */
+    @Composable
+    fun OverallStatusBanner() {
+        val enabled = syncServiceList.filter { it.viewModel().syncEnabled.value }
+        val pending = enabled.sumOf { it.pendingRetryCount() }
+        val (text, color) = when {
+            enabled.isEmpty() ->
+                stringResource(R.string.dashboard_status_no_service) to MaterialTheme.colorScheme.onSurfaceVariant
+            pending > 0 ->
+                stringResource(R.string.dashboard_status_pending, pending) to MaterialTheme.colorScheme.error
+            else ->
+                stringResource(R.string.dashboard_status_all_synced) to MaterialTheme.colorScheme.primary
+        }
+        Text(text, style = MaterialTheme.typography.titleMedium, color = color)
+    }
+
+    /** One status row per backend. Tap → opens that service's detail screen. */
+    @Composable
+    fun SyncServiceStatusRow(syncService: ServiceInterface) {
+        val vm = syncService.viewModel()
+        val enabled = vm.syncEnabled.value
+        val lastSync by vm.lastSync.observeAsState()
+        val errorMessage by vm.errorMessage.observeAsState()
+        val pending = syncService.pendingRetryCount()
+        val canOpen = openScaleService.viewModel().allPermissionsGranted.value &&
+                openScaleService.viewModel().connectAvailable.value
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            onClick = { if (canOpen) navController.navigate(vm.getName()) },
+            enabled = canOpen
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(id = vm.getIcon()),
+                    contentDescription = null,
+                    tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        vm.getName(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val (statusText, statusColor) = when {
+                        !enabled ->
+                            stringResource(R.string.service_status_off) to MaterialTheme.colorScheme.onSurfaceVariant
+                        pending > 0 ->
+                            stringResource(R.string.service_status_pending, pending) to MaterialTheme.colorScheme.error
+                        !errorMessage.isNullOrEmpty() ->
+                            stringResource(R.string.service_status_error) to MaterialTheme.colorScheme.error
+                        lastSync != null && lastSync?.toEpochMilli() != 0L -> {
+                            val dateFormat = DateFormat.getDateFormat(applicationContext)
+                            val timeFormat = DateFormat.getTimeFormat(applicationContext)
+                            val ts = dateFormat.format(Date.from(lastSync)) + " " + timeFormat.format(Date.from(lastSync))
+                            (stringResource(R.string.service_status_synced) + " · " + ts) to MaterialTheme.colorScheme.primary
+                        }
+                        else ->
+                            stringResource(R.string.sync_service_last_sync_never_text) to MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
+                }
+                Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+
+    /** One global full-sync action instead of a FAB per card. */
+    @Composable
+    fun GlobalSyncButton() {
+        var running by remember { mutableStateOf(false) }
+        val showMessage = LocalSnackbar.current
+        val canSync = syncServiceList.any { it.viewModel().syncEnabled.value } &&
+                openScaleService.viewModel().connectAvailable.value
+
+        Button(
+            onClick = {
+                if (!running) {
+                    running = true
+                    lifecycleScope.launch {
+                        openScaleDataService.checkVersion()
+                        val measurements = openScaleDataService.getMeasurements(openScaleService.getSelectedUser())
+                        for (service in syncServiceList.filter { it.viewModel().syncEnabled.value }) {
+                            val result = service.sync(measurements)
+                            if (result is SyncResult.Success) {
+                                service.viewModel().setLastSync(Instant.now())
+                            } else {
+                                service.setErrorMessage(result as SyncResult.Failure)
+                            }
+                        }
+                        running = false
+                        showMessage(getString(R.string.sync_service_full_synced_info, measurements.size))
+                    }
+                }
+            },
+            enabled = canSync && !running,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (running) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.sync_service_syncing_text))
+            } else {
+                Icon(imageVector = Icons.Filled.Refresh, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.dashboard_sync_all_button))
+            }
+        }
+    }
+
+    /** First-run guided setup, all on one scrollable page. */
+    @Composable
+    fun OnboardingScreen(activity: ComponentActivity, onFinish: () -> Unit) {
+        Surface(
+            color = MaterialTheme.colorScheme.background,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding()          // keep content clear of the system bars (edge-to-edge)
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(96.dp)
+                )
+                Text(
+                    "openScale sync",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    stringResource(R.string.onboarding_welcome_text),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    stringResource(R.string.onboarding_connect_text),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                openScaleService.composeSettings(activity)
+
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    stringResource(R.string.onboarding_services_text),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                syncServiceList.forEach { OnboardingServiceToggle(it) }
+
+                Spacer(Modifier.height(24.dp))
+                Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.onboarding_finish))
                 }
             }
         }
     }
 
     @Composable
+    fun OnboardingServiceToggle(syncService: ServiceInterface) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(id = syncService.viewModel().getIcon()),
+                contentDescription = null,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                syncService.viewModel().getName(),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = syncService.viewModel().syncEnabled.value,
+                onCheckedChange = { syncService.viewModel().setSyncEnabled(it) }
+            )
+        }
+    }
+
+    @Composable
     fun AboutScreen() {
         Column {
+            Image(
+                painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 16.dp)
+                    .size(96.dp)
+            )
             Column (
                 modifier = Modifier.padding(16.dp)
             ) {
@@ -542,17 +793,22 @@ class MainActivity : AppCompatActivity() {
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "openScale sync")
+                Text(text = "openScale sync", color = MaterialTheme.colorScheme.onPrimary)
             }
+
+            val current by currentTitle.observeAsState()
+            val overviewTitle = stringResource(id = R.string.title_overview)
+            val aboutTitle = stringResource(id = R.string.title_about)
+
             NavigationDrawerItem(
-                label = { Text(stringResource(id = R.string.title_overview)) },
+                label = { Text(overviewTitle) },
                 icon = {
                     Icon(
                         imageVector = Icons.Filled.Home,
-                        contentDescription = stringResource(id = R.string.title_overview)
+                        contentDescription = null
                     )
                 },
-                selected = false,
+                selected = current == overviewTitle,
                 onClick = {
                     scope.launch { drawerState.close() }
                     navController.navigate("overview")
@@ -560,19 +816,20 @@ class MainActivity : AppCompatActivity() {
             )
 
             for (syncService in syncServiceList) {
+                val name = syncService.viewModel().getName()
                 NavigationDrawerItem(
-                    label = { Text(syncService.viewModel().getName()) },
+                    label = { Text(name) },
                     icon = {
                         Icon(
                             painter = painterResource(id = syncService.viewModel().getIcon()),
-                            contentDescription = syncService.viewModel().getName(),
+                            contentDescription = null,
                             modifier = Modifier.size(24.dp)
                         )
                     },
-                    selected = false,
+                    selected = current == name,
                     onClick = {
                         scope.launch { drawerState.close() }
-                        navController.navigate(syncService.viewModel().getName())
+                        navController.navigate(name)
                     }
                 )
             }
@@ -584,10 +841,10 @@ class MainActivity : AppCompatActivity() {
                 icon = {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_about),
-                        contentDescription = stringResource(R.string.title_about)
+                        contentDescription = null
                     )
                 },
-                selected = false,
+                selected = current == aboutTitle,
                 onClick = {
                     scope.launch { drawerState.close() }
                     navController.navigate("about")
@@ -595,129 +852,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
     }
-    @Composable
-    fun fullSyncFloatingButton(syncService: ServiceInterface) {
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(32.dp),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    if (syncService.viewModel().syncEnabled.value && !syncService.viewModel().syncRunning.value) {
-                        lifecycleScope.launch {
-                            syncService.viewModel().setSyncRunning(true)
-                            openScaleDataService.checkVersion()
-                            val measurements = openScaleDataService.getMeasurements(openScaleService.getSelectedUser())
-                            val syncResult = syncService.sync(measurements)
-
-                            if (syncResult is SyncResult.Success) {
-                                syncService.viewModel().setLastSync(Instant.now())
-                                syncService.setInfoMessage(getString(R.string.sync_service_full_synced_info, measurements.size))
-                            } else {
-                                syncService.setErrorMessage(syncResult as SyncResult.Failure)
-                            }
-
-                            syncService.viewModel().setSyncRunning(false)
-                        }
-                    }
-                },
-                containerColor = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.inverseOnSurface,
-                contentColor = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray,
-                text = {
-                    if (syncService.viewModel().syncRunning.value) {
-                        Text(
-                            text = stringResource(id = R.string.sync_service_syncing_text),
-                            color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(id = R.string.sync_service_full_sync_button),
-                            color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
-                        )
-                    }
-                },
-                icon = {
-                    if (syncService.viewModel().syncRunning.value) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = stringResource(R.string.sync_service_full_sync_button),
-                            tint = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
-                        )
-                    }
-                }
-            )
-        }
-    }
-
-    @Composable
-    fun SyncServiceGridItem(syncService: ServiceInterface) {
-        Card(
-            modifier = Modifier.padding(8.dp),
-            onClick = {
-                navController.navigate(syncService.viewModel().getName())
-            },
-            enabled = openScaleService.viewModel().allPermissionsGranted.value && openScaleService.viewModel().connectAvailable.value
-        ) {
-            Box(modifier = Modifier.padding(16.dp)) {
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(id = syncService.viewModel().getIcon()),
-                            contentDescription = syncService.viewModel().getName(),
-                            tint = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.primary else Color.Gray,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Text(
-                            " ${syncService.viewModel().getName()}",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.primary else Color.Gray,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Column (
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        val errorMessage by syncService.viewModel().errorMessage.observeAsState()
-                        if (errorMessage != null && errorMessage != "") {
-                            Text(
-                                "$errorMessage",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                        }
-                        val lastSync by syncService.viewModel().lastSync.observeAsState()
-                        if (lastSync?.toEpochMilli() == 0L) {
-                            Text(
-                                stringResource(id = R.string.sync_service_last_sync_never_text),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
-                            )
-                        } else {
-                            val dateFormat = DateFormat.getDateFormat(applicationContext)
-                            val timeFormat = DateFormat.getTimeFormat(applicationContext)
-                            val timeDateFormat = dateFormat.format(Date.from(lastSync)) + " " + timeFormat.format(Date.from(lastSync))
-                            Text(
-                                stringResource(id = R.string.sync_service_last_sync_formatted_text, timeDateFormat),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (syncService.viewModel().syncEnabled.value) MaterialTheme.colorScheme.onSecondaryContainer else Color.Gray
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 

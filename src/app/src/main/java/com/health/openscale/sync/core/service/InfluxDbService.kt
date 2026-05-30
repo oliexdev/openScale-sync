@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -19,14 +18,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.gui.components.LocalSnackbar
+import com.health.openscale.sync.gui.components.SecretOutlinedTextField
 import com.health.openscale.sync.core.model.InfluxDbViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.InfluxDbSync
@@ -117,9 +116,19 @@ class InfluxDbService(
 
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            super.composeSettings(activity)
-
+        val showMessage = LocalSnackbar.current
+        val connectingState by viewModel.connecting.observeAsState(false)
+        DetailScaffold(
+            activity = activity,
+            testConnecting = connectingState,
+            onTest = {
+                activity.lifecycleScope.launch {
+                    connectInfluxDb()
+                    if (viewModel.errorMessage.value.isNullOrEmpty())
+                        showMessage(context.getString(R.string.service_connection_successful))
+                }
+            }
+        ) {
             val urlState by viewModel.url.observeAsState("")
             val isV2State by viewModel.isV2.observeAsState(true)
             val orgState by viewModel.org.observeAsState("")
@@ -129,7 +138,6 @@ class InfluxDbService(
             val usernameState by viewModel.dbUsername.observeAsState("")
             val passwordState by viewModel.dbPassword.observeAsState("")
             val measurementState by viewModel.measurement.observeAsState("")
-            val connectingState by viewModel.connecting.observeAsState(false)
 
             OutlinedTextField(
                 enabled = viewModel.syncEnabled.value,
@@ -174,13 +182,12 @@ class InfluxDbService(
                     onValueChange = { viewModel.setBucket(it) },
                     label = { Text(stringResource(R.string.influxdb_bucket_title)) }
                 )
-                OutlinedTextField(
-                    enabled = viewModel.syncEnabled.value,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                SecretOutlinedTextField(
                     value = tokenState,
                     onValueChange = { viewModel.setToken(it) },
-                    label = { Text(stringResource(R.string.influxdb_token_title)) },
-                    visualTransformation = PasswordVisualTransformation()
+                    label = stringResource(R.string.influxdb_token_title),
+                    enabled = viewModel.syncEnabled.value,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                 )
             } else {
                 OutlinedTextField(
@@ -197,13 +204,12 @@ class InfluxDbService(
                     onValueChange = { viewModel.setDbUsername(it) },
                     label = { Text(stringResource(R.string.influxdb_username_title)) }
                 )
-                OutlinedTextField(
-                    enabled = viewModel.syncEnabled.value,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                SecretOutlinedTextField(
                     value = passwordState,
                     onValueChange = { viewModel.setDbPassword(it) },
-                    label = { Text(stringResource(R.string.influxdb_password_title)) },
-                    visualTransformation = PasswordVisualTransformation()
+                    label = stringResource(R.string.influxdb_password_title),
+                    enabled = viewModel.syncEnabled.value,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                 )
             }
 
@@ -215,25 +221,6 @@ class InfluxDbService(
                 label = { Text(stringResource(R.string.influxdb_measurement_title)) }
             )
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Button(
-                    enabled = viewModel.syncEnabled.value && !connectingState,
-                    onClick = { activity.lifecycleScope.launch { connectInfluxDb() } }
-                ) {
-                    Text(
-                        if (connectingState) stringResource(R.string.influxdb_connecting_text)
-                        else stringResource(R.string.influxdb_connect_button)
-                    )
-                }
-
-                val errorMessage by viewModel.errorMessage.observeAsState()
-                if (!errorMessage.isNullOrBlank() && viewModel.syncEnabled.value) {
-                    Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
-                }
-            }
         }
     }
 }

@@ -1,6 +1,8 @@
 <resources>
     <string name="title_overview">Overview</string>
     <string name="title_about">About</string>
+    <string name="field_show">Show</string>
+    <string name="field_hide">Hide</string>
 
     <string name="about_title_maintainer">Maintainer</string>
     <string name="about_title_website">Website</string>
@@ -15,10 +17,34 @@
     <string name="logging_export_failed">Log file could not be saved</string>
 
     <string name="sync_service_syncing_text">Syncing …</string>
-    <string name="sync_service_full_sync_button">Full sync</string>
+    <string name="sync_service_full_sync_button">Sync with %1$s</string>
     <string name="sync_service_last_sync_never_text">Last sync never</string>
     <string name="sync_service_last_sync_formatted_text">Last sync %1$s</string>
-    <string name="sync_service_enable_sync_service_button">Enable sync service</string>
+    <string name="sync_service_enable_sync_service_button">Enable %1$s sync service</string>
+    <string name="service_test_connection">Test connection</string>
+    <string name="service_connecting">Connecting …</string>
+    <string name="service_connection_successful">✓ Connection successful</string>
+    <string name="sync_retry_notification_title">openScale sync</string>
+    <string name="sync_retry_notification_text">%1$d measurements pending — will retry</string>
+
+    <string name="onboarding_welcome_text">Synchronize your openScale measurements with external services.</string>
+    <string name="onboarding_connect_text">Connect openScale and choose a profile.</string>
+    <string name="onboarding_services_text">Pick where to sync — configure details later.</string>
+    <string name="onboarding_finish">Get started</string>
+
+    <string name="dashboard_services_header">Services</string>
+    <string name="dashboard_sync_all_button">Sync all services</string>
+    <string name="dashboard_status_all_synced">Everything in sync</string>
+    <string name="dashboard_status_pending">%1$d measurements pending</string>
+    <string name="dashboard_status_no_service">No sync service enabled</string>
+    <string name="dashboard_status_attention">Needs attention</string>
+    <string name="service_status_off">off</string>
+    <string name="service_status_synced">in sync</string>
+    <string name="service_status_pending">%1$d pending</string>
+    <string name="service_status_error">error</string>
+    <string name="retry_pending_title">%1$d measurements waiting to sync</string>
+    <string name="retry_now_button">Retry now</string>
+    <string name="retry_discard_button">Discard</string>
     <string name="sync_service_full_synced_info">%1$d measurements synced</string>
     <string name="sync_service_measurement_inserted_info">%1$f kg (date: %2$s) measurement inserted</string>
     <string name="sync_service_measurement_deleted_info">%1$s measurement deleted</string>
@@ -41,6 +67,7 @@
     <string name="health_connect_request_permissions_button">Request Health Connect permissions</string>
     <string name="health_connect_permission_not_granted">Health Connect permission not granted</string>
     <string name="health_connect_not_installed_or_update_required_error">Health Connect not installed or has to be updated</string>
+    <string name="health_connect_connected_text">Health Connect connection successful</string>
 
     <string name="mqtt_broker_successful_connected_text">Successfully connected to MQTT broker</string>
     <string name="mqtt_server_name_title">Server name</string>
@@ -52,15 +79,12 @@
     <string name="mqtt_use_ssl_tls_title">Use SSL/TLS Encryption</string>
     <string name="mqtt_ssl_disabled_warning">Warning: Disabling SSL/TLS sends data unencrypted. Recommended for trusted local networks only.</string>
     <string name="mqtt_use_discovery_tite">Use Home Assistant discovery</string>
-    <string name="mqtt_connecting_text">Connecting …</string>
-    <string name="mqtt_connect_to_mqtt_broker_button">Connect to MQTT broker</string>
 
     <string name="wger_successful_connected_text">Successfully connected to Wger</string>
     <string name="wger_not_successful_connected_error">Cannot connect to Wger</string>
     <string name="wger_server_name_title">Server name</string>
     <string name="wger_server_name_hint">e.g. https://wger.de/api/v2/</string>
     <string name="wger_api_token_title">Wger Api token</string>
-    <string name="wger_connect_to_wger_button">Connect to Wger</string>
 
     <string name="realtime_sync_update_required_snackbar_text">For Real-time synchronization, please update openScale to version 2.5.5 or to the latest developer version.</string>
 
@@ -73,15 +97,11 @@
     <string name="influxdb_username_title">Username</string>
     <string name="influxdb_password_title">Password</string>
     <string name="influxdb_measurement_title">Measurement name</string>
-    <string name="influxdb_connect_button">Test connection</string>
-    <string name="influxdb_connecting_text">Connecting …</string>
     <string name="influxdb_connected_text">InfluxDB connection successful</string>
     <string name="influxdb_url_empty_error">InfluxDB URL must not be empty</string>
     <string name="webhook_url_title">Webhook URL</string>
     <string name="webhook_url_hint">e.g. https://example.com/webhook</string>
     <string name="webhook_auth_header_title">Authorization header (optional)</string>
-    <string name="webhook_connect_button">Test connection</string>
-    <string name="webhook_connecting_text">Connecting …</string>
     <string name="webhook_connected_text">Webhook connection successful</string>
     <string name="webhook_url_empty_error">Webhook URL must not be empty</string>
     <string name="retry_queue_remaining">pending in queue</string>

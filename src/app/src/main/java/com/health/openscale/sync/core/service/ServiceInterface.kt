@@ -18,19 +18,19 @@
 package com.health.openscale.sync.core.service
 
 import android.content.Context
-import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.gson.Gson
@@ -40,8 +40,11 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.provider.OpenScaleProvider
-import kotlinx.coroutines.launch
+import com.health.openscale.sync.gui.components.PendingQueueCard
+import com.health.openscale.sync.gui.components.SyncActionButtons
+import com.health.openscale.sync.gui.components.SyncErrorBanner
 import timber.log.Timber
+import java.time.Instant
 import java.util.Date
 
 sealed class SyncResult<out T> {
@@ -64,6 +67,27 @@ abstract class ServiceInterface (
 
     abstract fun viewModel() : ViewModelInterface
     abstract suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit>
+
+    /**
+     * Full manual sync of all measurements of the selected user to this backend.
+     * Returns the number of synced measurements on success, or null on failure
+     * (the error is surfaced via the error banner). Only call from the UI context
+     * where openScaleService/openScaleDataService are wired.
+     */
+    suspend fun runFullSync() : Int? {
+        openScaleDataService.checkVersion()
+        val measurements = openScaleDataService.getMeasurements(openScaleService.getSelectedUser())
+        return when (val result = sync(measurements)) {
+            is SyncResult.Success -> {
+                viewModel().setLastSync(Instant.now())
+                measurements.size
+            }
+            is SyncResult.Failure -> {
+                setErrorMessage(result)
+                null
+            }
+        }
+    }
 
     // Raw operations implemented by concrete services. They contain only the guard +
     // wire call — they know nothing about retrying. The base class wraps them below.
@@ -165,11 +189,19 @@ abstract class ServiceInterface (
         retryPrefs.edit().putString("queue", retryGson.toJson(ops)).apply()
     }
 
+    // --- Minimal read/action API for the UI (queue stays otherwise private) -------------
+    /** Number of failed ops currently waiting to be retried. */
+    fun pendingRetryCount(): Int = retryPeek().size
+
+    /** Replay the backlog now (e.g. user tapped "retry"). Keeps anything that still fails. */
+    suspend fun retryPending() = drainQueue()
+
+    /** Drop the whole backlog (e.g. user tapped "discard"). */
+    fun clearPending() = retryReplace(emptyList())
+
     fun setErrorMessage(message : String) {
-        val fullMessage = viewModel().getName() + ": " + message
-        viewModel().setErrorMessage(fullMessage)
-        Toast.makeText(context, fullMessage, Toast.LENGTH_SHORT).show()
-        Timber.e("[ERROR] $fullMessage")
+        viewModel().setErrorMessage(message)
+        Timber.e("[ERROR] %s: %s", viewModel().getName(), message)
     }
 
     fun setErrorMessage(failure: SyncResult.Failure) {
@@ -197,10 +229,8 @@ abstract class ServiceInterface (
     }
 
     fun setInfoMessage(message : String) {
-        val fullMessage = viewModel().getName() + ": " + message
-        viewModel().setInfoMessage(fullMessage)
-        Toast.makeText(context, fullMessage, Toast.LENGTH_SHORT).show()
-        Timber.i("[INFO] $fullMessage")
+        viewModel().setInfoMessage(message)
+        Timber.i("[INFO] %s: %s", viewModel().getName(), message)
     }
 
     fun setDebugMessage(message : String) {
@@ -218,38 +248,47 @@ abstract class ServiceInterface (
     }
 
     @Composable
-    open fun composeSettings(activity: ComponentActivity) {
-        composeBasicSettings(activity) // need to be called as a private function because of the open keyword
-    }
+    abstract fun composeSettings(activity: ComponentActivity)
 
+    /**
+     * Shared detail-screen layout: a scrollable form area on top (the given [form] fields +
+     * pending-queue card) and a fixed action area pinned to the bottom of the screen (error
+     * banner + full-sync / test-connection buttons). The enable toggle lives in the top app bar.
+     */
     @Composable
-    private fun composeBasicSettings(activity: ComponentActivity) {
-        val coroutineScope = rememberCoroutineScope()
-
-        Column (
-                modifier = Modifier.fillMaxWidth()
+    protected fun DetailScaffold(
+        activity: ComponentActivity,
+        showActions: Boolean = true,
+        testConnecting: Boolean = false,
+        onTest: () -> Unit = {},
+        form: @Composable ColumnScope.() -> Unit
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+                form()
+                PendingQueueCard(this@ServiceInterface, activity)
+            }
+            if (showActions) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Switch(
-                        checked = viewModel().syncEnabled.value,
-                        onCheckedChange = {
-                            viewModel().setSyncEnabled(it)
-
-                            if (it) {
-                                coroutineScope.launch {
-                                    init()
-                                }
-                            }
-                        },
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-
-                    Text(stringResource(id = R.string.sync_service_enable_sync_service_button))
+                    val errorMessage by viewModel().errorMessage.observeAsState()
+                    if (viewModel().syncEnabled.value) SyncErrorBanner(errorMessage)
+                    SyncActionButtons(this@ServiceInterface, activity, testConnecting, onTest)
                 }
             }
         }
+    }
 
     companion object {
         private const val RETRY_MAX_SIZE = 500

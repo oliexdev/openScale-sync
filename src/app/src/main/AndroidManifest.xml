@@ -52,7 +52,7 @@
 
         <!-- Permission handling for Android 13 and before -->
         <activity
-            android:name=".gui.PermissionsRationaleActivity"
+            android:name=".gui.permission.PermissionsRationaleActivity"
             android:exported="true"
             android:enabled="true"
             android:theme="@style/Theme.OpenScaleSync">
@@ -65,7 +65,7 @@
         <activity-alias
             android:name="ViewPermissionUsageActivity"
             android:exported="true"
-            android:targetActivity=".gui.PermissionsRationaleActivity"
+            android:targetActivity=".gui.permission.PermissionsRationaleActivity"
             android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />

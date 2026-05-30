@@ -15,7 +15,7 @@
  *     along with this program.  If not, see <http://www.gnu.org/licenses/>
  *
  */
-package com.health.openscale.sync.gui
+package com.health.openscale.sync.gui.permission
 
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -72,7 +72,7 @@ class PermissionsRationaleActivity : AppCompatActivity() {
                                 modifier = Modifier.size(64.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "openScale sync")
+                            Text(text = "openScale sync", color = MaterialTheme.colorScheme.onPrimary)
                         }
 
                         Column (

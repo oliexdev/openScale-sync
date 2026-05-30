@@ -3,24 +3,23 @@ package com.health.openscale.sync.core.service
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.health.openscale.sync.R
+import com.health.openscale.sync.gui.components.LocalSnackbar
+import com.health.openscale.sync.gui.components.SecretOutlinedTextField
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.model.WebhookViewModel
@@ -108,50 +107,39 @@ class WebhookService(
 
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            super.composeSettings(activity)
-
+        val showMessage = LocalSnackbar.current
+        val connectingState by viewModel.connecting.observeAsState(false)
+        DetailScaffold(
+            activity = activity,
+            testConnecting = connectingState,
+            onTest = {
+                activity.lifecycleScope.launch {
+                    testConnection()
+                    if (viewModel.errorMessage.value.isNullOrEmpty())
+                        showMessage(context.getString(R.string.service_connection_successful))
+                }
+            }
+        ) {
             val urlState by viewModel.url.observeAsState("")
             val authHeaderState by viewModel.authHeader.observeAsState("")
-            val connectingState by viewModel.connecting.observeAsState(false)
 
             OutlinedTextField(
                 enabled = viewModel.syncEnabled.value,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 value = urlState,
                 onValueChange = { viewModel.setUrl(it) },
                 label = { Text(stringResource(R.string.webhook_url_title)) },
-                placeholder = { Text(stringResource(R.string.webhook_url_hint)) }
+                placeholder = { Text(stringResource(R.string.webhook_url_hint)) },
+                singleLine = true
             )
 
-            OutlinedTextField(
-                enabled = viewModel.syncEnabled.value,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            SecretOutlinedTextField(
                 value = authHeaderState,
                 onValueChange = { viewModel.setAuthHeader(it) },
-                label = { Text(stringResource(R.string.webhook_auth_header_title)) },
-                visualTransformation = PasswordVisualTransformation()
+                label = stringResource(R.string.webhook_auth_header_title),
+                enabled = viewModel.syncEnabled.value,
+                modifier = Modifier.fillMaxWidth()
             )
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Button(
-                    enabled = viewModel.syncEnabled.value && !connectingState,
-                    onClick = { activity.lifecycleScope.launch { testConnection() } }
-                ) {
-                    Text(
-                        if (connectingState) stringResource(R.string.webhook_connecting_text)
-                        else stringResource(R.string.webhook_connect_button)
-                    )
-                }
-
-                val errorMessage by viewModel.errorMessage.observeAsState()
-                if (!errorMessage.isNullOrBlank() && viewModel.syncEnabled.value) {
-                    Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
-                }
-            }
         }
     }
 }

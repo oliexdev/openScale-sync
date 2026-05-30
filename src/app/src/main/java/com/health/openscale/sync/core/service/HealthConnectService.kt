@@ -23,13 +23,14 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -46,6 +47,8 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.HealthConnectViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.HealthConnectSync
+import com.health.openscale.sync.gui.components.LocalSnackbar
+import com.health.openscale.sync.gui.components.SyncConnectButton
 import kotlinx.coroutines.launch
 import java.util.Date
 
@@ -211,42 +214,48 @@ class HealthConnectService(
         return null
     }
 
+    private suspend fun testConnection() {
+        when (val result = checkAllPermissionsGranted()) {
+            is SyncResult.Success -> setInfoMessage(context.getString(R.string.health_connect_connected_text))
+            is SyncResult.Failure -> setErrorMessage(result)
+        }
+    }
+
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
-        Column (
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
-        ) {
-            super.composeSettings(activity)
-
-            if (!viewModel.connectAvailable.value) {
-                Column (
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(stringResource(id = R.string.health_connect_not_available_text))
-                    Button(enabled = viewModel.syncEnabled.value,
-                        onClick = {
-                        openAppStore(activity)
-                    }) {
-                        Text(text = stringResource(id = R.string.health_connect_get_health_connect_button))
-                    }
+        val showMessage = LocalSnackbar.current
+        val ready = viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value
+        DetailScaffold(
+            activity = activity,
+            showActions = ready,
+            testConnecting = false,
+            onTest = {
+                activity.lifecycleScope.launch {
+                    testConnection()
+                    if (viewModel.errorMessage.value.isNullOrEmpty())
+                        showMessage(context.getString(R.string.service_connection_successful))
                 }
             }
+        ) {
+            if (!viewModel.connectAvailable.value) {
+                Text(stringResource(id = R.string.health_connect_not_available_text))
+                SyncConnectButton(
+                    text = stringResource(id = R.string.health_connect_get_health_connect_button),
+                    connectingText = stringResource(id = R.string.health_connect_get_health_connect_button),
+                    connecting = false,
+                    enabled = viewModel.syncEnabled.value,
+                    onClick = { openAppStore(activity) }
+                )
+            }
             if (!viewModel.allPermissionsGranted.value) {
-                Column (
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(stringResource(id = R.string.health_connect_permission_not_granted))
-                    Button(enabled = viewModel.syncEnabled.value,
-                        onClick = {
-                        activity.lifecycleScope.launch {
-                            requestPermissions()
-                        }
-                    }) {
-                        Text(text = stringResource(id = R.string.health_connect_request_permissions_button))
-                    }
-                }
+                Text(stringResource(id = R.string.health_connect_permission_not_granted))
+                SyncConnectButton(
+                    text = stringResource(id = R.string.health_connect_request_permissions_button),
+                    connectingText = stringResource(id = R.string.health_connect_request_permissions_button),
+                    connecting = false,
+                    enabled = viewModel.syncEnabled.value,
+                    onClick = { activity.lifecycleScope.launch { requestPermissions() } }
+                )
             }
         }
     }
