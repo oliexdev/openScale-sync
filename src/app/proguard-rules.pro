@@ -29,6 +29,11 @@
 -keep class okio.** { *; }
 # App data classes (de)serialized by Gson via reflection — keep their fields intact:
 -keep class com.health.openscale.sync.core.datatypes.** { *; }
+# Gson has no consumer rules: keep every model class that has @SerializedName fields
+# fully intact (fields AND accessors), covering all JSON models regardless of package
+# (e.g. Wger responses) and any added later.
+-if class * { @com.google.gson.annotations.SerializedName <fields>; }
+-keep class <1> { *; }
 
 # Jetpack Compose: never strip @Composable functions or their enclosing classes.
 -keepclasseswithmembers public class * {
