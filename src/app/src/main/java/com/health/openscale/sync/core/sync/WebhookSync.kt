@@ -36,6 +36,9 @@ class WebhookSync(
             "muscle" to m.muscle
         ).also { map -> m.extraFields.forEach { (k, v) -> map[k] = v } }
 
+    suspend fun test(): SyncResult<Unit> =
+        post(gson.toJson(mapOf("event" to "test")))
+
     suspend fun fullSync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
         post(gson.toJson(mapOf(
             "event" to "fullSync",

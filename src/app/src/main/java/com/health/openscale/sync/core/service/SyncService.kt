@@ -27,7 +27,7 @@ import java.time.Instant
 import java.util.Date
 
 class SyncService : Service() {
-    private lateinit var syncServiceList: Array<ServiceInterface>
+    private lateinit var syncServiceList: List<ServiceInterface>
     private lateinit var prefs: SharedPreferences
     private val ID_SERVICE = 5
 
@@ -58,14 +58,8 @@ class SyncService : Service() {
 
         showNotification() // Required foreground service notification
 
-        // Prepare all sync backends
-        syncServiceList = arrayOf(
-            HealthConnectService(applicationContext, prefs),
-            MQTTService(applicationContext, prefs),
-            WgerService(applicationContext, prefs),
-            InfluxDbService(applicationContext, prefs),
-            WebhookService(applicationContext, prefs)
-        )
+        // Prepare all sync backends (single source of truth in BackendRegistry)
+        syncServiceList = BackendRegistry.create(applicationContext, prefs)
 
         CoroutineScope(Dispatchers.Main).launch {
             // Initialize only enabled services

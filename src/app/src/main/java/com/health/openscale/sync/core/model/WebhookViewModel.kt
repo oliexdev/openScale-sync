@@ -9,6 +9,7 @@ class WebhookViewModel(private val sharedPreferences: SharedPreferences) : ViewM
 
     private val _url = MutableLiveData<String>(sharedPreferences.getString("webhook_url", ""))
     private val _authHeader = MutableLiveData<String>(sharedPreferences.getString("webhook_auth_header", ""))
+    private val _connecting = MutableLiveData<Boolean>(false)
 
     override fun getName(): String = "Webhook"
     override fun getIcon(): Int = R.drawable.ic_webhook
@@ -18,4 +19,7 @@ class WebhookViewModel(private val sharedPreferences: SharedPreferences) : ViewM
 
     val authHeader: LiveData<String> = _authHeader
     fun setAuthHeader(value: String) { _authHeader.value = value; sharedPreferences.edit().putString("webhook_auth_header", value).apply() }
+
+    val connecting: LiveData<Boolean> = _connecting
+    fun setConnecting(value: Boolean) { _connecting.value = value }
 }

@@ -6,16 +6,20 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
@@ -115,6 +119,31 @@ class WebhookService(
     override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
         withSync { it.fullSync(measurements) }
 
+    private suspend fun testConnection() {
+        if (!viewModel.syncEnabled.value) return
+        val url = viewModel.url.value ?: ""
+        if (url.isBlank()) {
+            setErrorMessage(context.getString(R.string.webhook_url_empty_error))
+            return
+        }
+        viewModel.setConnecting(true)
+        initWebhook()
+        val result = webhookSync?.test()
+            ?: SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, "Not configured")
+        viewModel.setConnecting(false)
+        when (result) {
+            is SyncResult.Success -> {
+                clearErrorMessage()
+                val pending = retryQueue.size()
+                drainQueue()
+                val msg = context.getString(R.string.webhook_connected_text) +
+                    if (pending > 0) " ($pending ${context.getString(R.string.retry_queue_remaining)})" else ""
+                setInfoMessage(msg)
+            }
+            is SyncResult.Failure -> setErrorMessage(result)
+        }
+    }
+
     @Composable
     override fun composeSettings(activity: ComponentActivity) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -122,6 +151,7 @@ class WebhookService(
 
             val urlState by viewModel.url.observeAsState("")
             val authHeaderState by viewModel.authHeader.observeAsState("")
+            val connectingState by viewModel.connecting.observeAsState(false)
 
             OutlinedTextField(
                 enabled = viewModel.syncEnabled.value,
@@ -141,9 +171,24 @@ class WebhookService(
                 visualTransformation = PasswordVisualTransformation()
             )
 
-            val errorMessage by viewModel.errorMessage.observeAsState()
-            if (!errorMessage.isNullOrBlank() && viewModel.syncEnabled.value) {
-                Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Button(
+                    enabled = viewModel.syncEnabled.value && !connectingState,
+                    onClick = { activity.lifecycleScope.launch { testConnection() } }
+                ) {
+                    Text(
+                        if (connectingState) stringResource(R.string.webhook_connecting_text)
+                        else stringResource(R.string.webhook_connect_button)
+                    )
+                }
+
+                val errorMessage by viewModel.errorMessage.observeAsState()
+                if (!errorMessage.isNullOrBlank() && viewModel.syncEnabled.value) {
+                    Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }

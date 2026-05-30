@@ -80,5 +80,9 @@
     <string name="webhook_url_title">Webhook URL</string>
     <string name="webhook_url_hint">e.g. https://example.com/webhook</string>
     <string name="webhook_auth_header_title">Authorization header (optional)</string>
+    <string name="webhook_connect_button">Test connection</string>
+    <string name="webhook_connecting_text">Connecting …</string>
+    <string name="webhook_connected_text">Webhook connection successful</string>
+    <string name="webhook_url_empty_error">Webhook URL must not be empty</string>
     <string name="retry_queue_remaining">pending in queue</string>
 </resources>

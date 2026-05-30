@@ -112,13 +112,9 @@ import com.health.openscale.sync.BuildConfig
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.provider.OpenScaleProvider
-import com.health.openscale.sync.core.service.HealthConnectService
-import com.health.openscale.sync.core.service.InfluxDbService
-import com.health.openscale.sync.core.service.MQTTService
+import com.health.openscale.sync.core.service.BackendRegistry
 import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
-import com.health.openscale.sync.core.service.WebhookService
-import com.health.openscale.sync.core.service.WgerService
 import com.health.openscale.sync.core.utils.LogManager
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
@@ -166,13 +162,7 @@ class MainActivity : AppCompatActivity() {
             openScaleService.viewModel().setConnectAvailable(true)
         }
 
-        syncServiceList = listOf(
-            HealthConnectService(applicationContext, sharedPreferences),
-            MQTTService(applicationContext, sharedPreferences),
-            WgerService(applicationContext, sharedPreferences),
-            InfluxDbService(applicationContext, sharedPreferences),
-            WebhookService(applicationContext, sharedPreferences)
-        )
+        syncServiceList = BackendRegistry.create(applicationContext, sharedPreferences)
 
         for (syncService in syncServiceList) {
             syncService.registerActivityResultLauncher(this)
