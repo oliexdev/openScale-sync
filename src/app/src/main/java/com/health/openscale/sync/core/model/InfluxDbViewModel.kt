@@ -7,7 +7,7 @@ import com.health.openscale.sync.R
 
 class InfluxDbViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
 
-    private val _url = MutableLiveData<String>(sharedPreferences.getString("influxdb_url", "http://192.168.1.100:8086"))
+    private val _url = MutableLiveData<String>(sharedPreferences.getString("influxdb_url", ""))
     private val _isV2 = MutableLiveData<Boolean>(sharedPreferences.getBoolean("influxdb_is_v2", true))
     private val _org = MutableLiveData<String>(sharedPreferences.getString("influxdb_org", ""))
     private val _bucket = MutableLiveData<String>(sharedPreferences.getString("influxdb_bucket", "openscale"))

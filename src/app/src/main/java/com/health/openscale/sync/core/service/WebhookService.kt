@@ -12,7 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -128,7 +128,8 @@ class WebhookService(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 value = urlState,
                 onValueChange = { viewModel.setUrl(it) },
-                label = { Text(stringResource(R.string.webhook_url_title)) }
+                label = { Text(stringResource(R.string.webhook_url_title)) },
+                placeholder = { Text(stringResource(R.string.webhook_url_hint)) }
             )
 
             OutlinedTextField(
@@ -142,7 +143,7 @@ class WebhookService(
 
             val errorMessage by viewModel.errorMessage.observeAsState()
             if (!errorMessage.isNullOrBlank() && viewModel.syncEnabled.value) {
-                Text(errorMessage!!, color = Color.Red)
+                Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
             }
         }
     }

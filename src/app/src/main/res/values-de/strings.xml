@@ -45,7 +45,9 @@
 
     <string name="mqtt_broker_successful_connected_text">Erfolgreich mit MQTT-Broker verbunden.</string>
     <string name="mqtt_server_name_title">Servername</string>
+    <string name="mqtt_server_name_hint">z.B. broker.example.com</string>
     <string name="mqtt_server_port_number_title">Server-Portnummer</string>
+    <string name="mqtt_server_port_number_hint">z.B. 8883 (TLS) oder 1883</string>
     <string name="mqtt_username_title">Benutzername</string>
     <string name="mqtt_password_title">Passwort</string>
     <string name="mqtt_use_ssl_tls_title">SSL/TLS-Verschlüsselung verwenden</string>
@@ -57,6 +59,7 @@
     <string name="wger_successful_connected_text">Erfolgreich mit Wger verbunden.</string>
     <string name="wger_not_successful_connected_error">Verbindung zu Wger fehlgeschlagen.</string>
     <string name="wger_server_name_title">Servername</string>
+    <string name="wger_server_name_hint">z.B. https://wger.de/api/v2/</string>
     <string name="wger_api_token_title">Wger API-Token</string>
     <string name="wger_connect_to_wger_button">Mit Wger verbinden</string>
 
@@ -77,6 +80,7 @@
     <string name="influxdb_url_empty_error">InfluxDB-URL darf nicht leer sein</string>
 
     <string name="webhook_url_title">Webhook-URL</string>
+    <string name="webhook_url_hint">z.B. https://example.com/webhook</string>
     <string name="webhook_auth_header_title">Autorisierungs-Header (optional)</string>
 
     <string name="retry_queue_remaining">ausstehend in der Warteschlange</string>

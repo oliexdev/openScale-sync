@@ -396,13 +396,13 @@ class MainActivity : AppCompatActivity() {
             Row {
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowUp,
-                    contentDescription = "arrowUp",
+                    contentDescription = null,
                     modifier = Modifier.size(32.dp)
                 )
 
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = "arrowDown",
+                    contentDescription = null,
                     modifier = Modifier.size(32.dp)
                 )
             }

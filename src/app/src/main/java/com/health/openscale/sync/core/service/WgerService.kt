@@ -32,7 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -135,7 +135,7 @@ class WgerService(
                     setErrorMessage(context.getString(R.string.wger_not_successful_connected_error))
                 }
             } catch (ex: Exception) {
-                setErrorMessage("$ex.message")
+                setErrorMessage(ex.message ?: context.getString(R.string.sync_service_unknown_error))
             }
         }
     }
@@ -163,6 +163,7 @@ class WgerService(
                         viewModel.setWgerServer(it)
                     },
                     label = { Text(stringResource(id = R.string.wger_server_name_title)) },
+                    placeholder = { Text(stringResource(id = R.string.wger_server_name_hint)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     )
@@ -206,7 +207,7 @@ class WgerService(
                 val errorMessage by viewModel.errorMessage.observeAsState()
 
                 if (errorMessage != null && errorMessage != "" && viewModel.syncEnabled.value) {
-                    Text("$errorMessage", color = Color.Red)
+                    Text("$errorMessage", color = MaterialTheme.colorScheme.error)
                 }
             }
         }

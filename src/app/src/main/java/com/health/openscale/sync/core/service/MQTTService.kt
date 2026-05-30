@@ -308,6 +308,7 @@ class MQTTService(
                         viewModel.setMQTTServer(it)
                     },
                     label = { Text(stringResource(id = R.string.mqtt_server_name_title)) },
+                    placeholder = { Text(stringResource(id = R.string.mqtt_server_name_hint)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     )
@@ -336,6 +337,7 @@ class MQTTService(
                         }
                     },
                     label = { Text(stringResource(id = R.string.mqtt_server_port_number_title)) },
+                    placeholder = { Text(stringResource(id = R.string.mqtt_server_port_number_hint)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number
                     )
@@ -484,7 +486,7 @@ class MQTTService(
                 val errorMessage by viewModel.errorMessage.observeAsState()
 
                 if (errorMessage != null && errorMessage != "" && viewModel.syncEnabled.value) {
-                    Text("$errorMessage", color = Color.Red)
+                    Text("$errorMessage", color = MaterialTheme.colorScheme.error)
                 }
             }
         }
