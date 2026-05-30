@@ -28,10 +28,6 @@
     <string name="sync_retry_notification_title">openScale sync</string>
     <string name="sync_retry_notification_text">%1$d Messungen ausstehend – wird wiederholt</string>
 
-    <string name="onboarding_welcome_text">Synchronisiere deine openScale-Messungen mit externen Diensten.</string>
-    <string name="onboarding_connect_text">openScale verbinden und Profil wählen.</string>
-    <string name="onboarding_services_text">Ziele auswählen – Details später einstellen.</string>
-    <string name="onboarding_finish">Los geht\'s</string>
 
     <string name="dashboard_services_header">Dienste</string>
     <string name="dashboard_sync_all_button">Alle Dienste synchronisieren</string>

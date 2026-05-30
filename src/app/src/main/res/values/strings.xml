@@ -27,10 +27,6 @@
     <string name="sync_retry_notification_title">openScale sync</string>
     <string name="sync_retry_notification_text">%1$d measurements pending — will retry</string>
 
-    <string name="onboarding_welcome_text">Synchronize your openScale measurements with external services.</string>
-    <string name="onboarding_connect_text">Connect openScale and choose a profile.</string>
-    <string name="onboarding_services_text">Pick where to sync — configure details later.</string>
-    <string name="onboarding_finish">Get started</string>
 
     <string name="dashboard_services_header">Services</string>
     <string name="dashboard_sync_all_button">Sync all services</string>

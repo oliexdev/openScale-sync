@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -294,17 +293,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
-        var onboardingDone by remember { mutableStateOf(prefs.getBoolean("onboardingCompleted", false)) }
-
         OpenScaleSyncTheme {
-            if (!onboardingDone) {
-                OnboardingScreen(activity) {
-                    prefs.edit().putBoolean("onboardingCompleted", true).apply()
-                    onboardingDone = true
-                }
-                return@OpenScaleSyncTheme
-            }
             CompositionLocalProvider(
                 LocalSnackbar provides { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
             ) {
@@ -567,88 +556,6 @@ class MainActivity : AppCompatActivity() {
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.dashboard_sync_all_button))
             }
-        }
-    }
-
-    /** First-run guided setup, all on one scrollable page. */
-    @Composable
-    fun OnboardingScreen(activity: ComponentActivity, onFinish: () -> Unit) {
-        Surface(
-            color = MaterialTheme.colorScheme.background,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .safeDrawingPadding()          // keep content clear of the system bars (edge-to-edge)
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_launcher_openscale_sync_foreground),
-                    contentDescription = null,
-                    modifier = Modifier.size(96.dp)
-                )
-                Text(
-                    "openScale sync",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    stringResource(R.string.onboarding_welcome_text),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    stringResource(R.string.onboarding_connect_text),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                openScaleService.composeSettings(activity)
-
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    stringResource(R.string.onboarding_services_text),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                syncServiceList.forEach { OnboardingServiceToggle(it) }
-
-                Spacer(Modifier.height(24.dp))
-                Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.onboarding_finish))
-                }
-            }
-        }
-    }
-
-    @Composable
-    fun OnboardingServiceToggle(syncService: ServiceInterface) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(id = syncService.viewModel().getIcon()),
-                contentDescription = null,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                syncService.viewModel().getName(),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f)
-            )
-            Switch(
-                checked = syncService.viewModel().syncEnabled.value,
-                onCheckedChange = { syncService.viewModel().setSyncEnabled(it) }
-            )
         }
     }
 
