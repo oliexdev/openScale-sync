@@ -30,7 +30,6 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.InfluxDbViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.InfluxDbSync
-import com.health.openscale.sync.core.utils.RetryQueue
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.Date
@@ -43,11 +42,12 @@ class InfluxDbService(
 
     private val viewModel = InfluxDbViewModel(sharedPreferences)
     private var influxSync: InfluxDbSync? = null
-    private val retryQueue = RetryQueue(context, "influxdb")
+
+    override val retryQueueKey = "influxdb"
 
     override fun viewModel(): ViewModelInterface = viewModel
 
-    override suspend fun init() {
+    override suspend fun doInit() {
         connectInfluxDb()
     }
 
@@ -85,11 +85,7 @@ class InfluxDbService(
             is SyncResult.Success -> {
                 influxSync = sync
                 clearErrorMessage()
-                val pending = retryQueue.size()
-                drainQueue()
-                val msg = context.getString(R.string.influxdb_connected_text) +
-                    if (pending > 0) " ($pending ${context.getString(R.string.retry_queue_remaining)})" else ""
-                setInfoMessage(msg)
+                setInfoMessage(context.getString(R.string.influxdb_connected_text))
             }
             is SyncResult.Failure -> {
                 influxSync = null
@@ -98,56 +94,23 @@ class InfluxDbService(
         }
     }
 
-    private suspend fun drainQueue() {
-        val sync = influxSync ?: return
-        val ops = retryQueue.peek()
-        if (ops.isEmpty()) return
-        var failedIndex = ops.size
-        for ((index, op) in ops.withIndex()) {
-            val result = when (op.type) {
-                "insert" -> sync.writePoint(op.toMeasurement())
-                "update" -> sync.writePoint(op.toMeasurement())
-                "delete" -> sync.deleteByTimestamp(Date(op.dateMs))
-                "clear"  -> sync.deleteAll()
-                else     -> SyncResult.Success(Unit)
-            }
-            if (result is SyncResult.Failure) {
-                failedIndex = index
-                break
-            }
-        }
-        retryQueue.replace(ops.subList(failedIndex, ops.size))
-    }
-
     private suspend fun withSync(action: suspend (InfluxDbSync) -> SyncResult<Unit>): SyncResult<Unit> {
         if (influxSync == null) connectInfluxDb()
         val sync = influxSync ?: return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, "Not connected")
         return action(sync)
     }
 
-    override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        val result = withSync { it.writePoint(measurement) }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.insert(measurement))
-        return result
-    }
+    override suspend fun doInsert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+        withSync { it.writePoint(measurement) }
 
-    override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        val result = withSync { it.writePoint(measurement) }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.update(measurement))
-        return result
-    }
+    override suspend fun doUpdate(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+        withSync { it.writePoint(measurement) }
 
-    override suspend fun delete(date: Date): SyncResult<Unit> {
-        val result = withSync { it.deleteByTimestamp(date) }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.delete(date))
-        return result
-    }
+    override suspend fun doDelete(date: Date): SyncResult<Unit> =
+        withSync { it.deleteByTimestamp(date) }
 
-    override suspend fun clear(): SyncResult<Unit> {
-        val result = withSync { it.deleteAll() }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.clear())
-        return result
-    }
+    override suspend fun doClear(): SyncResult<Unit> =
+        withSync { it.deleteAll() }
 
     override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
         withSync { it.writePoints(measurements) }

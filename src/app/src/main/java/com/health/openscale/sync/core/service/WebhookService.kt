@@ -25,7 +25,6 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.model.WebhookViewModel
 import com.health.openscale.sync.core.sync.WebhookSync
-import com.health.openscale.sync.core.utils.RetryQueue
 import okhttp3.OkHttpClient
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -37,15 +36,15 @@ class WebhookService(
 
     private val viewModel = WebhookViewModel(sharedPreferences)
     private var webhookSync: WebhookSync? = null
-    private val retryQueue = RetryQueue(context, "webhook")
     private var lastUrl: String? = null
     private var lastAuthHeader: String? = null
 
+    override val retryQueueKey = "webhook"
+
     override fun viewModel(): ViewModelInterface = viewModel
 
-    override suspend fun init() {
+    override suspend fun doInit() {
         initWebhook()
-        drainQueue()
     }
 
     private fun initWebhook() {
@@ -63,27 +62,6 @@ class WebhookService(
         lastAuthHeader = authHeader
     }
 
-    private suspend fun drainQueue() {
-        val sync = webhookSync ?: return
-        val ops = retryQueue.peek()
-        if (ops.isEmpty()) return
-        var failedIndex = ops.size
-        for ((index, op) in ops.withIndex()) {
-            val result = when (op.type) {
-                "insert" -> sync.insert(op.toMeasurement())
-                "update" -> sync.update(op.toMeasurement())
-                "delete" -> sync.delete(Date(op.dateMs))
-                "clear"  -> sync.clear()
-                else     -> SyncResult.Success(Unit)
-            }
-            if (result is SyncResult.Failure) {
-                failedIndex = index
-                break
-            }
-        }
-        retryQueue.replace(ops.subList(failedIndex, ops.size))
-    }
-
     private suspend fun withSync(action: suspend (WebhookSync) -> SyncResult<Unit>): SyncResult<Unit> {
         initWebhook()
         val sync = webhookSync ?: return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, "Not configured")
@@ -92,29 +70,17 @@ class WebhookService(
         return result
     }
 
-    override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        val result = withSync { it.insert(measurement) }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.insert(measurement))
-        return result
-    }
+    override suspend fun doInsert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+        withSync { it.insert(measurement) }
 
-    override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        val result = withSync { it.update(measurement) }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.update(measurement))
-        return result
-    }
+    override suspend fun doUpdate(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+        withSync { it.update(measurement) }
 
-    override suspend fun delete(date: Date): SyncResult<Unit> {
-        val result = withSync { it.delete(date) }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.delete(date))
-        return result
-    }
+    override suspend fun doDelete(date: Date): SyncResult<Unit> =
+        withSync { it.delete(date) }
 
-    override suspend fun clear(): SyncResult<Unit> {
-        val result = withSync { it.clear() }
-        if (result is SyncResult.Failure) retryQueue.enqueue(RetryQueue.clear())
-        return result
-    }
+    override suspend fun doClear(): SyncResult<Unit> =
+        withSync { it.clear() }
 
     override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
         withSync { it.fullSync(measurements) }
@@ -134,11 +100,7 @@ class WebhookService(
         when (result) {
             is SyncResult.Success -> {
                 clearErrorMessage()
-                val pending = retryQueue.size()
-                drainQueue()
-                val msg = context.getString(R.string.webhook_connected_text) +
-                    if (pending > 0) " ($pending ${context.getString(R.string.retry_queue_remaining)})" else ""
-                setInfoMessage(msg)
+                setInfoMessage(context.getString(R.string.webhook_connected_text))
             }
             is SyncResult.Failure -> setErrorMessage(result)
         }

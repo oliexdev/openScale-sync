@@ -67,7 +67,7 @@ class HealthConnectService(
     private val healthConnectPermissionContract =
         PermissionController.createRequestPermissionResultContract()
 
-    override suspend fun init() {
+    override suspend fun doInit() {
         detectHealthConnect()
     }
 
@@ -84,41 +84,25 @@ class HealthConnectService(
         return healthConnectSync.fullSync(measurements)
     }
 
-    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        val permissionResult = checkAllPermissionsGranted()
-        if (permissionResult is SyncResult.Failure) {
-            return permissionResult
+    override suspend fun doInsert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+        checkAllPermissionsGranted().let {
+            if (it is SyncResult.Failure) it else healthConnectSync.insert(measurement)
         }
 
-        return healthConnectSync.insert(measurement)
-    }
-
-    override suspend fun delete(date: Date) : SyncResult<Unit> {
-        val permissionResult = checkAllPermissionsGranted()
-        if (permissionResult is SyncResult.Failure) {
-            return permissionResult
+    override suspend fun doDelete(date: Date) : SyncResult<Unit> =
+        checkAllPermissionsGranted().let {
+            if (it is SyncResult.Failure) it else healthConnectSync.delete(date)
         }
 
-        return healthConnectSync.delete(date)
-    }
-
-    override suspend fun clear() : SyncResult<Unit> {
-        val permissionResult = checkAllPermissionsGranted()
-        if (permissionResult is SyncResult.Failure) {
-            return permissionResult
+    override suspend fun doClear() : SyncResult<Unit> =
+        checkAllPermissionsGranted().let {
+            if (it is SyncResult.Failure) it else healthConnectSync.clear()
         }
 
-        return healthConnectSync.clear()
-    }
-
-    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        val permissionResult = checkAllPermissionsGranted()
-        if (permissionResult is SyncResult.Failure) {
-            return permissionResult
+    override suspend fun doUpdate(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+        checkAllPermissionsGranted().let {
+            if (it is SyncResult.Failure) it else healthConnectSync.update(measurement)
         }
-
-        return healthConnectSync.update(measurement)
-    }
 
     override fun registerActivityResultLauncher(activity: ComponentActivity) {
         healthConnectRequestPermissions = activity.registerForActivityResult(healthConnectPermissionContract) { granted ->

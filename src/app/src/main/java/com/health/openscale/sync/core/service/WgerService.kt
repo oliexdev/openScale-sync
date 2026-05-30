@@ -56,7 +56,7 @@ class WgerService(
     private lateinit var wgerSync : WgerSync
     private lateinit var wgerRetrofit: Retrofit
 
-    override suspend fun init() {
+    override suspend fun doInit() {
         connectWger()
     }
 
@@ -71,37 +71,26 @@ class WgerService(
 
         return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
     }
-    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return wgerSync.insert(measurement)
-        }
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
-    }
+    override suspend fun doInsert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
+            wgerSync.insert(measurement)
+        else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
-    override suspend fun delete(date: Date) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return wgerSync.delete(date)
-        }
+    override suspend fun doDelete(date: Date) : SyncResult<Unit> =
+        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
+            wgerSync.delete(date)
+        else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
-    }
+    override suspend fun doClear() : SyncResult<Unit> =
+        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
+            wgerSync.clear()
+        else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
-    override suspend fun clear() : SyncResult<Unit>  {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return wgerSync.clear()
-        }
-
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
-    }
-
-    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return wgerSync.update(measurement)
-        }
-
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
-    }
+    override suspend fun doUpdate(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
+            wgerSync.update(measurement)
+        else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
     private suspend fun connectWger() {
         if (viewModel.syncEnabled.value) {

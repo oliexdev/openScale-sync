@@ -71,7 +71,7 @@ class MQTTService(
     private lateinit var mqttClient: Mqtt5BlockingClient
     private lateinit var mqttSync: MQTTSync
 
-    override suspend fun init() {
+    override suspend fun doInit() {
         connectMQTT()
     }
 
@@ -132,48 +132,44 @@ class MQTTService(
         }
     }
 
-    override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        return ensureConnectedAndExecute("insert") { syncHandler ->
-            val result = syncHandler.insert(measurement)
-            if (result is SyncResult.Success) {
+    override suspend fun doInsert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+        ensureConnectedAndExecute("insert") { syncHandler ->
+            val r = syncHandler.insert(measurement)
+            if (r is SyncResult.Success) {
                 publishLastMeasurement(measurement)
             }
-            result
+            r
         }
-    }
 
-    override suspend fun delete(date: Date): SyncResult<Unit> {
-        return ensureConnectedAndExecute("delete") { syncHandler ->
-            val result = syncHandler.delete(date)
-            if (result is SyncResult.Success) {
+    override suspend fun doDelete(date: Date): SyncResult<Unit> =
+        ensureConnectedAndExecute("delete") { syncHandler ->
+            val r = syncHandler.delete(date)
+            if (r is SyncResult.Success) {
                 val lastDate = viewModel.lastPublishedDate.value
                 if (lastDate != null && date.time >= lastDate) {
                     publishLastMeasurement(null)
                 }
             }
-            result
+            r
         }
-    }
 
-    override suspend fun clear(): SyncResult<Unit> {
-        return ensureConnectedAndExecute("clear") { syncHandler ->
-            val result = syncHandler.clear()
-            if (result is SyncResult.Success) {
+    override suspend fun doClear(): SyncResult<Unit> =
+        ensureConnectedAndExecute("clear") { syncHandler ->
+            val r = syncHandler.clear()
+            if (r is SyncResult.Success) {
                 publishLastMeasurement(null)
             }
-            result
+            r
         }
-    }
 
-    override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        return ensureConnectedAndExecute("update") { syncHandler ->
-            val result = syncHandler.update(measurement)
-            if (result is SyncResult.Success) {
+    override suspend fun doUpdate(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+        ensureConnectedAndExecute("update") { syncHandler ->
+            val r = syncHandler.update(measurement)
+            if (r is SyncResult.Success) {
                 publishLastMeasurement(measurement)
             }
-            result
+            r
         }
-    }
 
     private fun publishLastMeasurement(measurement: OpenScaleMeasurement?) {
         if (measurement != null) {
