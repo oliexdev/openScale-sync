@@ -66,7 +66,7 @@ platform :android do
         gradle(
             task: "bundle",
             project_dir: 'src/',
-            build_type: "OSS"
+            build_type: "oss"
         )
         upload_to_play_store
     end

@@ -43,20 +43,20 @@ If you found a bug, have an idea how to improve the openScale sync app or have a
 <table>
   <tr>
     <th>
-        <a href="docs/screenshots/openScale_sync_main.png" target="_blank">
-        <img src='docs/screenshots/openScale_sync_main.png' width='200px' alt='image missing' /> </a>
+        <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/1_en-GB.png" target="_blank">
+        <img src='fastlane/metadata/android/en-US/images/phoneScreenshots/1_en-GB.png' width='200px' alt='image missing' /> </a>
     </th>
     <th>
-        <a href="docs/screenshots/openScale_sync_drawer.png" target="_blank">
-        <img src='docs/screenshots/openScale_sync_drawer.png' width='200px' alt='image missing' /> </a>
+        <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/2_en-GB.png" target="_blank">
+        <img src='fastlane/metadata/android/en-US/images/phoneScreenshots/2_en-GB.png' width='200px' alt='image missing' /> </a>
     </th>
     <th>
-        <a href="docs/screenshots/openScale_sync_mqtt.png" target="_blank">
-        <img src='docs/screenshots/openScale_sync_mqtt.png' width='200px' alt='image missing' /> </a>
+        <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/3_en-GB.png" target="_blank">
+        <img src='fastlane/metadata/android/en-US/images/phoneScreenshots/3_en-GB.png' width='200px' alt='image missing' /> </a>
     </th>
     <th>
-        <a href="docs/screenshots/openScale_sync_error.png" target="_blank">
-        <img src='docs/screenshots/openScale_sync_error.png' width='200px' alt='image missing' /> </a>
+        <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/4_en-GB.png" target="_blank">
+        <img src='fastlane/metadata/android/en-US/images/phoneScreenshots/4_en-GB.png' width='200px' alt='image missing' /> </a>
     </th>
   </tr>
 </table>
