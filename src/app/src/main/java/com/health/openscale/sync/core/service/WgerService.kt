@@ -95,19 +95,21 @@ class WgerService(
     private suspend fun connectWger() {
         if (viewModel.syncEnabled.value) {
             try {
+                // Strip control characters (e.g. a trailing newline from a pasted token) —
+                // OkHttp rejects header values containing them and would crash the call thread.
+                val authToken = viewModel.wgerApiToken.value.orEmpty().filterNot { it.isISOControl() }.trim()
+                val baseUrl = (viewModel.wgerServer.value ?: "").trim()
+
                 val client = OkHttpClient.Builder().addInterceptor { chain ->
                     val newRequest = chain.request().newBuilder()
-                        .addHeader(
-                            "Authorization",
-                            "Token " + viewModel.wgerApiToken.value
-                        )
+                        .addHeader("Authorization", "Token $authToken")
                         .build()
                     chain.proceed(newRequest)
                 }.build()
 
                 wgerRetrofit = Retrofit.Builder()
                     .client(client)
-                    .baseUrl(viewModel.wgerServer.value!!)
+                    .baseUrl(baseUrl)
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
 

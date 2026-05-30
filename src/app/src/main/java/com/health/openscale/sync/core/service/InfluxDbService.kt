@@ -61,7 +61,7 @@ class InfluxDbService(
             isV2 = viewModel.isV2.value ?: true,
             org = viewModel.org.value ?: "",
             bucket = viewModel.bucket.value ?: "",
-            token = viewModel.token.value ?: "",
+            token = (viewModel.token.value ?: "").filterNot { it.isISOControl() }.trim(),
             database = viewModel.database.value ?: "",
             dbUsername = viewModel.dbUsername.value ?: "",
             dbPassword = viewModel.dbPassword.value ?: "",

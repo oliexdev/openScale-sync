@@ -23,7 +23,7 @@ default_platform(:android)
 platform :android do 
     versionName = get_version_name(
         gradle_file_path:"src/app/build.gradle",
-        ext_constant_name:"versionName"
+        ext_constant_name:"appVersionName"
     )
 
     versionCode = get_version_name(
@@ -78,7 +78,7 @@ platform :android do
             api_token: ENV["OLIEXDEV_GITHUB_API_TOKEN"],
             name: "openScale sync #{versionName} release",
             tag_name: "v#{versionName}",
-            description: (File.read("metadata/android/en-GB/changelogs/#{versionCode}.txt") rescue "No changelog provided"),
+            description: (File.read("metadata/android/en-US/changelogs/#{versionCode}.txt") rescue "No changelog provided"),
             upload_assets: [ "src/app/build/outputs/apk/release/openScale-sync-#{versionName}-release.apk" ]
         )
     end

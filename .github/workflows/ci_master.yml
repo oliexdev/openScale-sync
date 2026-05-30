@@ -36,7 +36,7 @@ jobs:
       - name: Extract versionName from build.gradle
         id: get_version
         run: |
-          VERSION_NAME=$(grep "versionName \"" app/build.gradle | sed -n 's/.*versionName "\(.*\)".*/\1/p')
+          VERSION_NAME=$(grep 'appVersionName = "' app/build.gradle | sed -n 's/.*appVersionName = "\(.*\)".*/\1/p')
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
       - name: Build APK
         run: ./gradlew assembleDebug

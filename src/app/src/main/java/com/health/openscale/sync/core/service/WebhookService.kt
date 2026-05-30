@@ -48,8 +48,9 @@ class WebhookService(
 
     private fun initWebhook() {
         if (!viewModel.syncEnabled.value) return
-        val url = viewModel.url.value ?: ""
-        val authHeader = viewModel.authHeader.value ?: ""
+        val url = (viewModel.url.value ?: "").trim()
+        // Strip control chars (e.g. a pasted trailing newline) — OkHttp rejects them in header values.
+        val authHeader = (viewModel.authHeader.value ?: "").filterNot { it.isISOControl() }.trim()
         if (url.isBlank()) return
         if (webhookSync != null && url == lastUrl && authHeader == lastAuthHeader) return
         val client = OkHttpClient.Builder()

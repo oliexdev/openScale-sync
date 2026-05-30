@@ -1,0 +1,4 @@
+- New InfluxDB and Webhook sync backends.
+- Redesigned interface (Material 3): a status dashboard that shows every service at a glance.
+- Failed real-time syncs are now retried automatically
+- Pending measurements are shown and a notification appears when a sync couldn't complete.
