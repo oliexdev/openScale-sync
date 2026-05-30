@@ -57,7 +57,7 @@ class OpenScaleProvider (
     private val sharedPreferences: SharedPreferences
 ) {
     private val viewModel: OpenScaleViewModel = OpenScaleViewModel(sharedPreferences)//ViewModelProvider(context)[OpenScaleViewModel::class.java]
-    private val requiredPermissions = sharedPreferences.getString("packageName", "com.health.openscale") + ".READ_WRITE_DATA"
+    private val requiredPermissions = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale") + ".READ_WRITE_DATA"
     private lateinit var requestPermission : ActivityResultLauncher<String>
 
      fun init() {

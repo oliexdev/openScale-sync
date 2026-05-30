@@ -13,6 +13,7 @@ import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.utils.LogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,7 @@ class SyncService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        prefs = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
+        prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
 
         // Ensure at least a debug tree is available
         if (Timber.forest().isEmpty()) {
@@ -89,7 +90,7 @@ class SyncService : Service() {
     private suspend fun onHandleIntent(intent: Intent?) {
         Timber.d("onHandleIntent extras: %s", intent.safeExtras())
 
-        val openScaleUserId = prefs.getInt("selectedOpenScaleUserId", -1)
+        val openScaleUserId = prefs.getInt(OpenScaleViewModel.SELECTED_USER_ID, -1)
         Timber.d("selectedOpenScaleUserId=%d", openScaleUserId)
 
         val mode = intent?.extras?.getString("mode") ?: "none"

@@ -24,6 +24,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.datatypes.OpenScaleUser
+import com.health.openscale.sync.core.model.OpenScaleViewModel
 import timber.log.Timber
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -33,7 +34,7 @@ class OpenScaleDataProvider(
     private val context: Context,
     private val sharedPreferences: SharedPreferences
 ) {
-    private val authority = sharedPreferences.getString("packageName", "com.health.openscale") + ".provider"
+    private val authority = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale") + ".provider"
 
     fun getUsers(): List<OpenScaleUser> {
 
@@ -209,7 +210,7 @@ class OpenScaleDataProvider(
     }
 
     fun getSavedSelectedUserId(): Int? {
-        val userId = sharedPreferences.getInt("selectedOpenScaleUserId", -1)
+        val userId = sharedPreferences.getInt(OpenScaleViewModel.SELECTED_USER_ID, -1)
 
         if (userId == -1) {
             return null
@@ -220,9 +221,9 @@ class OpenScaleDataProvider(
 
     fun saveSelectedUserId(userId: Int?) {
         if (userId != null) {
-            sharedPreferences.edit().putInt("selectedOpenScaleUserId", userId).apply()
+            sharedPreferences.edit().putInt(OpenScaleViewModel.SELECTED_USER_ID, userId).apply()
         } else {
-            sharedPreferences.edit().putInt("selectedOpenScaleUserId", -1).apply()
+            sharedPreferences.edit().putInt(OpenScaleViewModel.SELECTED_USER_ID, -1).apply()
         }
     }
 }

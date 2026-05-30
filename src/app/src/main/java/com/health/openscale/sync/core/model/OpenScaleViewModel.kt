@@ -27,6 +27,13 @@ import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleUser
 
 class OpenScaleViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
+    companion object {
+        /** The app's main settings store. */
+        const val SETTINGS_FILE = "openScaleSyncSettings"
+        const val PACKAGE_NAME = "packageName"
+        const val SELECTED_USER_ID = "selectedOpenScaleUserId"
+    }
+
     private val _openScaleUsers: MutableState<List<OpenScaleUser>> = mutableStateOf(listOf())
     private val _openScaleSelectedUser = MutableLiveData<OpenScaleUser>(null)
 

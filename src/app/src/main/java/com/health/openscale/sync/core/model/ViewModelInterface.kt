@@ -27,11 +27,17 @@ import java.time.Instant
 
 
 abstract class ViewModelInterface(private val sharedPreferences: SharedPreferences) : ViewModel() {
+    companion object {
+        // Per-service flags, suffixed with getName()
+        const val SYNC_ENABLED_PREFIX = "syncEnabled"
+        const val LAST_SYNC_PREFIX = "lastSync"
+    }
+
     private val _connectAvailable = mutableStateOf(false)
     private val _allPermissionsGranted = mutableStateOf(false)
-    private val _syncEnabled = mutableStateOf(sharedPreferences.getBoolean("syncEnabled"+getName(), false))
+    private val _syncEnabled = mutableStateOf(sharedPreferences.getBoolean(SYNC_ENABLED_PREFIX+getName(), false))
     private val _syncRunning = mutableStateOf(false)
-    private val _lastSync = MutableLiveData<Instant>(Instant.ofEpochMilli(sharedPreferences.getLong("lastSync"+getName(), 0L)))
+    private val _lastSync = MutableLiveData<Instant>(Instant.ofEpochMilli(sharedPreferences.getLong(LAST_SYNC_PREFIX+getName(), 0L)))
     private val _errorMessage = MutableLiveData<String?>(null)
     private val _infoMessage = MutableLiveData<String?>(null)
     private val _debugMessage = MutableLiveData<String?>(null)
@@ -55,14 +61,14 @@ abstract class ViewModelInterface(private val sharedPreferences: SharedPreferenc
 
     fun setSyncEnabled(value: Boolean) {
         _syncEnabled.value = value
-        sharedPreferences.edit().putBoolean("syncEnabled"+getName(), value).apply()
+        sharedPreferences.edit().putBoolean(SYNC_ENABLED_PREFIX+getName(), value).apply()
     }
 
     val lastSync: LiveData<Instant> get() = _lastSync
 
     fun setLastSync(value: Instant) {
         _lastSync.value = value
-        sharedPreferences.edit().putLong("lastSync"+getName(), value.toEpochMilli()).apply()
+        sharedPreferences.edit().putLong(LAST_SYNC_PREFIX+getName(), value.toEpochMilli()).apply()
     }
 
     val syncRunning: State<Boolean> get() = _syncRunning

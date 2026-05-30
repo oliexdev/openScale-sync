@@ -23,8 +23,13 @@ import androidx.lifecycle.MutableLiveData
 import com.health.openscale.sync.R
 
 class WgerViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
-    private val _wgerServer = MutableLiveData<String>(sharedPreferences.getString("wger_server", "https://wger.de/api/v2/"))
-    private val _wgerApiToken = MutableLiveData<String>(sharedPreferences.getString("wger_api_token", ""))
+    companion object {
+        const val SERVER = "wger_server"
+        const val API_TOKEN = "wger_api_token"
+    }
+
+    private val _wgerServer = MutableLiveData<String>(sharedPreferences.getString(SERVER, "https://wger.de/api/v2/"))
+    private val _wgerApiToken = MutableLiveData<String>(sharedPreferences.getString(API_TOKEN, ""))
 
     override fun getName(): String {
         return "Wger"
@@ -37,12 +42,12 @@ class WgerViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     val wgerServer: LiveData<String> = _wgerServer
     fun setWgerServer(value: String) {
         this._wgerServer.value = value
-        sharedPreferences.edit().putString("wger_server", value).apply()
+        sharedPreferences.edit().putString(SERVER, value).apply()
     }
 
     val wgerApiToken: LiveData<String> = _wgerApiToken
     fun setWgerApiToken(value: String) {
         this._wgerApiToken.value = value
-        sharedPreferences.edit().putString("wger_api_token", value).apply()
+        sharedPreferences.edit().putString(API_TOKEN, value).apply()
     }
 }

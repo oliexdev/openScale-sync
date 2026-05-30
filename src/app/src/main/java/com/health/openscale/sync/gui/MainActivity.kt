@@ -115,6 +115,7 @@ import com.health.openscale.sync.core.provider.OpenScaleProvider
 import com.health.openscale.sync.core.service.BackendRegistry
 import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
+import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.utils.LogManager
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
@@ -141,9 +142,9 @@ class MainActivity : AppCompatActivity() {
         plant(DebugTree())
 
         currentTitle.value = getString(R.string.title_overview)
-        val sharedPreferences: SharedPreferences = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
+        val sharedPreferences: SharedPreferences = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
 
-        sharedPreferences.edit().putString("packageName", detectPackage()).apply()
+        sharedPreferences.edit().putString(OpenScaleViewModel.PACKAGE_NAME, detectPackage()).apply()
 
         LogManager.init(this, sharedPreferences)
 
@@ -156,7 +157,7 @@ class MainActivity : AppCompatActivity() {
             openScaleService.init()
         }
 
-        if (sharedPreferences.getString("packageName", "null") == "null") {
+        if (sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "null") == "null") {
             openScaleService.viewModel().setConnectAvailable(false)
         } else {
             openScaleService.viewModel().setConnectAvailable(true)
@@ -457,7 +458,7 @@ class MainActivity : AppCompatActivity() {
     @Composable
     fun LoggingCard() {
         val ctx = this@MainActivity
-        val prefs = getSharedPreferences("openScaleSyncSettings", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
         val scope = rememberCoroutineScope()
 
         val loggingEnabled = remember { mutableStateOf(LogManager.isEnabled(prefs)) }
