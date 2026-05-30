@@ -93,7 +93,7 @@ class InfluxDbSync(
         client.newCall(request).execute().use { response ->
             if (response.isSuccessful || response.code == 204) SyncResult.Success(Unit)
             else SyncResult.Failure(SyncResult.ErrorType.API_ERROR,
-                "HTTP ${response.code}: ${response.body?.string()?.take(200)}")
+                "HTTP ${response.code}: ${response.body.string().take(200)}")
         }
     } catch (e: Exception) {
         SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, cause = e)

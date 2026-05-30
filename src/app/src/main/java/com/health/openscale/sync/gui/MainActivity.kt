@@ -327,7 +327,7 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                                              },
-                            colors = TopAppBarDefaults.mediumTopAppBarColors(
+                            colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = MaterialTheme.colorScheme.background
                             )
                         )

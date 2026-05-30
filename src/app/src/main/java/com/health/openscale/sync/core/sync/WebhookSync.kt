@@ -63,7 +63,7 @@ class WebhookSync(
             client.newCall(builder.build()).execute().use { response ->
                 if (response.isSuccessful) SyncResult.Success(Unit)
                 else SyncResult.Failure(SyncResult.ErrorType.API_ERROR,
-                    "HTTP ${response.code}: ${response.body?.string()?.take(200)}")
+                    "HTTP ${response.code}: ${response.body.string().take(200)}")
             }
         } catch (e: Exception) {
             SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, cause = e)
