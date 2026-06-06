@@ -14,6 +14,7 @@
       "name": "Weight",
       "platform": "sensor",
       "device_class": "weight",
+      "state_class": "measurement",
       "unit_of_measurement": "kg",
       "value_template": "{{ value_json.weight | default(none) }}",
       "unique_id": "openscale_weight"
@@ -21,6 +22,7 @@
     "openscale_fat": {
       "name": "Body fat",
       "platform": "sensor",
+      "state_class": "measurement",
       "unit_of_measurement": "%",
       "value_template": "{{ value_json.fat | default(none) }}",
       "unique_id": "openscale_fat"
@@ -28,6 +30,7 @@
     "openscale_muscle": {
       "name": "Muscle",
       "platform": "sensor",
+      "state_class": "measurement",
       "unit_of_measurement": "%",
       "value_template": "{{ value_json.muscle | default(none) }}",
       "unique_id": "openscale_muscle"
@@ -36,6 +39,7 @@
       "name": "Total body water",
       "platform": "sensor",
       "device_class": "moisture",
+      "state_class": "measurement",
       "unit_of_measurement": "%",
       "value_template": "{{ value_json.water | default(none) }}",
       "unique_id": "openscale_water"
