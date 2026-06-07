@@ -16,35 +16,41 @@
       "device_class": "weight",
       "state_class": "measurement",
       "unit_of_measurement": "kg",
+      "suggested_display_precision": 2,
       "value_template": "{{ value_json.weight | default(none) }}",
       "unique_id": "openscale_weight"
     },
     "openscale_fat": {
       "name": "Body fat",
       "platform": "sensor",
+      "icon": "mdi:hamburger",
       "state_class": "measurement",
       "unit_of_measurement": "%",
+      "suggested_display_precision": 1,
       "value_template": "{{ value_json.fat | default(none) }}",
       "unique_id": "openscale_fat"
     },
     "openscale_muscle": {
       "name": "Muscle",
       "platform": "sensor",
+      "icon": "mdi:dumbbell",
       "state_class": "measurement",
       "unit_of_measurement": "%",
+      "suggested_display_precision": 1,
       "value_template": "{{ value_json.muscle | default(none) }}",
       "unique_id": "openscale_muscle"
     },
     "openscale_water": {
       "name": "Total body water",
       "platform": "sensor",
-      "device_class": "moisture",
+      "icon": "mdi:water-percent",
       "state_class": "measurement",
       "unit_of_measurement": "%",
+      "suggested_display_precision": 1,
       "value_template": "{{ value_json.water | default(none) }}",
       "unique_id": "openscale_water"
     },
-    "openscale_measurement_date": {
+    "openscale_date": {
       "name": "Measurement date",
       "platform": "sensor",
       "entity_category": "diagnostic",
@@ -52,9 +58,10 @@
       "value_template": "{{ value_json.date | default(none) }}",
       "unique_id": "openscale_date"
     },
-    "openscale_measurement_id": {
+    "openscale_id": {
       "name": "Measurement id",
       "platform": "sensor",
+      "icon": "mdi:identifier",
       "entity_category": "diagnostic",
       "value_template": "{{ value_json.id | default(none) }}",
       "unique_id": "openscale_id"

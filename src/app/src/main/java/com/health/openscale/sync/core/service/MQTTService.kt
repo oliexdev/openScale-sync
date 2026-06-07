@@ -43,7 +43,9 @@ import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.MQTTViewModel
+import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
+import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.sync.MQTTSync
 import com.health.openscale.sync.gui.components.LocalSnackbar
@@ -72,6 +74,21 @@ class MQTTService(
 
     override fun viewModel(): ViewModelInterface {
         return viewModel
+    }
+
+    // Determines the installed openScale version ("<versionName> (API <apiVersion>)") for the
+    // Home Assistant device page. Returns null if openScale is not installed or not accessible.
+    private fun openScaleVersionInfo(): String? {
+        return try {
+            val packageName = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale")!!
+            val versionName = context.packageManager.getPackageInfo(packageName, 0).versionName
+                ?: return null
+            val apiVersion = OpenScaleDataProvider(context, sharedPreferences).getApiVersion()
+            if (apiVersion != null) "$versionName (API $apiVersion)" else versionName
+        } catch (e: Exception) {
+            Timber.w(e, "MQTTService: Could not determine openScale version for HA discovery.")
+            null
+        }
     }
 
     // Centralized function to ensure client is connected before performing an operation
@@ -239,7 +256,8 @@ class MQTTService(
 
                         // Call the method on the now initialized mqttSync instance
                         val discoveryResult = mqttSync.publishHomeAssistantDiscovery(
-                            jsonPayloadString = jsonPayloadString
+                            jsonPayloadString = jsonPayloadString,
+                            deviceSwVersion = openScaleVersionInfo()
                         )
 
                         if (discoveryResult is SyncResult.Failure) {

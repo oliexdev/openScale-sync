@@ -125,6 +125,34 @@ class OpenScaleDataProvider(
         return false
     }
 
+    fun getApiVersion(): Int? {
+        val metaUri = Uri.Builder()
+            .scheme(ContentResolver.SCHEME_CONTENT)
+            .authority(authority)
+            .path("meta")
+            .build()
+
+        val records = context.contentResolver.query(
+            metaUri,
+            null,
+            null,
+            null,
+            null
+        )
+
+        records.use { record ->
+            while (record?.moveToNext() == true) {
+                for (i in 0 until record.columnCount) {
+                    if (record.getColumnName(i).equals("apiVersion")) {
+                        return record.getInt(i)
+                    }
+                }
+            }
+        }
+
+        return null
+    }
+
     fun getMeasurements(openScaleUser: OpenScaleUser): List<OpenScaleMeasurement> {
         Timber.d("Get measurements for user ${openScaleUser.id}")
         val measurementsUri = Uri.Builder()

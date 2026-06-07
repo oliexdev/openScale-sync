@@ -74,7 +74,8 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     }
 
     fun publishHomeAssistantDiscovery(
-        jsonPayloadString: String
+        jsonPayloadString: String,
+        deviceSwVersion: String? = null
     ): SyncResult<Unit> {
         if (!mqttClient.state.isConnected) {
             Timber.e("MQTTSync: Cannot publish HA discovery, instance client is not connected.")
@@ -101,6 +102,12 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
                     defaultOrigin // Return the newly created object
                 }
             originObject.addProperty("sw_version", currentAppVersion)
+
+            // The device object represents openScale (the data source), so it gets the openScale
+            // version — shown on the HA device page. Omitted if the version could not be determined.
+            if (deviceSwVersion != null) {
+                payloadJson.getAsJsonObject("device")?.addProperty("sw_version", deviceSwVersion)
+            }
 
             val bytes = gson.toJson(payloadJson).toByteArray()
 
