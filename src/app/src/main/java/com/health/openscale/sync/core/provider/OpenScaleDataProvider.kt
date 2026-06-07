@@ -17,8 +17,8 @@
  */
 package com.health.openscale.sync.core.provider
 
+import androidx.core.content.edit
 import android.content.ContentResolver
-import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
@@ -221,22 +221,6 @@ class OpenScaleDataProvider(
         return rounded.toFloat()
     }
 
-    fun insertMeasurement(date: Date, weight: Float, userId: Int) {
-        val measurementsUri = Uri.Builder()
-            .scheme(ContentResolver.SCHEME_CONTENT)
-            .authority(authority)
-            .path("measurements")
-            .build()
-
-        val values = ContentValues()
-
-        values.put("datetime", date.time)
-        values.put("weight", weight)
-        values.put("userId", userId)
-
-        context.contentResolver.insert(measurementsUri, values)
-    }
-
     fun getSavedSelectedUserId(): Int? {
         val userId = sharedPreferences.getInt(OpenScaleViewModel.SELECTED_USER_ID, -1)
 
@@ -249,9 +233,9 @@ class OpenScaleDataProvider(
 
     fun saveSelectedUserId(userId: Int?) {
         if (userId != null) {
-            sharedPreferences.edit().putInt(OpenScaleViewModel.SELECTED_USER_ID, userId).apply()
+            sharedPreferences.edit { putInt(OpenScaleViewModel.SELECTED_USER_ID, userId) }
         } else {
-            sharedPreferences.edit().putInt(OpenScaleViewModel.SELECTED_USER_ID, -1).apply()
+            sharedPreferences.edit { putInt(OpenScaleViewModel.SELECTED_USER_ID, -1) }
         }
     }
 }

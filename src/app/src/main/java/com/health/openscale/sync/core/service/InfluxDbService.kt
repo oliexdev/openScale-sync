@@ -3,7 +3,6 @@ package com.health.openscale.sync.core.service
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -36,7 +35,7 @@ import java.util.concurrent.TimeUnit
 
 class InfluxDbService(
     private val context: Context,
-    private val sharedPreferences: SharedPreferences
+    sharedPreferences: SharedPreferences
 ) : ServiceInterface(context) {
 
     private val viewModel = InfluxDbViewModel(sharedPreferences)
@@ -115,7 +114,7 @@ class InfluxDbService(
         withSync { it.writePoints(measurements) }
 
     @Composable
-    override fun composeSettings(activity: ComponentActivity) {
+    override fun ComposeSettings(activity: ComponentActivity) {
         val showMessage = LocalSnackbar.current
         val connectingState by viewModel.connecting.observeAsState(false)
         DetailScaffold(

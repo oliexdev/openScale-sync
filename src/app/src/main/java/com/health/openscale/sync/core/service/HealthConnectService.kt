@@ -17,23 +17,15 @@
  */
 package com.health.openscale.sync.core.service
 
+import androidx.core.net.toUri
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -54,7 +46,7 @@ import java.util.Date
 
 class HealthConnectService(
     private val context: Context,
-    private val sharedPreferences: SharedPreferences
+    sharedPreferences: SharedPreferences
 ) : ServiceInterface(context) {
     private val viewModel: HealthConnectViewModel = HealthConnectViewModel(sharedPreferences)//ViewModelProvider(context)[HealthConnectViewModel::class.java]
     private lateinit var healthConnectSync : HealthConnectSync
@@ -210,8 +202,6 @@ class HealthConnectService(
             healthConnectClient = null
             return null
         }
-
-        return null
     }
 
     private suspend fun testConnection() {
@@ -222,7 +212,7 @@ class HealthConnectService(
     }
 
     @Composable
-    override fun composeSettings(activity: ComponentActivity) {
+    override fun ComposeSettings(activity: ComponentActivity) {
         val showMessage = LocalSnackbar.current
         val ready = viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value
         DetailScaffold(
@@ -263,15 +253,15 @@ class HealthConnectService(
     private fun openAppStore(activity: ComponentActivity) {
         val packageName = "com.google.android.apps.healthdata"
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            data = Uri.parse("market://details?id=$packageName")
+            data = "market://details?id=$packageName".toUri()
             setPackage("com.google.android.apps.healthdata") // Google Play Store package
         }
 
         try {
             activity.startActivity(intent)
-        } catch (e: Exception) {
-                val webIntent = Intent(Intent.ACTION_VIEW).apply {
-                    data = Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+        } catch (_: Exception) {
+            val webIntent = Intent(Intent.ACTION_VIEW).apply {
+                data = "https://play.google.com/store/apps/details?id=$packageName".toUri()
             }
             activity.startActivity(webIntent)
         }

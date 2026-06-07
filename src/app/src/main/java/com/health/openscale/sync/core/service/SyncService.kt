@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
@@ -27,6 +26,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
 import java.util.Date
+import kotlin.time.Duration.Companion.milliseconds
 
 class SyncService : Service() {
     private lateinit var syncServiceList: List<ServiceInterface>
@@ -39,7 +39,7 @@ class SyncService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
+        prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, MODE_PRIVATE)
 
         // Ensure at least a debug tree is available
         if (Timber.forest().isEmpty()) {
@@ -80,7 +80,7 @@ class SyncService : Service() {
                 }
             }
 
-            delay(500) // small delay to give init a chance to complete
+            delay(500.milliseconds) // small delay to give init a chance to complete
             onHandleIntent(intent)
 
             Timber.d("onStartCommand done in %d ms", (System.nanoTime() - t0) / 1_000_000)
@@ -243,7 +243,7 @@ class SyncService : Service() {
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_launcher_openscale_sync)
             .setContentTitle(getString(R.string.sync_retry_notification_title))
-            .setContentText(getString(R.string.sync_retry_notification_text, pending))
+            .setContentText(resources.getQuantityString(R.plurals.sync_retry_notification_text, pending, pending))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(contentIntent)

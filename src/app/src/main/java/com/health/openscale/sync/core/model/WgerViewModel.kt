@@ -17,6 +17,7 @@
  */
 package com.health.openscale.sync.core.model
 
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -42,12 +43,12 @@ class WgerViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     val wgerServer: LiveData<String> = _wgerServer
     fun setWgerServer(value: String) {
         this._wgerServer.value = value
-        sharedPreferences.edit().putString(SERVER, value).apply()
+        sharedPreferences.edit { putString(SERVER, value) }
     }
 
     val wgerApiToken: LiveData<String> = _wgerApiToken
     fun setWgerApiToken(value: String) {
         this._wgerApiToken.value = value
-        sharedPreferences.edit().putString(API_TOKEN, value).apply()
+        sharedPreferences.edit { putString(API_TOKEN, value) }
     }
 }

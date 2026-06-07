@@ -3,10 +3,7 @@ package com.health.openscale.sync.core.service
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,7 +11,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.health.openscale.sync.R
@@ -30,7 +26,7 @@ import java.util.concurrent.TimeUnit
 
 class WebhookService(
     private val context: Context,
-    private val sharedPreferences: SharedPreferences
+    sharedPreferences: SharedPreferences
 ) : ServiceInterface(context) {
 
     private val viewModel = WebhookViewModel(sharedPreferences)
@@ -107,7 +103,7 @@ class WebhookService(
     }
 
     @Composable
-    override fun composeSettings(activity: ComponentActivity) {
+    override fun ComposeSettings(activity: ComponentActivity) {
         val showMessage = LocalSnackbar.current
         val connectingState by viewModel.connecting.observeAsState(false)
         DetailScaffold(

@@ -46,7 +46,6 @@ import com.health.openscale.sync.core.model.MQTTViewModel
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
-import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.sync.MQTTSync
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SecretOutlinedTextField
@@ -214,14 +213,14 @@ class MQTTService(
             withContext(Dispatchers.IO) {
                 // Step 1: Build the client and assign to the class member
                 // If this fails, mqttClient might remain uninitialized or hold an old instance.
-                val clientBuilder = MqttClient.builder()
+                var clientBuilder = MqttClient.builder()
                     .useMqttVersion5()
                     .serverHost(viewModel.mqttServer.value.toString())
                     .serverPort(viewModel.mqttPort.value.toString().toIntOrNull() ?: 1883)
                     .identifier("openScaleSync")
 
                 if (viewModel.mqttUseSsl.value == true) {
-                    clientBuilder.sslWithDefaultConfig()
+                    clientBuilder = clientBuilder.sslWithDefaultConfig()
                 }
 
                 // Assign directly to the class member.
@@ -293,7 +292,7 @@ class MQTTService(
     }
 
     @Composable
-    override fun composeSettings(activity: ComponentActivity) {
+    override fun ComposeSettings(activity: ComponentActivity) {
         val showMessage = LocalSnackbar.current
         val mqttConnectingState by viewModel.mqttConnecting.observeAsState(false)
         DetailScaffold(

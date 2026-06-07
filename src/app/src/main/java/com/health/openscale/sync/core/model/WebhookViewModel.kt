@@ -1,5 +1,6 @@
 package com.health.openscale.sync.core.model
 
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -19,10 +20,10 @@ class WebhookViewModel(private val sharedPreferences: SharedPreferences) : ViewM
     override fun getIcon(): Int = R.drawable.ic_webhook
 
     val url: LiveData<String> = _url
-    fun setUrl(value: String) { _url.value = value; sharedPreferences.edit().putString(URL, value).apply() }
+    fun setUrl(value: String) { _url.value = value; sharedPreferences.edit { putString(URL, value) } }
 
     val authHeader: LiveData<String> = _authHeader
-    fun setAuthHeader(value: String) { _authHeader.value = value; sharedPreferences.edit().putString(AUTH_HEADER, value).apply() }
+    fun setAuthHeader(value: String) { _authHeader.value = value; sharedPreferences.edit { putString(AUTH_HEADER, value) } }
 
     val connecting: LiveData<Boolean> = _connecting
     fun setConnecting(value: Boolean) { _connecting.value = value }

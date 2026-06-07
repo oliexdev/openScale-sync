@@ -17,11 +17,11 @@
  */
 package com.health.openscale.sync.core.provider
 
+import androidx.core.net.toUri
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager.PERMISSION_GRANTED
-import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -54,7 +54,7 @@ import timber.log.Timber
 class OpenScaleProvider (
     private val context: Context,
     private val openScaleDataService : OpenScaleDataProvider,
-    private val sharedPreferences: SharedPreferences
+    sharedPreferences: SharedPreferences
 ) {
     private val viewModel: OpenScaleViewModel = OpenScaleViewModel(sharedPreferences)//ViewModelProvider(context)[OpenScaleViewModel::class.java]
     private val requiredPermissions = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale") + ".READ_WRITE_DATA"
@@ -108,7 +108,7 @@ class OpenScaleProvider (
             } else {
                 return viewModel.openScaleUsers.value.first()
             }
-        } catch (e: NoSuchElementException) {
+        } catch (_: NoSuchElementException) {
             viewModel.setErrorMessage(context.getString(R.string.open_scale_no_user_found_error))
         }
 
@@ -116,7 +116,7 @@ class OpenScaleProvider (
     }
 
     @Composable
-    fun composeSettings(activity: ComponentActivity) {
+    fun ComposeSettings(activity: ComponentActivity) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -147,15 +147,15 @@ class OpenScaleProvider (
     private fun openAppStore(activity: ComponentActivity) {
         val packageName = "com.health.openscale.pro"
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            data = Uri.parse("market://details?id=$packageName")
+            data = "market://details?id=$packageName".toUri()
             setPackage("com.health.openscale.pro") // Google Play Store package
         }
 
         try {
             activity.startActivity(intent)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             val webIntent = Intent(Intent.ACTION_VIEW).apply {
-                data = Uri.parse("https://github.com/oliexdev/openScale")
+                data = "https://github.com/oliexdev/openScale".toUri()
             }
             activity.startActivity(webIntent)
         }

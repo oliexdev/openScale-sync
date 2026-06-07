@@ -17,6 +17,7 @@
  */
 package com.health.openscale.sync.core.service
 
+import androidx.core.content.edit
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -181,12 +182,12 @@ abstract class ServiceInterface (
         val current = if (op.type == "clear") mutableListOf() else retryPeek().toMutableList()
         current.add(op)
         if (current.size > RETRY_MAX_SIZE) current.subList(0, current.size - RETRY_MAX_SIZE).clear()
-        retryPrefs.edit().putString("queue", retryGson.toJson(current)).apply()
+        retryPrefs.edit { putString("queue", retryGson.toJson(current)) }
     }
 
     @Synchronized
     private fun retryReplace(ops: List<PendingOp>) {
-        retryPrefs.edit().putString("queue", retryGson.toJson(ops)).apply()
+        retryPrefs.edit { putString("queue", retryGson.toJson(ops)) }
     }
 
     // --- Minimal read/action API for the UI (queue stays otherwise private) -------------
@@ -248,7 +249,7 @@ abstract class ServiceInterface (
     }
 
     @Composable
-    abstract fun composeSettings(activity: ComponentActivity)
+    abstract fun ComposeSettings(activity: ComponentActivity)
 
     /**
      * Shared detail-screen layout: a scrollable form area on top (the given [form] fields +

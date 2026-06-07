@@ -19,29 +19,41 @@
     <string name="sync_service_syncing_text">Syncing …</string>
     <string name="sync_service_full_sync_button">Sync with %1$s</string>
     <string name="sync_service_last_sync_never_text">Last sync never</string>
-    <string name="sync_service_last_sync_formatted_text">Last sync %1$s</string>
-    <string name="sync_service_enable_sync_service_button">Enable %1$s sync service</string>
     <string name="service_test_connection">Test connection</string>
     <string name="service_connecting">Connecting …</string>
     <string name="service_connection_successful">✓ Connection successful</string>
     <string name="sync_retry_notification_title">openScale sync</string>
-    <string name="sync_retry_notification_text">%1$d measurements pending — will retry</string>
+    <plurals name="sync_retry_notification_text">
+        <item quantity="one">%1$d measurement pending — will retry</item>
+        <item quantity="other">%1$d measurements pending — will retry</item>
+    </plurals>
 
 
     <string name="dashboard_services_header">Services</string>
     <string name="dashboard_sync_all_button">Sync all services</string>
     <string name="dashboard_status_all_synced">Everything in sync</string>
-    <string name="dashboard_status_pending">%1$d measurements pending</string>
+    <plurals name="dashboard_status_pending">
+        <item quantity="one">%1$d measurement pending</item>
+        <item quantity="other">%1$d measurements pending</item>
+    </plurals>
     <string name="dashboard_status_no_service">No sync service enabled</string>
-    <string name="dashboard_status_attention">Needs attention</string>
     <string name="service_status_off">off</string>
     <string name="service_status_synced">in sync</string>
-    <string name="service_status_pending">%1$d pending</string>
+    <plurals name="service_status_pending">
+        <item quantity="one">%1$d pending</item>
+        <item quantity="other">%1$d pending</item>
+    </plurals>
     <string name="service_status_error">error</string>
-    <string name="retry_pending_title">%1$d measurements waiting to sync</string>
+    <plurals name="retry_pending_title">
+        <item quantity="one">%1$d measurement waiting to sync</item>
+        <item quantity="other">%1$d measurements waiting to sync</item>
+    </plurals>
     <string name="retry_now_button">Retry now</string>
     <string name="retry_discard_button">Discard</string>
-    <string name="sync_service_full_synced_info">%1$d measurements synced</string>
+    <plurals name="sync_service_full_synced_info">
+        <item quantity="one">%1$d measurement synced</item>
+        <item quantity="other">%1$d measurements synced</item>
+    </plurals>
     <string name="sync_service_measurement_inserted_info">%1$f kg (date: %2$s) measurement inserted</string>
     <string name="sync_service_measurement_deleted_info">%1$s measurement deleted</string>
     <string name="sync_service_measurement_cleared_info">all measurements cleared</string>
@@ -62,7 +74,6 @@
     <string name="health_connect_not_available_text">Health Connect not available</string>
     <string name="health_connect_request_permissions_button">Request Health Connect permissions</string>
     <string name="health_connect_permission_not_granted">Health Connect permission not granted</string>
-    <string name="health_connect_not_installed_or_update_required_error">Health Connect not installed or has to be updated</string>
     <string name="health_connect_connected_text">Health Connect connection successful</string>
 
     <string name="mqtt_broker_successful_connected_text">Successfully connected to MQTT broker</string>
@@ -85,7 +96,6 @@
     <string name="realtime_sync_update_required_snackbar_text">For Real-time synchronization, please update openScale to version 2.5.5 or to the latest developer version.</string>
 
     <string name="influxdb_url_title">URL (e.g. http://192.168.1.100:8086)</string>
-    <string name="influxdb_use_v2_title">Use InfluxDB v2 API</string>
     <string name="influxdb_org_title">Organization</string>
     <string name="influxdb_bucket_title">Bucket</string>
     <string name="influxdb_token_title">Token</string>
@@ -100,5 +110,4 @@
     <string name="webhook_auth_header_title">Authorization header (optional)</string>
     <string name="webhook_connected_text">Webhook connection successful</string>
     <string name="webhook_url_empty_error">Webhook URL must not be empty</string>
-    <string name="retry_queue_remaining">pending in queue</string>
 </resources>

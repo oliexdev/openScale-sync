@@ -17,8 +17,7 @@
  */
 package com.health.openscale.sync.gui
 
-import android.app.Activity
-import android.content.Context
+import androidx.core.content.edit
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
@@ -31,7 +30,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -72,9 +70,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
@@ -90,10 +86,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Color.Companion.Blue
 import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -105,7 +100,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
-import androidx.navigation.activity
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -144,9 +138,9 @@ class MainActivity : AppCompatActivity() {
         plant(DebugTree())
 
         currentTitle.value = getString(R.string.title_overview)
-        val sharedPreferences: SharedPreferences = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
+        val sharedPreferences: SharedPreferences = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, MODE_PRIVATE)
 
-        sharedPreferences.edit().putString(OpenScaleViewModel.PACKAGE_NAME, detectPackage()).apply()
+        sharedPreferences.edit { putString(OpenScaleViewModel.PACKAGE_NAME, detectPackage()) }
 
         LogManager.init(this, sharedPreferences)
 
@@ -182,7 +176,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         saveLogLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
+            if (result.resultCode == RESULT_OK) {
                 val uri = result.data?.data
                 if (uri == null) {
                     lifecycleScope.launch {
@@ -221,7 +215,7 @@ class MainActivity : AppCompatActivity() {
 
 
         setContent {
-            composeMainView(this)
+            ComposeMainView(this)
         }
     }
 
@@ -258,14 +252,14 @@ class MainActivity : AppCompatActivity() {
         return try {
             packageManager.getPackageInfo(packageName, 0)
             true
-        } catch (e: PackageManager.NameNotFoundException) {
+        } catch (_: PackageManager.NameNotFoundException) {
             false
         }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    private fun composeMainView(activity: ComponentActivity) {
+    private fun ComposeMainView(activity: ComponentActivity) {
         val snackbarHostState = remember { SnackbarHostState() }
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
@@ -299,7 +293,7 @@ class MainActivity : AppCompatActivity() {
             ) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
-                drawerContent = { navigationDrawerSheet(drawerState, scope) }
+                drawerContent = { NavigationDrawerSheet(drawerState, scope) }
             ) {
                 Scaffold(
                     topBar = {
@@ -392,7 +386,7 @@ class MainActivity : AppCompatActivity() {
                                 composable(
                                     syncService.viewModel().getName()
                                 ) {
-                                    syncService.composeSettings(activity)
+                                    syncService.ComposeSettings(activity)
                                     currentTitle.value = syncService.viewModel().getName()
                                 }
                                 syncService.navController = navController
@@ -420,7 +414,7 @@ class MainActivity : AppCompatActivity() {
                     .padding(16.dp)
             ) {
                 // Source: openScale connection + user selector
-                openScaleService.composeSettings(activity)
+                openScaleService.ComposeSettings(activity)
 
                 Spacer(Modifier.height(8.dp))
                 OverallStatusBanner()
@@ -449,7 +443,7 @@ class MainActivity : AppCompatActivity() {
             enabled.isEmpty() ->
                 stringResource(R.string.dashboard_status_no_service) to MaterialTheme.colorScheme.onSurfaceVariant
             pending > 0 ->
-                stringResource(R.string.dashboard_status_pending, pending) to MaterialTheme.colorScheme.error
+                pluralStringResource(R.plurals.dashboard_status_pending, pending, pending) to MaterialTheme.colorScheme.error
             else ->
                 stringResource(R.string.dashboard_status_all_synced) to MaterialTheme.colorScheme.primary
         }
@@ -497,7 +491,7 @@ class MainActivity : AppCompatActivity() {
                         !enabled ->
                             stringResource(R.string.service_status_off) to MaterialTheme.colorScheme.onSurfaceVariant
                         pending > 0 ->
-                            stringResource(R.string.service_status_pending, pending) to MaterialTheme.colorScheme.error
+                            pluralStringResource(R.plurals.service_status_pending, pending, pending) to MaterialTheme.colorScheme.error
                         !errorMessage.isNullOrEmpty() ->
                             stringResource(R.string.service_status_error) to MaterialTheme.colorScheme.error
                         lastSync != null && lastSync?.toEpochMilli() != 0L -> {
@@ -540,7 +534,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                         running = false
-                        showMessage(getString(R.string.sync_service_full_synced_info, measurements.size))
+                        showMessage(resources.getQuantityString(R.plurals.sync_service_full_synced_info, measurements.size, measurements.size))
                     }
                 }
             },
@@ -616,7 +610,7 @@ class MainActivity : AppCompatActivity() {
     @Composable
     fun LoggingCard() {
         val ctx = this@MainActivity
-        val prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, MODE_PRIVATE)
         val scope = rememberCoroutineScope()
 
         val loggingEnabled = remember { mutableStateOf(LogManager.isEnabled(prefs)) }
@@ -683,7 +677,7 @@ class MainActivity : AppCompatActivity() {
 
 
     @Composable
-    fun navigationDrawerSheet(drawerState : DrawerState, scope : CoroutineScope) {
+    fun NavigationDrawerSheet(drawerState : DrawerState, scope : CoroutineScope) {
         ModalDrawerSheet(
             drawerContainerColor = MaterialTheme.colorScheme.background
         ) {

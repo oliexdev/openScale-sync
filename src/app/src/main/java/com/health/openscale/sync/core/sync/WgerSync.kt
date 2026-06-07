@@ -18,7 +18,6 @@
 package com.health.openscale.sync.core.sync
 
 
-import android.text.format.DateFormat
 import com.google.gson.annotations.SerializedName
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.service.SyncResult
@@ -35,11 +34,13 @@ import retrofit2.http.Query
 import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import java.util.TimeZone
 
-class WgerSync(private val wgerRetrofit: Retrofit) : SyncInterface() {
+class WgerSync(wgerRetrofit: Retrofit) : SyncInterface() {
     private val wgerApi : WgerApi = wgerRetrofit.create(WgerApi::class.java)
-    private val wgerDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX").apply { timeZone = TimeZone.getDefault() }
+    // Locale.US: API wire format — must stay ASCII regardless of the device locale
+    private val wgerDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).apply { timeZone = TimeZone.getDefault() }
 
     suspend fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         var failureCount = 0

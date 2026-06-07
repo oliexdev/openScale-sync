@@ -17,6 +17,7 @@
  */
 package com.health.openscale.sync.core.model
 
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
@@ -36,7 +37,6 @@ abstract class ViewModelInterface(private val sharedPreferences: SharedPreferenc
     private val _connectAvailable = mutableStateOf(false)
     private val _allPermissionsGranted = mutableStateOf(false)
     private val _syncEnabled = mutableStateOf(sharedPreferences.getBoolean(SYNC_ENABLED_PREFIX+getName(), false))
-    private val _syncRunning = mutableStateOf(false)
     private val _lastSync = MutableLiveData<Instant>(Instant.ofEpochMilli(sharedPreferences.getLong(LAST_SYNC_PREFIX+getName(), 0L)))
     private val _errorMessage = MutableLiveData<String?>(null)
     private val _infoMessage = MutableLiveData<String?>(null)
@@ -61,20 +61,14 @@ abstract class ViewModelInterface(private val sharedPreferences: SharedPreferenc
 
     fun setSyncEnabled(value: Boolean) {
         _syncEnabled.value = value
-        sharedPreferences.edit().putBoolean(SYNC_ENABLED_PREFIX+getName(), value).apply()
+        sharedPreferences.edit { putBoolean(SYNC_ENABLED_PREFIX+getName(), value) }
     }
 
     val lastSync: LiveData<Instant> get() = _lastSync
 
     fun setLastSync(value: Instant) {
         _lastSync.value = value
-        sharedPreferences.edit().putLong(LAST_SYNC_PREFIX+getName(), value.toEpochMilli()).apply()
-    }
-
-    val syncRunning: State<Boolean> get() = _syncRunning
-
-    fun setSyncRunning(value: Boolean) {
-        this._syncRunning.value = value
+        sharedPreferences.edit { putLong(LAST_SYNC_PREFIX+getName(), value.toEpochMilli()) }
     }
 
     val errorMessage: LiveData<String?> = _errorMessage
@@ -82,12 +76,10 @@ abstract class ViewModelInterface(private val sharedPreferences: SharedPreferenc
         this._errorMessage.value = value
     }
 
-    val infoMessage: LiveData<String?> = _infoMessage
     fun setInfoMessage(value: String) {
         this._infoMessage.value = value
     }
 
-    val debugMessage: LiveData<String?> = _debugMessage
     fun setDebugMessage(value: String) {
         this._debugMessage.value = value
     }

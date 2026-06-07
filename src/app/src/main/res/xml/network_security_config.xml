@@ -1,9 +1,13 @@
 <!-- res/xml/network_security_config.xml -->
-<network-security-config>
+<!-- Deliberately permissive: this app targets self-hosting users who run MQTT/InfluxDB/
+     Webhook endpoints on their local network — often plain HTTP or TLS with a private CA
+     installed as a user certificate. Hence cleartext and user certs stay enabled. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="InsecureBaseConfiguration">
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
+            <certificates src="user" tools:ignore="AcceptsUserCertificates" />
         </trust-anchors>
     </base-config>
 </network-security-config>

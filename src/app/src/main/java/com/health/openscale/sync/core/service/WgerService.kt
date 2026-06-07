@@ -20,10 +20,7 @@ package com.health.openscale.sync.core.service
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,7 +30,6 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
@@ -50,7 +46,7 @@ import java.util.Date
 
 class WgerService(
     private val context: Context,
-    private val sharedPreferences: SharedPreferences
+    sharedPreferences: SharedPreferences
 ) : ServiceInterface(context) {
     private val viewModel: WgerViewModel = WgerViewModel(sharedPreferences)//ViewModelProvider(context)[MQTTViewModel::class.java]
     private lateinit var wgerSync : WgerSync
@@ -132,7 +128,7 @@ class WgerService(
     }
 
     @Composable
-    override fun composeSettings(activity: ComponentActivity) {
+    override fun ComposeSettings(activity: ComponentActivity) {
         val showMessage = LocalSnackbar.current
         DetailScaffold(
             activity = activity,

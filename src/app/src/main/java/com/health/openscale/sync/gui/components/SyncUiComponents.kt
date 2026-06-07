@@ -1,6 +1,5 @@
 package com.health.openscale.sync.gui.components
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,6 +31,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -148,7 +149,7 @@ fun SyncActionButtons(
                 fullSyncing = true
                 activity.lifecycleScope.launch {
                     val count = service.runFullSync()
-                    if (count != null) showMessage(activity.getString(R.string.sync_service_full_synced_info, count))
+                    if (count != null) showMessage(activity.resources.getQuantityString(R.plurals.sync_service_full_synced_info, count, count))
                     fullSyncing = false
                 }
             }
@@ -176,12 +177,12 @@ fun SyncActionButtons(
 /** Card shown when a backend has failed ops waiting in its retry queue. */
 @Composable
 fun PendingQueueCard(service: ServiceInterface, activity: ComponentActivity) {
-    var pending by remember { mutableStateOf(service.pendingRetryCount()) }
+    var pending by remember { mutableIntStateOf(service.pendingRetryCount()) }
     if (pending <= 0) return
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                stringResource(R.string.retry_pending_title, pending),
+                pluralStringResource(R.plurals.retry_pending_title, pending, pending),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.error
             )

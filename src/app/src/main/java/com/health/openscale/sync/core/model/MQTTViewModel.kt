@@ -17,6 +17,7 @@
  */
 package com.health.openscale.sync.core.model
 
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -55,25 +56,25 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     val mqttServer: LiveData<String> = _mqttServer
     fun setMQTTServer(value: String) {
         this._mqttServer.value = value
-        sharedPreferences.edit().putString(SERVER, value).apply()
+        sharedPreferences.edit { putString(SERVER, value) }
     }
 
     val mqttPort: LiveData<Int> = _mqttPort
     fun setMQTTPort(value: Int) {
         this._mqttPort.value = value
-        sharedPreferences.edit().putInt(PORT, value).apply()
+        sharedPreferences.edit { putInt(PORT, value) }
     }
 
     val mqttUsername: LiveData<String> = _mqttUsername
     fun setMQTTUsername(value: String) {
         this._mqttUsername.value = value
-        sharedPreferences.edit().putString(USERNAME, value).apply()
+        sharedPreferences.edit { putString(USERNAME, value) }
     }
 
     val mqttPassword: LiveData<String> = _mqttPassword
     fun setMQTTPassword(value: String) {
         this._mqttPassword.value = value
-        sharedPreferences.edit().putString(PASSWORD, value).apply()
+        sharedPreferences.edit { putString(PASSWORD, value) }
     }
 
     val mqttConnecting: LiveData<Boolean> = _mqttConnecting
@@ -85,20 +86,20 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
 
     fun setMqttUseSsl(useSsl: Boolean) {
         _mqttUseSsl.value = useSsl
-        sharedPreferences.edit().putBoolean(USE_SSL, useSsl).apply()
+        sharedPreferences.edit { putBoolean(USE_SSL, useSsl) }
     }
 
     val mqttUseDiscovery: LiveData<Boolean> = _mqttUseDiscovery
 
     fun setMqttUseDiscovery(useDiscovery: Boolean) {
         _mqttUseDiscovery.value = useDiscovery
-        sharedPreferences.edit().putBoolean(USE_DISCOVERY, useDiscovery).apply()
+        sharedPreferences.edit { putBoolean(USE_DISCOVERY, useDiscovery) }
     }
 
     val lastPublishedDate: LiveData<Long> = _lastPublishedDate
 
     fun setLastPublishedDate(date: Long) {
         _lastPublishedDate.value = date
-        sharedPreferences.edit().putLong(LAST_PUBLISHED_DATE, date).apply()
+        sharedPreferences.edit { putLong(LAST_PUBLISHED_DATE, date) }
     }
 }

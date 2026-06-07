@@ -1,25 +1,31 @@
 package com.health.openscale.sync.core.utils
 
+import androidx.core.content.edit
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
 import timber.log.Timber
 import java.io.File
-import java.io.FileOutputStream
 import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class FileLoggingTree(
-    private val context: Context,
+    context: Context,
     private val maxSizeBytes: Long = 10L * 1024L * 1024L // 10 MB
 ) : Timber.Tree() {
 
+    // Only ever keep the application context so instances are safe to hold in static fields
+    private val context: Context = context.applicationContext
+
     companion object {
         const val BASE_NAME = "openscale_sync_log.txt"
-        private val TS_HUMAN = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+        private fun timestamp(): String =
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
     }
 
     private val lock = Any()
@@ -31,7 +37,7 @@ class FileLoggingTree(
     }
 
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        val ts = TS_HUMAN.format(Date())
+        val ts = timestamp()
         val lvl = when (priority) {
             Log.VERBOSE -> "VERBOSE"
             Log.DEBUG   -> "DEBUG"
@@ -64,7 +70,7 @@ class FileLoggingTree(
         val currentBytes = if (logFile.exists()) logFile.length() else 0L
         if (currentBytes + incomingBytes <= maxSizeBytes) return
 
-        val now = TS_HUMAN.format(Date())
+        val now = timestamp()
         val note = "NOTE: Previous log exceeded ${formatBytes(maxSizeBytes)} at $now; started new log.\n\n"
 
         if (logFile.exists()) runCatching { logFile.delete() }
@@ -84,7 +90,7 @@ class FileLoggingTree(
         val appName = context.applicationInfo.loadLabel(pm).toString()
         val versionName = info.versionName ?: "?"
         val versionCode = info.longVersionCode
-        val started = TS_HUMAN.format(Date())
+        val started = timestamp()
         val device = "${Build.MANUFACTURER} ${Build.MODEL}"
         val androidVersion = "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"
 
@@ -111,6 +117,9 @@ class FileLoggingTree(
 
 object LogManager {
     private const val PREF_KEY = "loggingEnabled"
+
+    // FileLoggingTree only retains the application context (see its constructor), so this cannot leak
+    @SuppressLint("StaticFieldLeak")
     private var fileTree: FileLoggingTree? = null
     private const val MAX_SIZE_BYTES: Long = 10L * 1024L * 1024L // 10 MB
     private val lock = Any()
@@ -125,7 +134,7 @@ object LogManager {
     fun setEnabled(context: Context, prefs: SharedPreferences, enabled: Boolean) {
         synchronized(lock) {
             val wasEnabled = isEnabled(prefs)
-            prefs.edit().putBoolean(PREF_KEY, enabled).apply()
+            prefs.edit { putBoolean(PREF_KEY, enabled) }
 
             if (enabled && !wasEnabled) {
                 // Transition off -> on: fresh file
@@ -137,14 +146,13 @@ object LogManager {
                 // Transition on -> off
                 disableInternal()
                 Timber.i("Logging disabled")
-            } else {
             }
         }
     }
 
     private fun enableInternal(context: Context) {
         if (fileTree == null) {
-            fileTree = FileLoggingTree(context.applicationContext, MAX_SIZE_BYTES)
+            fileTree = FileLoggingTree(context, MAX_SIZE_BYTES)
             Timber.plant(fileTree!!)
         }
     }

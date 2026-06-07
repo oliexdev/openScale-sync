@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -17,13 +19,13 @@ android {
         targetSdkVersion 36
         versionCode 15
         versionName appVersionName
-        multiDexEnabled true
+        multiDexEnabled = true
     }
 
     buildFeatures {
-        viewBinding true
-        buildConfig true
-        compose true
+        viewBinding = true
+        buildConfig = true
+        compose = true
     }
 
     dependenciesInfo {
@@ -37,8 +39,8 @@ android {
             def keystoreProperties = new Properties()
             try {
                 keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-            } catch (FileNotFoundException e) {
-                keystoreProperties = null;
+            } catch (FileNotFoundException ignored) {
+                keystoreProperties = null
             }
 
             if (keystoreProperties != null) {
@@ -55,8 +57,8 @@ android {
             try {
                 keystoreOSSProperties.load(new FileInputStream(keystoreOSSPropertiesFile))
             }
-            catch (FileNotFoundException e) {
-                keystoreOSSProperties = null;
+            catch (FileNotFoundException ignored) {
+                keystoreOSSProperties = null
             }
 
             if (keystoreOSSProperties != null) {
@@ -75,23 +77,23 @@ android {
         }
 
         release {
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled = true
+            shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            signingConfig = signingConfigs.release
         }
 
         oss {
-            applicationIdSuffix ".oss"
-            versionNameSuffix "-oss"
-            minifyEnabled true
-            shrinkResources true
+            applicationIdSuffix = ".oss"
+            versionNameSuffix = "-oss"
+            minifyEnabled = true
+            shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.oss
+            signingConfig = signingConfigs.oss
         }
     }
 
-    namespace 'com.health.openscale.sync'
+    namespace = 'com.health.openscale.sync'
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -102,13 +104,18 @@ android {
         resources {
             excludes += ['META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties']
         }
+        jniLibs {
+            // androidx.graphics.path ships an unstrippable .so; keep it as-is to
+            // silence the "Unable to strip" build notice (no NDK required).
+            keepDebugSymbols += ['**/libandroidx.graphics.path.so']
+        }
     }
 
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 

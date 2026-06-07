@@ -1,5 +1,6 @@
 package com.health.openscale.sync.core.model
 
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -33,31 +34,31 @@ class InfluxDbViewModel(private val sharedPreferences: SharedPreferences) : View
     override fun getIcon(): Int = R.drawable.ic_influxdb
 
     val url: LiveData<String> = _url
-    fun setUrl(value: String) { _url.value = value; sharedPreferences.edit().putString(URL, value).apply() }
+    fun setUrl(value: String) { _url.value = value; sharedPreferences.edit { putString(URL, value) } }
 
     val isV2: LiveData<Boolean> = _isV2
-    fun setIsV2(value: Boolean) { _isV2.value = value; sharedPreferences.edit().putBoolean(IS_V2, value).apply() }
+    fun setIsV2(value: Boolean) { _isV2.value = value; sharedPreferences.edit { putBoolean(IS_V2, value) } }
 
     val org: LiveData<String> = _org
-    fun setOrg(value: String) { _org.value = value; sharedPreferences.edit().putString(ORG, value).apply() }
+    fun setOrg(value: String) { _org.value = value; sharedPreferences.edit { putString(ORG, value) } }
 
     val bucket: LiveData<String> = _bucket
-    fun setBucket(value: String) { _bucket.value = value; sharedPreferences.edit().putString(BUCKET, value).apply() }
+    fun setBucket(value: String) { _bucket.value = value; sharedPreferences.edit { putString(BUCKET, value) } }
 
     val token: LiveData<String> = _token
-    fun setToken(value: String) { _token.value = value; sharedPreferences.edit().putString(TOKEN, value).apply() }
+    fun setToken(value: String) { _token.value = value; sharedPreferences.edit { putString(TOKEN, value) } }
 
     val database: LiveData<String> = _database
-    fun setDatabase(value: String) { _database.value = value; sharedPreferences.edit().putString(DATABASE, value).apply() }
+    fun setDatabase(value: String) { _database.value = value; sharedPreferences.edit { putString(DATABASE, value) } }
 
     val dbUsername: LiveData<String> = _dbUsername
-    fun setDbUsername(value: String) { _dbUsername.value = value; sharedPreferences.edit().putString(USERNAME, value).apply() }
+    fun setDbUsername(value: String) { _dbUsername.value = value; sharedPreferences.edit { putString(USERNAME, value) } }
 
     val dbPassword: LiveData<String> = _dbPassword
-    fun setDbPassword(value: String) { _dbPassword.value = value; sharedPreferences.edit().putString(PASSWORD, value).apply() }
+    fun setDbPassword(value: String) { _dbPassword.value = value; sharedPreferences.edit { putString(PASSWORD, value) } }
 
     val measurement: LiveData<String> = _measurement
-    fun setMeasurement(value: String) { _measurement.value = value; sharedPreferences.edit().putString(MEASUREMENT, value).apply() }
+    fun setMeasurement(value: String) { _measurement.value = value; sharedPreferences.edit { putString(MEASUREMENT, value) } }
 
     val connecting: LiveData<Boolean> = _connecting
     fun setConnecting(value: Boolean) { _connecting.value = value }
