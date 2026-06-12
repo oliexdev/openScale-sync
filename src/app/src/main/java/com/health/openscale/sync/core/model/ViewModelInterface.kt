@@ -27,11 +27,21 @@ import androidx.lifecycle.ViewModel
 import java.time.Instant
 
 
+/** Per-backend sync direction. Only inbound-capable backends (see ServiceInterface.supportsInbound)
+ *  offer IMPORT/BOTH; everything else stays EXPORT (the default, = previous behaviour). */
+// Declaration order drives the segmented-control order in SyncDirectionSelector (Both first).
+enum class SyncDirection { BOTH, EXPORT, IMPORT }
+
 abstract class ViewModelInterface(private val sharedPreferences: SharedPreferences) : ViewModel() {
     companion object {
         // Per-service flags, suffixed with getName()
         const val SYNC_ENABLED_PREFIX = "syncEnabled"
         const val LAST_SYNC_PREFIX = "lastSync"
+        // Per-service selected openScale user (single-user backends like HealthConnect/Wger).
+        // -1 = not chosen yet. Multi-user backends ignore this and sync all users.
+        const val SELECTED_USER_PREFIX = "selectedUser"
+        // Per-service sync direction (EXPORT default). Only meaningful for inbound-capable backends.
+        const val SYNC_DIRECTION_PREFIX = "syncDirection"
     }
 
     private val _connectAvailable = mutableStateOf(false)
@@ -69,6 +79,38 @@ abstract class ViewModelInterface(private val sharedPreferences: SharedPreferenc
     fun setLastSync(value: Instant) {
         _lastSync.value = value
         sharedPreferences.edit { putLong(LAST_SYNC_PREFIX+getName(), value.toEpochMilli()) }
+    }
+
+    // Per-service value if chosen; otherwise fall back to the (legacy) global selection so existing
+    // single-user setups keep working until the user picks a per-service user.
+    private val _selectedUserId = mutableStateOf(
+        sharedPreferences.getInt(SELECTED_USER_PREFIX + getName(), -1).let { perService ->
+            if (perService != -1) perService
+            else sharedPreferences.getInt(OpenScaleViewModel.SELECTED_USER_ID, -1)
+        }
+    )
+
+    /** Per-service selected openScale user id, or -1 if not chosen. Only meaningful for
+     *  single-user backends; multi-user backends ignore it (see ServiceInterface.isMultiUser). */
+    val selectedUserId: State<Int> get() = _selectedUserId
+
+    fun setSelectedUserId(value: Int) {
+        _selectedUserId.value = value
+        sharedPreferences.edit { putInt(SELECTED_USER_PREFIX+getName(), value) }
+    }
+
+    private val _syncDirection = mutableStateOf(
+        runCatching {
+            SyncDirection.valueOf(sharedPreferences.getString(SYNC_DIRECTION_PREFIX + getName(), null) ?: SyncDirection.BOTH.name)
+        }.getOrDefault(SyncDirection.BOTH)
+    )
+
+    /** Per-service sync direction (EXPORT default). Inbound-capable backends may set IMPORT/BOTH. */
+    val syncDirection: State<SyncDirection> get() = _syncDirection
+
+    fun setSyncDirection(value: SyncDirection) {
+        _syncDirection.value = value
+        sharedPreferences.edit { putString(SYNC_DIRECTION_PREFIX + getName(), value.name) }
     }
 
     val errorMessage: LiveData<String?> = _errorMessage

@@ -49,6 +49,9 @@ import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.sync.MQTTSync
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SecretOutlinedTextField
+import com.health.openscale.sync.gui.components.SyncDirectionSelector
+import com.health.openscale.sync.gui.components.UserScopeSection
+import org.json.JSONObject
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import kotlinx.coroutines.Dispatchers
@@ -67,12 +70,51 @@ class MQTTService(
     private lateinit var mqttClient: Mqtt5BlockingClient
     private lateinit var mqttSync: MQTTSync
 
-    override suspend fun doInit() {
+    override suspend fun connect() {
         connectMQTT()
     }
 
     override fun viewModel(): ViewModelInterface {
         return viewModel
+    }
+
+    // MQTT encodes the stable userId in the topic path (username travels in the JSON payload) → multi-user.
+    override val isMultiUser: Boolean get() = true
+
+    // Inbound: drain retained messages on openScaleSync/inbound/<userId>/… → bidirectional.
+    override val supportsInbound: Boolean get() = true
+
+    /**
+     * Inbound source: subscribe to the inbound topic tree and drain currently available (retained)
+     * measurement messages. Each message is a JSON `{date, weight[, fat, water, values, userId]}`;
+     * the target user comes from the topic segment `openScaleSync/inbound/<userId>/…` or the payload.
+     */
+    override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
+        if (!viewModel.syncEnabled.value) return emptyList()
+        if (!::mqttClient.isInitialized || !mqttClient.state.isConnected) connectMQTT()
+        if (!::mqttSync.isInitialized || !mqttClient.state.isConnected) {
+            throw IllegalStateException("MQTT broker not connected")
+        }
+        return mqttSync.drainInboundMessages("openScaleSync/inbound/#", 1500)
+            .mapNotNull { (topic, payload) -> parseInboundMessage(topic, payload) }
+    }
+
+    private fun parseInboundMessage(topic: String, payload: String): InboundMeasurement? {
+        if (payload.isBlank()) return null
+        return runCatching {
+            val topicUser = topic.split("/").getOrNull(2)?.toIntOrNull()
+            val o = JSONObject(payload)
+            val date = o.optLong("date", 0L)
+            if (date == 0L || !o.has("weight")) return@runCatching null
+            InboundMeasurement(
+                timeMs = date,
+                weightKg = o.getDouble("weight").toFloat(),
+                fatPct = if (o.has("fat")) o.getDouble("fat").toFloat() else null,
+                waterPct = if (o.has("water")) o.getDouble("water").toFloat() else null,
+                valuesJson = if (o.has("values")) o.getJSONArray("values").toString() else null,
+                userId = if (o.has("userId")) o.optInt("userId") else topicUser
+            )
+        }.getOrNull()
     }
 
     // Determines the installed openScale version ("<versionName> (API <apiVersion>)") for the
@@ -133,17 +175,29 @@ class MQTTService(
         return action(mqttSync)
     }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> {
-        return ensureConnectedAndExecute("fullSync") {syncHandler ->
+    // MQTT publishes the whole set to the per-user "all" topic (like a full sync) and refreshes the
+    // retained "last" topic with the newest. Both insert and update batches take this route.
+    override suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        bulkPublish(measurements)
+
+    override suspend fun updateAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        bulkPublish(measurements)
+
+    private suspend fun bulkPublish(measurements: List<OpenScaleMeasurement>): BulkResult {
+        val r = ensureConnectedAndExecute("reconcile") { syncHandler ->
             val result = syncHandler.fullSync(measurements)
             if (result is SyncResult.Success) {
                 measurements.maxByOrNull { it.date }?.let { publishLastMeasurement(it) }
             }
             result
         }
+        return when (r) {
+            is SyncResult.Success -> BulkResult(measurements)
+            is SyncResult.Failure -> BulkResult(emptyList(), r)
+        }
     }
 
-    override suspend fun doInsert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+    override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
         ensureConnectedAndExecute("insert") { syncHandler ->
             val r = syncHandler.insert(measurement)
             if (r is SyncResult.Success) {
@@ -152,28 +206,30 @@ class MQTTService(
             r
         }
 
-    override suspend fun doDelete(date: Date): SyncResult<Unit> =
+    override suspend fun delete(userId: Int, date: Date): SyncResult<Unit> =
         ensureConnectedAndExecute("delete") { syncHandler ->
-            val r = syncHandler.delete(date)
+            val r = syncHandler.delete(userId, date)
             if (r is SyncResult.Success) {
                 val lastDate = viewModel.lastPublishedDate.value
                 if (lastDate != null && date.time >= lastDate) {
-                    publishLastMeasurement(null)
+                    syncHandler.clearLastMeasurement(userId)
+                    viewModel.setLastPublishedDate(0L)
                 }
             }
             r
         }
 
-    override suspend fun doClear(): SyncResult<Unit> =
+    override suspend fun clear(userId: Int): SyncResult<Unit> =
         ensureConnectedAndExecute("clear") { syncHandler ->
-            val r = syncHandler.clear()
+            val r = syncHandler.clear(userId)
             if (r is SyncResult.Success) {
-                publishLastMeasurement(null)
+                syncHandler.clearLastMeasurement(userId)
+                viewModel.setLastPublishedDate(0L)
             }
             r
         }
 
-    override suspend fun doUpdate(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+    override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> =
         ensureConnectedAndExecute("update") { syncHandler ->
             val r = syncHandler.update(measurement)
             if (r is SyncResult.Success) {
@@ -253,15 +309,20 @@ class MQTTService(
                         val inputStream = context.resources.openRawResource(R.raw.homeassistant_payload)
                         val jsonPayloadString = inputStream.bufferedReader().use { it.readText() }
 
-                        // Call the method on the now initialized mqttSync instance
-                        val discoveryResult = mqttSync.publishHomeAssistantDiscovery(
-                            jsonPayloadString = jsonPayloadString,
-                            deviceSwVersion = openScaleVersionInfo()
-                        )
-
-                        if (discoveryResult is SyncResult.Failure) {
-                            Timber.w("MQTTService: Home Assistant Discovery publish failed: ${discoveryResult.message}")
-                            // Decide if this non-critical error should be shown to the user or just logged.
+                        // One Home Assistant device per openScale user (stable userId identity,
+                        // username as the display name) so multiple users don't collide into one entity.
+                        val sw = openScaleVersionInfo()
+                        val users = OpenScaleDataProvider(context, sharedPreferences).getUsers()
+                        for (user in users) {
+                            val discoveryResult = mqttSync.publishHomeAssistantDiscovery(
+                                jsonPayloadString = jsonPayloadString,
+                                deviceSwVersion = sw,
+                                userId = user.id,
+                                username = user.username
+                            )
+                            if (discoveryResult is SyncResult.Failure) {
+                                Timber.w("MQTTService: HA discovery publish failed for user ${user.id}: ${discoveryResult.message}")
+                            }
                         }
                     } catch (e: Exception) {
                         Timber.e(e, "MQTTService: Error during Home Assistant discovery preparation or publish.")
@@ -306,6 +367,22 @@ class MQTTService(
                 }
             }
         ) {
+            // Multi-user backend: states that every openScale user is synced (no per-user picker).
+            UserScopeSection(
+                isMultiUser = isMultiUser,
+                users = emptyList(),
+                selectedUserId = 0,
+                onUserSelected = {},
+                enabled = viewModel.syncEnabled.value
+            )
+            // Per-backend direction (export / import / both). Inbound is pulled by the global Sync button.
+            SyncDirectionSelector(
+                current = viewModel.syncDirection.value,
+                onChange = { viewModel.setSyncDirection(it) },
+                enabled = viewModel.syncEnabled.value,
+                serviceName = viewModel.getName()
+            )
+
             Column (
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally

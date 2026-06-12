@@ -22,19 +22,24 @@ import com.google.gson.JsonParser
 import com.health.openscale.sync.BuildConfig
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.service.SyncResult
+import com.hivemq.client.mqtt.MqttGlobalPublishFilter
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish
 import timber.log.Timber
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     private val gson = GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mmZ").create()
+
+    // Per-user topic: the stable userId is the path segment; the username travels in the JSON payload.
+    private fun userTopic(userId: Int, event: String) = "openScaleSync/$userId/measurements/$event"
 
     fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
         var failureCount = 0
 
         measurements.sortedBy { measurements -> measurements.date.time }.forEach { measurement ->
-            val syncResult = publishMeasurement(measurement, "openScaleSync/measurements/all")
+            val syncResult = publishMeasurement(measurement, userTopic(measurement.userId, "all"))
 
             if (syncResult is SyncResult.Failure) {
                 failureCount++
@@ -49,33 +54,41 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     }
 
     fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        return publishMeasurement(measurement, "openScaleSync/measurements/insert")
+        return publishMeasurement(measurement, userTopic(measurement.userId, "insert"))
     }
 
-    fun delete(date: Date) : SyncResult<Unit> {
+    fun delete(userId: Int, date: Date) : SyncResult<Unit> {
         val message = mapOf("dateTime" to gson.toJsonTree(date))
-        return publishMessage(message, "openScaleSync/measurements/delete")
+        return publishMessage(message, userTopic(userId, "delete"))
     }
 
-    fun clear() : SyncResult<Unit> {
-        return publishMessage(true, "openScaleSync/measurements/clear")
+    fun clear(userId: Int) : SyncResult<Unit> {
+        return publishMessage(true, userTopic(userId, "clear"))
+    }
+
+    /** Clears the retained per-user "last" measurement (after a delete/clear of that user). */
+    fun clearLastMeasurement(userId: Int) : SyncResult<Unit> {
+        return publishMessage(mapOf<String, Any>(), userTopic(userId, "last"), true)
     }
 
     fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        return publishMeasurement(measurement, "openScaleSync/measurements/update")
+        return publishMeasurement(measurement, userTopic(measurement.userId, "update"))
     }
 
     fun publishLastMeasurement(measurement: OpenScaleMeasurement?): SyncResult<Unit> {
         return if (measurement != null) {
-            publishMeasurement(measurement, "openScaleSync/measurements/last", true)
+            publishMeasurement(measurement, userTopic(measurement.userId, "last"), true)
         } else {
+            // No measurement (e.g. last entry cleared) → can't target a per-user topic; use the shared one.
             publishMessage(mapOf<String, Any>(), "openScaleSync/measurements/last", true)
         }
     }
 
     fun publishHomeAssistantDiscovery(
         jsonPayloadString: String,
-        deviceSwVersion: String? = null
+        deviceSwVersion: String? = null,
+        userId: Int,
+        username: String
     ): SyncResult<Unit> {
         if (!mqttClient.state.isConnected) {
             Timber.e("MQTTSync: Cannot publish HA discovery, instance client is not connected.")
@@ -109,11 +122,25 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
                 payloadJson.getAsJsonObject("device")?.addProperty("sw_version", deviceSwVersion)
             }
 
+            // --- Per-user device: stable userId-based identity, username as the HA display name ---
+            payloadJson.getAsJsonObject("device")?.apply {
+                addProperty("identifiers", "openscale_$userId")
+                addProperty("name", if (username.isNotBlank()) "openScale ($username)" else "openScale ($userId)")
+            }
+            // Point the entities at this user's retained "last" measurement topic.
+            payloadJson.addProperty("state_topic", "openScaleSync/$userId/measurements/last")
+            // Make each component's unique_id user-specific so HA keeps them as separate entities.
+            payloadJson.getAsJsonObject("components")?.entrySet()?.forEach { entry ->
+                val obj = entry.value.asJsonObject
+                val baseUid = obj.get("unique_id")?.asString ?: "openscale"
+                obj.addProperty("unique_id", "${baseUid}_$userId")
+            }
+
             val bytes = gson.toJson(payloadJson).toByteArray()
 
             val publishResult = mqttClient.publish(
                 Mqtt5Publish.builder()
-                    .topic("homeassistant/device/openscale/config")
+                    .topic("homeassistant/device/openscale_$userId/config")
                     .payload(bytes)
                     .retain(true)
                     .build()
@@ -139,6 +166,32 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
                 e
             )
         }
+    }
+
+    /**
+     * Inbound (bidirectional): subscribe to [topicFilter] and drain currently available (incl.
+     * retained) messages, returning (topic, payloadString) pairs. On-demand poll model — external
+     * systems publish measurements as retained messages on openScaleSync/inbound/<userId>/… so they
+     * persist until imported. Stops after [perMessageTimeoutMs] with no further message.
+     */
+    fun drainInboundMessages(topicFilter: String, perMessageTimeoutMs: Long): List<Pair<String, String>> {
+        val out = mutableListOf<Pair<String, String>>()
+        val publishes = mqttClient.publishes(MqttGlobalPublishFilter.ALL)
+        try {
+            mqttClient.subscribeWith().topicFilter(topicFilter).send()
+            while (true) {
+                val opt = publishes.receive(perMessageTimeoutMs, TimeUnit.MILLISECONDS)
+                if (!opt.isPresent) break
+                val p = opt.get()
+                out.add(p.topic.toString() to String(p.payloadAsBytes))
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "MQTT inbound drain interrupted")
+        } finally {
+            runCatching { mqttClient.unsubscribeWith().topicFilter(topicFilter).send() }
+            runCatching { publishes.close() }
+        }
+        return out
     }
 
     private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String, retain : Boolean = false) : SyncResult<Unit> {

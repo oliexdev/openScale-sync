@@ -38,6 +38,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
+import com.health.openscale.sync.core.model.SyncDirection
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.provider.OpenScaleProvider
@@ -45,8 +47,15 @@ import com.health.openscale.sync.gui.components.PendingQueueCard
 import com.health.openscale.sync.gui.components.SyncActionButtons
 import com.health.openscale.sync.gui.components.SyncErrorBanner
 import timber.log.Timber
+import java.time.Duration
 import java.time.Instant
 import java.util.Date
+import java.util.concurrent.ConcurrentHashMap
+
+// One lock per backend name, shared across all ServiceInterface instances in this process
+// (SyncService real-time, PeriodicSyncWorker, MainActivity manual sync) so every export-ledger
+// read-modify-write is atomic regardless of which component performs it.
+private val ledgerLocks = ConcurrentHashMap<String, Any>()
 
 sealed class SyncResult<out T> {
     data class Success<T>(val data: T) : SyncResult<T>()
@@ -59,6 +68,50 @@ sealed class SyncResult<out T> {
     }
 }
 
+/**
+ * One measurement to import INTO openScale from an external source (Phase 4 inbound).
+ * [weightKg] is mandatory; [fatPct]/[waterPct]/[musclePct] are convenience fields written via the
+ * provider's fixed columns. [valuesJson] (optional) carries an arbitrary generic value set
+ * (all types incl. custom) for future-flexible sources, written via the generic provider insert.
+ */
+data class InboundMeasurement(
+    val timeMs: Long,
+    val weightKg: Float,
+    val fatPct: Float? = null,
+    val waterPct: Float? = null,
+    val musclePct: Float? = null,
+    val valuesJson: String? = null,
+    // Optional per-item target user (multi-user sources like MQTT carry it per message); when null
+    // the pipeline writes to the userId passed to runInbound (single-user sources).
+    val userId: Int? = null
+)
+
+/**
+ * Result of a bulk apply ([ServiceInterface.insertAll]/[ServiceInterface.updateAll]): which measurements were
+ * actually applied (so reconcile can update the ledger per item) plus the failure, if any. The
+ * default per-item loop fills [succeeded] precisely; a batch override reports all-or-nothing.
+ */
+data class BulkResult(
+    val succeeded: List<OpenScaleMeasurement>,
+    val failure: SyncResult.Failure? = null
+)
+
+/**
+ * A single queued/dispatched operation (insert/update/delete/clear). Carries everything needed to
+ * replay it after a failure; the generic value set is the single source of truth (weight/fat/water/
+ * muscle are derived via [toMeasurement]). Persisted as Gson JSON in the per-service retry queue.
+ */
+data class PendingOp(
+    val type: String,
+    val id: Int = 0,
+    val userId: Int = 0,
+    val dateMs: Long = 0L,
+    val username: String = "",
+    val values: List<OpenScaleMeasurementValue> = emptyList()
+) {
+    fun toMeasurement() = OpenScaleMeasurement.fromValues(id, userId, Date(dateMs), username, values)
+}
+
 abstract class ServiceInterface (
     private val context: Context
 ) {
@@ -67,7 +120,30 @@ abstract class ServiceInterface (
     lateinit var openScaleDataService: OpenScaleDataProvider
 
     abstract fun viewModel() : ViewModelInterface
-    abstract suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit>
+
+    /**
+     * Whether this backend can disambiguate multiple openScale users at the destination and should
+     * therefore sync ALL users. Multi-user backends carry the user identity on the wire
+     * (MQTT topic / payload / tag). Single-user backends (HealthConnect, Wger) keep this false and
+     * only sync the per-service selected user (see [shouldSync]).
+     */
+    open val isMultiUser: Boolean get() = false
+
+    /** Whether this backend can pull data INTO openScale (bidirectional). HealthConnect/Wger = true. */
+    open val supportsInbound: Boolean get() = false
+
+    /** Outbound active unless the user set this backend to import-only. */
+    fun exportEnabled(): Boolean = viewModel().syncDirection.value != SyncDirection.IMPORT
+
+    /** Inbound active only for inbound-capable backends set to import or both. */
+    fun importEnabled(): Boolean = supportsInbound && viewModel().syncDirection.value != SyncDirection.EXPORT
+
+    /**
+     * Per-service gate for the real-time (outbound) path: respects the direction setting, then
+     * multi-user backends accept every user while single-user backends only accept their user.
+     */
+    fun shouldSync(userId: Int): Boolean =
+        exportEnabled() && (isMultiUser || userId == viewModel().selectedUserId.value)
 
     /**
      * Full manual sync of all measurements of the selected user to this backend.
@@ -76,9 +152,11 @@ abstract class ServiceInterface (
      * where openScaleService/openScaleDataService are wired.
      */
     suspend fun runFullSync() : Int? {
-        openScaleDataService.checkVersion()
-        val measurements = openScaleDataService.getMeasurements(openScaleService.getSelectedUser())
-        return when (val result = sync(measurements)) {
+        // Multi-user backends sync all users; single-user backends only their selected user.
+        val allUsers = openScaleDataService.getUsers()
+        val users = if (isMultiUser) allUsers else allUsers.filter { it.id == viewModel().selectedUserId.value }
+        val measurements = users.flatMap { openScaleDataService.getMeasurements(it) }
+        return when (val result = reconcile(measurements)) {
             is SyncResult.Success -> {
                 viewModel().setLastSync(Instant.now())
                 measurements.size
@@ -90,37 +168,227 @@ abstract class ServiceInterface (
         }
     }
 
-    // Raw operations implemented by concrete services. They contain only the guard +
-    // wire call — they know nothing about retrying. The base class wraps them below.
-    protected abstract suspend fun doInit()
-    protected abstract suspend fun doInsert(measurement: OpenScaleMeasurement) : SyncResult<Unit>
-    protected abstract suspend fun doUpdate(measurement: OpenScaleMeasurement) : SyncResult<Unit>
-    protected abstract suspend fun doDelete(date: Date) : SyncResult<Unit>
-    protected abstract suspend fun doClear() : SyncResult<Unit>
+    // --- Export ledger (Phase 3 reliability backstop) -----------------------------------
+    // Per-backend record of what we've exported (measurementId → fingerprint + time + user),
+    // persisted as Gson/SharedPreferences (no separate class, no Room/KSP). It is kept LIVE by
+    // dispatch() on every real-time op, so it always knows each measurement's last-synced timestamp
+    // — which lets the real-time path detect a moved (re-timed) measurement, and lets reconcile()
+    // diff openScale's current state to heal missed inserts/updates/deletes (incl. moves) on
+    // push-only backends (MQTT/Webhook/InfluxDB) where a plain re-push can't.
+    private data class LedgerEntry(val hash: Long, val dateMs: Long, val userId: Int)
+    private val ledgerPrefs by lazy {
+        context.getSharedPreferences("export_ledger_${viewModel().getName()}", Context.MODE_PRIVATE)
+    }
+    private val ledgerMapType = object : TypeToken<MutableMap<Int, LedgerEntry>>() {}.type
+    private val ledgerLock: Any get() = ledgerLocks.getOrPut(viewModel().getName()) { Any() }
 
-    // Public ops are final: they transparently replay the backlog and enqueue on failure.
-    // Concrete services implement only the do* methods and never see the queue below.
+    private fun ledgerLoad(): MutableMap<Int, LedgerEntry> {
+        val json = ledgerPrefs.getString("ledger", null) ?: return mutableMapOf()
+        return runCatching { retryGson.fromJson<MutableMap<Int, LedgerEntry>>(json, ledgerMapType) ?: mutableMapOf() }
+            .getOrElse { mutableMapOf() }
+    }
+    private fun ledgerStore(map: Map<Int, LedgerEntry>) =
+        ledgerPrefs.edit { putString("ledger", retryGson.toJson(map)) }
+
+    // All mutations are atomic read-modify-write under ledgerLock so the live real-time path and a
+    // concurrent reconcile/worker never clobber each other.
+    /** Immutable snapshot for read-only classification in reconcile(). */
+    private fun ledgerSnapshot(): Map<Int, LedgerEntry> = synchronized(ledgerLock) { HashMap(ledgerLoad()) }
+    /** Single-entry lookup (move detection on update). */
+    private fun ledgerEntry(id: Int): LedgerEntry? = synchronized(ledgerLock) { ledgerLoad()[id] }
+    /** Record a successful insert/update: id → fingerprint + time + user. */
+    private fun ledgerRecord(id: Int, m: OpenScaleMeasurement) = synchronized(ledgerLock) {
+        val l = ledgerLoad(); l[id] = LedgerEntry(contentHash(m), m.date.time, m.userId); ledgerStore(l)
+    }
+    /** Forget an exported measurement by its stable id. */
+    private fun ledgerForget(id: Int) = synchronized(ledgerLock) {
+        val l = ledgerLoad(); if (l.remove(id) != null) ledgerStore(l)
+    }
+    /** Drop every entry of one user (clear). */
+    private fun ledgerClearUser(userId: Int) = synchronized(ledgerLock) {
+        val l = ledgerLoad(); if (l.entries.removeAll { it.value.userId == userId }) ledgerStore(l)
+    }
+
+    /** Value fingerprint (weight/fat/water/muscle + generic values) to detect content edits. The
+     *  timestamp is deliberately NOT part of it — a time change is detected separately (ledger
+     *  dateMs vs current) and handled as a move, since backends key records by (user, time). */
+    private fun contentHash(m: OpenScaleMeasurement): Long =
+        listOf(m.weight, m.fat, m.water, m.muscle, m.values).hashCode().toLong()
+
+    /**
+     * Diffs [current] (the authoritative openScale measurements for this backend's users) against
+     * the export ledger and pushes the delta: new id → insert, changed fingerprint → update,
+     * changed timestamp → move (delete old + insert new), id in ledger but gone from openScale →
+     * delete (heals a missed delete-push, which a plain re-push cannot). The ledger is the only way
+     * to detect deletions and moves on push-only backends.
+     */
+    suspend fun reconcile(current: List<OpenScaleMeasurement>): SyncResult<Unit> {
+        val ledger = ledgerSnapshot()                       // read-only classification base
+        val currentIds = current.mapTo(HashSet()) { it.id }
+
+        // Classify the delta against the ledger:
+        //   unknown id                     → insert
+        //   known id, timestamp changed    → move (backends key by time, so the old record would
+        //                                     orphan: delete it at the old time, insert at the new)
+        //   known id, same time, new hash  → update
+        //   known id, same time, same hash → no-op
+        val inserts = ArrayList<OpenScaleMeasurement>()
+        val updates = ArrayList<OpenScaleMeasurement>()
+        val moves = ArrayList<Pair<OpenScaleMeasurement, LedgerEntry>>()
+        for (m in current) {
+            val prev = ledger[m.id]
+            when {
+                prev == null -> inserts += m
+                prev.dateMs != m.date.time -> moves += (m to prev)
+                prev.hash != contentHash(m) -> updates += m
+                // else unchanged → no-op
+            }
+        }
+
+        var failure: SyncResult.Failure? = null
+
+        // Moved measurements: remove the stale record at the OLD timestamp (best-effort, via the raw
+        // delete so a since-gone record doesn't pollute the retry queue), then insert at the new one.
+        // submit() records the new ledger entry on success.
+        for ((m, prev) in moves) {
+            runCatching { delete(prev.userId, Date(prev.dateMs)) }
+            (submit(pendingOp("insert", m)) as? SyncResult.Failure)?.let { failure = it }
+        }
+
+        // Apply inserts/updates through the bulk operator (one call for batch-capable backends,
+        // a per-item loop otherwise). The ledger is updated only for what actually applied; the
+        // rest is queued so the retry path re-pushes it per item.
+        for ((batch, isInsert) in listOf(inserts to true, updates to false)) {
+            if (batch.isEmpty()) continue
+            val res = if (isInsert) insertAll(batch) else updateAll(batch)
+            val appliedIds = res.succeeded.mapTo(HashSet()) { it.id }
+            for (m in batch) {
+                if (m.id in appliedIds) ledgerRecord(m.id, m)
+                else retryEnqueue(pendingOp(if (isInsert) "insert" else "update", m))
+            }
+            res.failure?.let { failure = it }
+        }
+
+        // Deletes: ids we exported before but openScale no longer has. Per item — the protocols
+        // don't batch deletes, and reconcile deletes are rare. submit() forgets them on success.
+        for ((id, e) in ledger) {
+            if (id !in currentIds) {
+                (submit(PendingOp("delete", id = id, userId = e.userId, dateMs = e.dateMs)) as? SyncResult.Failure)?.let { failure = it }
+            }
+        }
+
+        return failure ?: SyncResult.Success(Unit)
+    }
+
+    // --- Inbound (Phase 4: external source → openScale) ---------------------------------
+    /**
+     * Inbound-capable backends ([supportsInbound]) override this to pull measurements from their
+     * source for [userId] since [sinceMs]. Source-specific echo/dedup (HealthConnect dataOrigin
+     * filter, Wger day-level gap-fill) happens inside the implementation.
+     */
+    open suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> = emptyList()
+
+    /**
+     * Generic inbound pipeline: read from the source and write into openScale. openScale stays
+     * master — the provider insert uses IGNORE on (userId,timestamp), so existing measurements are
+     * never overwritten (gap-fill). Returns the number of newly imported measurements.
+     */
+    suspend fun runInbound(userId: Int): SyncResult<Int> {
+        if (!importEnabled()) {
+            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Import is not enabled for this backend")
+        }
+        return try {
+            val since = Instant.now().minus(Duration.ofDays(730)).toEpochMilli()
+            val items = readInbound(userId, since)
+            var imported = 0
+            for (m in items) {
+                val targetUser = m.userId ?: userId
+                val ok = if (m.valuesJson != null)
+                    openScaleDataService.insertMeasurementGeneric(targetUser, m.timeMs, m.weightKg, m.valuesJson)
+                else
+                    openScaleDataService.insertMeasurement(targetUser, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct)
+                if (ok) imported++
+            }
+            SyncResult.Success(imported)
+        } catch (e: Exception) {
+            SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
+        }
+    }
+
+    // Raw single-item primitives implemented by concrete backends: just the guard + wire call,
+    // no retry awareness. submit() (real-time) and the bulk operators reuse them; the central
+    // retry queue lives only in submit()/reconcile().
+    protected abstract suspend fun connect()
+    protected abstract suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit>
+    protected abstract suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit>
+    protected abstract suspend fun delete(userId: Int, date: Date) : SyncResult<Unit>
+    protected abstract suspend fun clear(userId: Int) : SyncResult<Unit>
+
+    // Bulk apply for mass sync (reconcile / initial export). The DEFAULT just loops the single-item
+    // op and reports per-item success — so a backend that implements only the single primitives gets
+    // correct (if unbatched) mass sync for free. Backends whose protocol can batch (Webhook one
+    // POST, InfluxDB one line-protocol write, HealthConnect insertRecords, MQTT full publish)
+    // override these with a single call (all-or-nothing).
+    protected open suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        loopBulk(measurements) { insert(it) }
+
+    protected open suspend fun updateAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        loopBulk(measurements) { update(it) }
+
+    private suspend fun loopBulk(
+        measurements: List<OpenScaleMeasurement>,
+        op: suspend (OpenScaleMeasurement) -> SyncResult<Unit>
+    ): BulkResult {
+        val succeeded = ArrayList<OpenScaleMeasurement>(measurements.size)
+        var failure: SyncResult.Failure? = null
+        for (m in measurements) when (val r = op(m)) {
+            is SyncResult.Success -> succeeded += m
+            is SyncResult.Failure -> failure = r
+        }
+        return BulkResult(succeeded, failure)
+    }
+
+    // Lifecycle: connect to the backend, then replay any backlog queued by a previous run.
     suspend fun init() {
-        doInit()
+        connect()
         drainQueue()
     }
 
-    suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
-        retried(pendingOp("insert", measurement)) { doInsert(measurement) }
-
-    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
-        retried(pendingOp("update", measurement)) { doUpdate(measurement) }
-
-    suspend fun delete(date: Date) : SyncResult<Unit> =
-        retried(PendingOp("delete", dateMs = date.time)) { doDelete(date) }
-
-    suspend fun clear() : SyncResult<Unit> =
-        retried(PendingOp("clear")) { doClear() }
-
-    private suspend fun retried(op: PendingOp, action: suspend () -> SyncResult<Unit>) : SyncResult<Unit> {
-        val result = action()
+    /**
+     * The one central place a real-time op flows through: run it via [dispatch], and on failure
+     * remember it in the retry queue so the next init() replays it. reconcile() routes its deletes
+     * through here too. submit() is the only thing that touches the queue.
+     */
+    suspend fun submit(op: PendingOp): SyncResult<Unit> {
+        val result = dispatch(op)
         if (result is SyncResult.Failure) retryEnqueue(op)
         return result
+    }
+
+    /**
+     * Run one op AND keep the export ledger live, so reconcile sees an up-to-date picture and the
+     * real-time path can detect moves. An update whose id already sits at a DIFFERENT timestamp in
+     * the ledger is a MOVE — backends key records by (user, time), so we drop the stale record at the
+     * old time and recreate at the new one. No retry-enqueue here; submit()/drainQueue() own that.
+     */
+    private suspend fun dispatch(op: PendingOp): SyncResult<Unit> = when (op.type) {
+        "insert" -> op.toMeasurement().let { m ->
+            insert(m).also { if (it is SyncResult.Success) ledgerRecord(op.id, m) }
+        }
+        "update" -> op.toMeasurement().let { m ->
+            val prev = ledgerEntry(op.id)
+            if (prev != null && prev.dateMs != op.dateMs) {
+                runCatching { delete(prev.userId, Date(prev.dateMs)) }   // stale record at the old time
+                insert(m).also { if (it is SyncResult.Success) ledgerRecord(op.id, m) }
+            } else {
+                update(m).also { if (it is SyncResult.Success) ledgerRecord(op.id, m) }
+            }
+        }
+        "delete" -> delete(op.userId, Date(op.dateMs)).also {
+            if (it is SyncResult.Success) ledgerForget(op.id)
+        }
+        "clear"  -> clear(op.userId).also { if (it is SyncResult.Success) ledgerClearUser(op.userId) }
+        else     -> SyncResult.Success(Unit)
     }
 
     private suspend fun drainQueue() {
@@ -128,14 +396,7 @@ abstract class ServiceInterface (
         if (ops.isEmpty()) return
         var failedIndex = ops.size
         for ((index, op) in ops.withIndex()) {
-            val result = when (op.type) {
-                "insert" -> doInsert(op.toMeasurement())
-                "update" -> doUpdate(op.toMeasurement())
-                "delete" -> doDelete(Date(op.dateMs))
-                "clear"  -> doClear()
-                else     -> SyncResult.Success(Unit)
-            }
-            if (result is SyncResult.Failure) {
+            if (dispatch(op) is SyncResult.Failure) {
                 failedIndex = index
                 break
             }
@@ -153,22 +414,8 @@ abstract class ServiceInterface (
     private val retryGson = Gson()
     private val retryListType = object : TypeToken<List<PendingOp>>() {}.type
 
-    private data class PendingOp(
-        val type: String,
-        val id: Int = 0,
-        val userId: Int = 0,
-        val dateMs: Long = 0L,
-        val weight: Float = 0f,
-        val fat: Float = 0f,
-        val water: Float = 0f,
-        val muscle: Float = 0f,
-        val extraFields: Map<String, Float> = emptyMap()
-    ) {
-        fun toMeasurement() = OpenScaleMeasurement(id, userId, Date(dateMs), weight, fat, water, muscle, extraFields)
-    }
-
-    private fun pendingOp(type: String, m: OpenScaleMeasurement) =
-        PendingOp(type, m.id, m.userId, m.date.time, m.weight, m.fat, m.water, m.muscle, m.extraFields)
+    fun pendingOp(type: String, m: OpenScaleMeasurement) =
+        PendingOp(type, m.id, m.userId, m.date.time, m.username, m.values)
 
     @Synchronized
     private fun retryPeek(): List<PendingOp> {

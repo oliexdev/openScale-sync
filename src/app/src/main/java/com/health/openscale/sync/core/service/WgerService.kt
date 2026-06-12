@@ -27,22 +27,29 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.remember
+import com.health.openscale.sync.gui.components.UserScopeSection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.model.WgerViewModel
 import com.health.openscale.sync.core.sync.WgerSync
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SecretOutlinedTextField
+import com.health.openscale.sync.gui.components.SyncDirectionSelector
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class WgerService(
     private val context: Context,
@@ -52,7 +59,7 @@ class WgerService(
     private lateinit var wgerSync : WgerSync
     private lateinit var wgerRetrofit: Retrofit
 
-    override suspend fun doInit() {
+    override suspend fun connect() {
         connectWger()
     }
 
@@ -60,33 +67,49 @@ class WgerService(
         return viewModel
     }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
-        if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-            return wgerSync.fullSync(measurements)
-        }
+    // Wger weight entries are readable via REST → bidirectional.
+    override val supportsInbound: Boolean get() = true
 
-        return SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
-    }
+    // No bulk override: Wger's REST API has no batch endpoint, so the default per-item loop
+    // (insert/update) is already optimal.
 
-    override suspend fun doInsert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
             wgerSync.insert(measurement)
         else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
-    override suspend fun doDelete(date: Date) : SyncResult<Unit> =
+    override suspend fun delete(userId: Int, date: Date) : SyncResult<Unit> =
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
             wgerSync.delete(date)
         else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
-    override suspend fun doClear() : SyncResult<Unit> =
+    override suspend fun clear(userId: Int) : SyncResult<Unit> =
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
             wgerSync.clear()
         else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
-    override suspend fun doUpdate(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
         if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value)
             wgerSync.update(measurement)
         else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
+
+    /**
+     * Inbound source (bidirectional): read weight entries from Wger. Wger has no data origin and
+     * only a date, so we apply openScale-as-master day-level gap-fill: only return entries for days
+     * openScale has no measurement yet (avoids echo/duplicates). The base [runInbound] writes them.
+     */
+    override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
+        if (!::wgerSync.isInitialized || !viewModel.connectAvailable.value || !viewModel.allPermissionsGranted.value) {
+            throw IllegalStateException("Wger not connected")
+        }
+        val entries = wgerSync.readInboundWeights()
+        val dayKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getDefault() }
+        val existingDays = openScaleDataService.getMeasurements(OpenScaleUser(userId, ""))
+            .map { dayKey.format(it.date) }.toSet()
+        return entries.mapNotNull { (dateMs, kg) ->
+            if (dayKey.format(Date(dateMs)) in existingDays) null else InboundMeasurement(dateMs, kg)
+        }
+    }
 
     private suspend fun connectWger() {
         if (viewModel.syncEnabled.value) {
@@ -141,6 +164,23 @@ class WgerService(
                 }
             }
         ) {
+            // Single-user backend: pick which openScale user this destination receives.
+            val osUsers = remember { openScaleDataService.getUsers() }
+            UserScopeSection(
+                isMultiUser = isMultiUser,
+                users = osUsers,
+                selectedUserId = viewModel.selectedUserId.value,
+                onUserSelected = { viewModel.setSelectedUserId(it.id) },
+                enabled = viewModel.syncEnabled.value
+            )
+            // Per-backend direction (export / import / both). Inbound is pulled by the global Sync button.
+            SyncDirectionSelector(
+                current = viewModel.syncDirection.value,
+                onChange = { viewModel.setSyncDirection(it) },
+                enabled = viewModel.syncEnabled.value,
+                serviceName = viewModel.getName()
+            )
+
             val serverNameState by viewModel.wgerServer.observeAsState("")
             OutlinedTextField(
                 enabled = viewModel.syncEnabled.value,

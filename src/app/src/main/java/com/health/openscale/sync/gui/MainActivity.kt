@@ -48,8 +48,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -108,6 +110,7 @@ import com.health.openscale.sync.R
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.provider.OpenScaleProvider
 import com.health.openscale.sync.core.service.BackendRegistry
+import com.health.openscale.sync.core.work.PeriodicSyncWorker
 import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.model.OpenScaleViewModel
@@ -173,6 +176,11 @@ class MainActivity : AppCompatActivity() {
                     syncService.init()
                 }
             }
+        }
+
+        // Re-ensure the optional periodic background sync is scheduled (survives reinstalls/clears).
+        if (sharedPreferences.getBoolean(PeriodicSyncWorker.PREF_KEY, false)) {
+            PeriodicSyncWorker.schedule(applicationContext, true)
         }
 
         saveLogLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -263,7 +271,6 @@ class MainActivity : AppCompatActivity() {
         val snackbarHostState = remember { SnackbarHostState() }
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
-        val versionCheckPerformed = remember { mutableStateOf(false) }
 
         snackbarHostStateRef = snackbarHostState
 
@@ -271,21 +278,7 @@ class MainActivity : AppCompatActivity() {
             snackbarHostStateRef = snackbarHostState
             onDispose { snackbarHostStateRef = null }
         }
-
-        LaunchedEffect(Unit,openScaleService.viewModel().allPermissionsGranted.value, openScaleService.viewModel().connectAvailable.value) {
-            if (!versionCheckPerformed.value && openScaleService.viewModel().allPermissionsGranted.value && openScaleService.viewModel().connectAvailable.value) {
-                val supportsRealtimeSync = openScaleDataService.checkVersion()
-                if (!supportsRealtimeSync) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = activity.getString(R.string.realtime_sync_update_required_snackbar_text),
-                                duration = SnackbarDuration.Long
-                            )
-                        }
-                }
-                versionCheckPerformed.value = true
-            }
-        }
+        // The "openScale too old" warning is shown by VersionWarningBanner (apiVersion gate).
 
         OpenScaleSyncTheme {
             CompositionLocalProvider(
@@ -413,6 +406,8 @@ class MainActivity : AppCompatActivity() {
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
+                VersionWarningBanner()
+
                 // Source: openScale connection + user selector
                 openScaleService.ComposeSettings(activity)
 
@@ -430,6 +425,43 @@ class MainActivity : AppCompatActivity() {
             }
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 GlobalSyncButton()
+            }
+        }
+    }
+
+    /** Warns when the installed openScale is too old for this sync app (hard version gate). */
+    @Composable
+    fun VersionWarningBanner() {
+        val unsupported = remember { mutableStateOf(false) }
+        val installedVersion = remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(Unit) {
+            unsupported.value = runCatching { openScaleDataService.isVersionTooOld() }.getOrDefault(false)
+            installedVersion.value = runCatching { openScaleDataService.getInstalledVersionName() }.getOrNull()
+        }
+        if (unsupported.value) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        installedVersion.value?.let {
+                            stringResource(R.string.open_scale_version_unsupported_banner_versioned, it)
+                        } ?: stringResource(R.string.open_scale_version_unsupported_banner),
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
             }
         }
     }
@@ -498,12 +530,32 @@ class MainActivity : AppCompatActivity() {
                             val dateFormat = DateFormat.getDateFormat(applicationContext)
                             val timeFormat = DateFormat.getTimeFormat(applicationContext)
                             val ts = dateFormat.format(Date.from(lastSync)) + " " + timeFormat.format(Date.from(lastSync))
-                            (stringResource(R.string.service_status_synced) + " · " + ts) to MaterialTheme.colorScheme.primary
+                            stringResource(R.string.sync_status_on, ts) to MaterialTheme.colorScheme.primary
                         }
                         else ->
-                            stringResource(R.string.sync_service_last_sync_never_text) to MaterialTheme.colorScheme.onSurfaceVariant
+                            stringResource(R.string.sync_status_never) to MaterialTheme.colorScheme.onSurfaceVariant
                     }
-                    Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
+                    // When enabled, lead the status with whose data this backend syncs (all users vs the
+                    // selected user) — hidden while off. The single-user name needs the openScale provider
+                    // (READ_WRITE_DATA), so resolve it guarded/memoized: a missing permission yields null.
+                    val allUsersLabel = stringResource(R.string.sync_scope_all_users)
+                    val resolvedUser = remember(canOpen, vm.selectedUserId.value) {
+                        if (!canOpen) null
+                        else runCatching {
+                            openScaleDataService.getUsers()
+                                .firstOrNull { it.id == vm.selectedUserId.value }?.username
+                        }.getOrNull()
+                    }
+                    val scope = when {
+                        !enabled -> null
+                        syncService.isMultiUser -> allUsersLabel
+                        else -> resolvedUser
+                    }
+                    Text(
+                        (scope?.let { "$it · " } ?: "") + statusText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = statusColor
+                    )
                 }
                 Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -523,18 +575,26 @@ class MainActivity : AppCompatActivity() {
                 if (!running) {
                     running = true
                     lifecycleScope.launch {
-                        openScaleDataService.checkVersion()
-                        val measurements = openScaleDataService.getMeasurements(openScaleService.getSelectedUser())
+                        // Multi-user backends sync all users; single-user backends only their selected user.
+                        val allUsers = openScaleDataService.getUsers()
+                        val allMeasurements = allUsers.flatMap { openScaleDataService.getMeasurements(it) }
                         for (service in syncServiceList.filter { it.viewModel().syncEnabled.value }) {
-                            val result = service.sync(measurements)
-                            if (result is SyncResult.Success) {
-                                service.viewModel().setLastSync(Instant.now())
-                            } else {
-                                service.setErrorMessage(result as SyncResult.Failure)
+                            var failure: SyncResult.Failure? = null
+                            // Outbound: reconcile (not just push) — heals missed inserts/updates AND deletes via the ledger.
+                            if (service.exportEnabled()) {
+                                val measurements = if (service.isMultiUser) allMeasurements
+                                    else allMeasurements.filter { it.userId == service.viewModel().selectedUserId.value }
+                                (service.reconcile(measurements) as? SyncResult.Failure)?.let { failure = it }
                             }
+                            // Inbound: pull from the source into openScale (bidirectional backends, import/both direction).
+                            if (failure == null && service.importEnabled()) {
+                                val userId = if (service.isMultiUser) -1 else service.viewModel().selectedUserId.value
+                                (service.runInbound(userId) as? SyncResult.Failure)?.let { failure = it }
+                            }
+                            failure?.let { service.setErrorMessage(it) } ?: service.viewModel().setLastSync(Instant.now())
                         }
                         running = false
-                        showMessage(resources.getQuantityString(R.plurals.sync_service_full_synced_info, measurements.size, measurements.size))
+                        showMessage(resources.getQuantityString(R.plurals.sync_service_full_synced_info, allMeasurements.size, allMeasurements.size))
                     }
                 }
             },
@@ -603,7 +663,44 @@ class MainActivity : AppCompatActivity() {
                 Text("GPLv3", style = MaterialTheme.typography.bodyMedium)
             }
 
+            BackgroundSyncCard()
+
             LoggingCard()
+        }
+    }
+
+    /** Optional periodic background sync toggle (off by default). Schedules PeriodicSyncWorker. */
+    @Composable
+    fun BackgroundSyncCard() {
+        val ctx = this@MainActivity
+        val prefs = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, MODE_PRIVATE)
+        val enabled = remember { mutableStateOf(prefs.getBoolean(PeriodicSyncWorker.PREF_KEY, false)) }
+
+        Card(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text(stringResource(id = R.string.background_sync_title), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(id = R.string.background_sync_label))
+                    Spacer(Modifier.weight(1f))
+                    Switch(
+                        checked = enabled.value,
+                        onCheckedChange = { checked ->
+                            enabled.value = checked
+                            prefs.edit { putBoolean(PeriodicSyncWorker.PREF_KEY, checked) }
+                            PeriodicSyncWorker.schedule(ctx, checked)
+                        }
+                    )
+                }
+                Text(
+                    stringResource(id = R.string.background_sync_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 

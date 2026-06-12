@@ -19,7 +19,6 @@
 
     <string name="sync_service_syncing_text">Synchronisiere …</string>
     <string name="sync_service_full_sync_button">Mit %1$s synchronisieren</string>
-    <string name="sync_service_last_sync_never_text">Letzte Synchronisation: Nie</string>
     <string name="service_test_connection">Verbindung testen</string>
     <string name="service_connecting">Verbinde …</string>
     <string name="service_connection_successful">✓ Verbindung erfolgreich</string>
@@ -39,7 +38,8 @@
     </plurals>
     <string name="dashboard_status_no_service">Kein Dienst aktiv</string>
     <string name="service_status_off">aus</string>
-    <string name="service_status_synced">synchron</string>
+    <string name="sync_status_on">Sync am %1$s</string>
+    <string name="sync_status_never">noch nie synchronisiert</string>
     <plurals name="service_status_pending">
         <item quantity="one">%1$d ausstehend</item>
         <item quantity="other">%1$d ausstehend</item>
@@ -94,7 +94,23 @@
     <string name="wger_server_name_hint">z.B. https://wger.de/api/v2/</string>
     <string name="wger_api_token_title">Wger API-Token</string>
 
-    <string name="realtime_sync_update_required_snackbar_text">Für die Echtzeit-Synchronisation aktualisiere openScale bitte auf Version 2.5.5 oder die neueste Entwickler Version.</string>
+    <string name="open_scale_version_unsupported_banner">Diese openScale-sync-Version benötigt ein neueres openScale. Bitte aktualisiere openScale, um weiter zu synchronisieren.</string>
+    <string name="open_scale_version_unsupported_banner_versioned">openScale %1$s auf diesem Gerät ist zu alt zum Synchronisieren. Bitte aktualisiere openScale auf die neueste Version.</string>
+    <string name="sync_users_title">Synchronisierte Benutzer</string>
+    <string name="sync_users_all">Alle openScale-Benutzer</string>
+    <string name="sync_users_all_desc">Jeder Benutzer wird getrennt gehalten.</string>
+    <string name="sync_users_single_desc">Nur dieser Benutzer wird synchronisiert.</string>
+    <string name="sync_scope_all_users">Alle Benutzer</string>
+    <string name="sync_direction_title">Sync-Richtung</string>
+    <string name="sync_direction_export">Export</string>
+    <string name="sync_direction_import">Import</string>
+    <string name="sync_direction_both">Beides</string>
+    <string name="sync_direction_export_desc">openScale → %1$s</string>
+    <string name="sync_direction_import_desc">%1$s → openScale</string>
+    <string name="sync_direction_both_desc">openScale ⇄ %1$s</string>
+    <string name="background_sync_title">Hintergrund-Sync</string>
+    <string name="background_sync_label">Periodischer Hintergrund-Sync</string>
+    <string name="background_sync_hint">Gleicht Exporte ab und holt Importe etwa alle 6 Stunden, ohne die App zu öffnen. Der sofortige Push bei jeder Messung läuft unabhängig davon weiter.</string>
 
     <string name="influxdb_url_title">URL (z.B. http://192.168.1.100:8086)</string>
     <string name="influxdb_org_title">Organisation</string>

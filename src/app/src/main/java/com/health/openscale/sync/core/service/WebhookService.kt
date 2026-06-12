@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import com.health.openscale.sync.R
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SecretOutlinedTextField
+import com.health.openscale.sync.gui.components.UserScopeSection
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.model.WebhookViewModel
@@ -36,9 +37,12 @@ class WebhookService(
 
     override val retryQueueKey = "webhook"
 
+    // Webhook carries userId + username in the JSON payload → can serve all users.
+    override val isMultiUser: Boolean get() = true
+
     override fun viewModel(): ViewModelInterface = viewModel
 
-    override suspend fun doInit() {
+    override suspend fun connect() {
         initWebhook()
     }
 
@@ -66,20 +70,30 @@ class WebhookService(
         return result
     }
 
-    override suspend fun doInsert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+    override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
         withSync { it.insert(measurement) }
 
-    override suspend fun doUpdate(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+    override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> =
         withSync { it.update(measurement) }
 
-    override suspend fun doDelete(date: Date): SyncResult<Unit> =
-        withSync { it.delete(date) }
+    override suspend fun delete(userId: Int, date: Date): SyncResult<Unit> =
+        withSync { it.delete(userId, date) }
 
-    override suspend fun doClear(): SyncResult<Unit> =
-        withSync { it.clear() }
+    override suspend fun clear(userId: Int): SyncResult<Unit> =
+        withSync { it.clear(userId) }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
-        withSync { it.fullSync(measurements) }
+    // Webhook batches a whole insert/update set into one POST.
+    override suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        bulkPost("insert", measurements)
+
+    override suspend fun updateAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        bulkPost("update", measurements)
+
+    private suspend fun bulkPost(event: String, measurements: List<OpenScaleMeasurement>): BulkResult =
+        when (val r = withSync { it.postBatch(event, measurements) }) {
+            is SyncResult.Success -> BulkResult(measurements)
+            is SyncResult.Failure -> BulkResult(emptyList(), r)
+        }
 
     private suspend fun testConnection() {
         if (!viewModel.syncEnabled.value) return
@@ -117,6 +131,14 @@ class WebhookService(
                 }
             }
         ) {
+            // Multi-user backend: states that every openScale user is synced (no per-user picker).
+            UserScopeSection(
+                isMultiUser = isMultiUser,
+                users = emptyList(),
+                selectedUserId = 0,
+                onUserSelected = {},
+                enabled = viewModel.syncEnabled.value
+            )
             val urlState by viewModel.url.observeAsState("")
             val authHeaderState by viewModel.authHeader.observeAsState("")
 

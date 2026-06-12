@@ -5,15 +5,19 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.text.format.DateFormat
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
 import com.health.openscale.sync.core.model.OpenScaleViewModel
+import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.utils.LogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,17 +26,30 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import timber.log.Timber.Forest.plant
-import java.math.BigDecimal
-import java.math.RoundingMode
 import java.time.Instant
 import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.content.edit
 
 class SyncService : Service() {
     private lateinit var syncServiceList: List<ServiceInterface>
     private lateinit var prefs: SharedPreferences
     private val ID_SERVICE = 5
     private val ID_RETRY = 6
+
+    companion object {
+        /** Test seam: when set, the service uses these backends instead of [BackendRegistry].
+         *  Production code never sets it. Lets an instrumentation test drive the real foreground
+         *  service with a fake backend. */
+        @VisibleForTesting
+        var backendFactory: ((Context, SharedPreferences) -> List<ServiceInterface>)? = null
+
+        /** Test seam: when set, the service reads from this provider instead of the real openScale
+         *  ContentProvider. Lets an instrumentation test exercise the "changed"/reconcile path and
+         *  the version gate deterministically, without a real openScale install. */
+        @VisibleForTesting
+        var dataProviderFactory: ((Context, SharedPreferences) -> OpenScaleDataProvider)? = null
+    }
 
     override fun onBind(intent: Intent): IBinder? = null
 
@@ -61,8 +78,8 @@ class SyncService : Service() {
 
         showNotification() // Required foreground service notification
 
-        // Prepare all sync backends (single source of truth in BackendRegistry)
-        syncServiceList = BackendRegistry.create(applicationContext, prefs)
+        // Prepare all sync backends (single source of truth in BackendRegistry; a test may inject fakes)
+        syncServiceList = (backendFactory ?: { c, p -> BackendRegistry.create(c, p) })(applicationContext, prefs)
 
         CoroutineScope(Dispatchers.Main).launch {
             // Initialize only enabled services
@@ -92,11 +109,27 @@ class SyncService : Service() {
     private suspend fun onHandleIntent(intent: Intent?) {
         Timber.d("onHandleIntent extras: %s", intent.safeExtras())
 
-        val openScaleUserId = prefs.getInt(OpenScaleViewModel.SELECTED_USER_ID, -1)
-        Timber.d("selectedOpenScaleUserId=%d", openScaleUserId)
+        // Version gate: this sync app requires a minimum openScale ContentProvider API version
+        // (hard gate, no legacy fallbacks). If the installed openScale is too old, flag it for the
+        // UI ("please update openScale") and drop the event instead of mis-handling old-format data.
+        val dataProvider = (dataProviderFactory ?: { c, p -> OpenScaleDataProvider(c, p) })(applicationContext, prefs)
+        val apiVersion = runCatching { dataProvider.getApiVersion() }.getOrNull()
+        if (apiVersion != null && apiVersion < OpenScaleDataProvider.MIN_API_VERSION) {
+            prefs.edit { putBoolean(OpenScaleViewModel.OPENSCALE_VERSION_UNSUPPORTED, true) }
+            Timber.w("openScale apiVersion=%d < required %d -> blocking sync (user must update openScale)",
+                apiVersion, OpenScaleDataProvider.MIN_API_VERSION)
+            stopServiceCleanly()
+            return
+        }
+        prefs.edit { putBoolean(OpenScaleViewModel.OPENSCALE_VERSION_UNSUPPORTED, false) }
+
+        // Resolve userId -> username once for this op (used for multi-user labelling on the wire).
+        val userMap: Map<Int, String> = runCatching {
+            dataProvider.getUsers().associate { it.id to it.username }
+        }.getOrElse { emptyMap() }
 
         val mode = intent?.extras?.getString("mode") ?: "none"
-        if (mode !in setOf("insert", "update", "delete", "clear")) {
+        if (mode !in setOf("insert", "update", "delete", "clear", "changed")) {
             Timber.w("Unknown mode='%s' -> ignoring", mode)
             stopServiceCleanly()
             return
@@ -116,26 +149,21 @@ class SyncService : Service() {
 
                 when (mode) {
                     "insert", "update" -> {
-                        // Read all extras safely, no NPEs
+                        // The generic "values" payload is the single source of truth; weight/fat/
+                        // water/muscle are derived from it (see OpenScaleMeasurement.fromValues).
                         val id     = intent?.getIntExtra("id", 0) ?: 0
                         val userId = intent?.getIntExtra("userId", 0) ?: 0
-                        val weight = roundFloat(intent?.getFloatExtra("weight", 0.0f) ?: 0f)
-                        val fat    = roundFloat(intent?.getFloatExtra("fat", 0.0f) ?: 0f)
-                        val water  = roundFloat(intent?.getFloatExtra("water", 0.0f) ?: 0f)
-                        val muscle = roundFloat(intent?.getFloatExtra("muscle", 0.0f) ?: 0f)
                         val date   = Date(intent?.getLongExtra("date", 0L) ?: 0L)
 
-                        Timber.d(
-                            "SyncService %s id=%d userId=%d date=%s w=%.2f f=%.2f wa=%.2f m=%.2f",
-                            mode, id, userId, date, weight, fat, water, muscle
-                        )
+                        Timber.d("SyncService %s id=%d userId=%d date=%s", mode, id, userId, date)
 
-                        if (userId == openScaleUserId) {
+                        if (syncService.shouldSync(userId)) {
+                            val values = OpenScaleMeasurementValue.parseList(intent?.getStringExtra("values"))
                             launch {
-                                val m = OpenScaleMeasurement(id, userId, date, weight, fat, water, muscle)
+                                val m = OpenScaleMeasurement.fromValues(id, userId, date, userMap[userId] ?: "", values)
                                 val t = System.nanoTime()
                                 val res = runCatching {
-                                    if (mode == "insert") syncService.insert(m) else syncService.update(m)
+                                    syncService.submit(syncService.pendingOp(mode, m))
                                 }.onFailure { e -> Timber.e(e, "%s.%s() threw", name, mode) }
                                     .getOrNull()
 
@@ -145,9 +173,9 @@ class SyncService : Service() {
                                         vm.setLastSync(Instant.now())
                                         val fmt = DateFormat.getDateFormat(applicationContext).format(date)
                                         val msg = if (mode == "insert")
-                                            getString(R.string.sync_service_measurement_inserted_info, weight, fmt)
+                                            getString(R.string.sync_service_measurement_inserted_info, m.weight, fmt)
                                         else
-                                            getString(R.string.sync_service_measurement_updated_info, weight, fmt)
+                                            getString(R.string.sync_service_measurement_updated_info, m.weight, fmt)
                                         syncService.setInfoMessage(msg)
                                         Timber.d("%s.%s() success in %d ms", name, mode, ms)
                                     }
@@ -161,16 +189,25 @@ class SyncService : Service() {
                                 }
                             }
                         } else {
-                            Timber.w("userId mismatch: intent=%d, selected=%d -> skipping", userId, openScaleUserId)
+                            Timber.w("%s: userId=%d not synced (single-user backend, different selected user) -> skipping", name, userId)
                         }
                     }
 
                     "delete" -> {
                         val date = Date(intent?.getLongExtra("date", 0L) ?: 0L)
-                        Timber.d("SyncService delete for date=%s", date)
+                        val userId = intent?.getIntExtra("userId", -1) ?: -1
+                        // id identifies the exact ledger entry to forget (always present — the
+                        // apiVersion gate blocks any openScale too old to send it).
+                        val id = intent?.getIntExtra("id", 0) ?: 0
+                        Timber.d("SyncService delete for id=%d userId=%d date=%s", id, userId, date)
+
+                        if (!syncService.shouldSync(userId)) {
+                            Timber.w("%s: delete userId=%d not synced -> skipping", name, userId)
+                            continue
+                        }
 
                         launch {
-                            val res = runCatching { syncService.delete(date) }
+                            val res = runCatching { syncService.submit(PendingOp("delete", id = id, userId = userId, dateMs = date.time)) }
                                 .onFailure { e -> Timber.e(e, "%s.delete() threw", name) }
                                 .getOrNull()
                             when (res) {
@@ -192,10 +229,16 @@ class SyncService : Service() {
                     }
 
                     "clear" -> {
-                        Timber.d("SyncService clear command received")
+                        val userId = intent?.getIntExtra("userId", -1) ?: -1
+                        Timber.d("SyncService clear command received for userId=%d", userId)
+
+                        if (!syncService.shouldSync(userId)) {
+                            Timber.w("%s: clear userId=%d not synced -> skipping", name, userId)
+                            continue
+                        }
 
                         launch {
-                            val res = runCatching { syncService.clear() }
+                            val res = runCatching { syncService.submit(PendingOp("clear", userId = userId)) }
                                 .onFailure { e -> Timber.e(e, "%s.clear() threw", name) }
                                 .getOrNull()
                             when (res) {
@@ -211,6 +254,34 @@ class SyncService : Service() {
                                 null -> {
                                     Timber.w("%s.clear() returned null", name)
                                 }
+                            }
+                        }
+                    }
+
+                    // Coalesced bulk signal (e.g. CSV import / backup restore in openScale):
+                    // one data-less wake-up → full reconcile against the ledger (heals adds/edits/deletes).
+                    "changed" -> {
+                        if (!syncService.exportEnabled()) {
+                            Timber.d("%s: import-only -> skipping reconcile", name)
+                            continue
+                        }
+                        launch {
+                            val allMeasurements = dataProvider.getUsers().flatMap { dataProvider.getMeasurements(it) }
+                            val measurements = if (syncService.isMultiUser) allMeasurements
+                                else allMeasurements.filter { it.userId == vm.selectedUserId.value }
+                            val res = runCatching { syncService.reconcile(measurements) }
+                                .onFailure { e -> Timber.e(e, "%s.reconcile() threw", name) }
+                                .getOrNull()
+                            when (res) {
+                                is SyncResult.Success -> {
+                                    vm.setLastSync(Instant.now())
+                                    Timber.d("%s.reconcile() success (%d measurements)", name, measurements.size)
+                                }
+                                is SyncResult.Failure -> {
+                                    syncService.setErrorMessage(res)
+                                    Timber.e("(%s.reconcile) %s", name, res.message)
+                                }
+                                null -> Timber.w("%s.reconcile() returned null", name)
                             }
                         }
                     }
@@ -257,11 +328,6 @@ class SyncService : Service() {
         stopSelf()
     }
 
-    private fun roundFloat(number: Float): Float {
-        val n = if (number.isFinite()) number else 0f
-        val big = BigDecimal(n.toDouble()).setScale(2, RoundingMode.HALF_UP)
-        return big.toFloat()
-    }
 
     /** Creates required foreground notification for service */
     private fun showNotification() {

@@ -25,7 +25,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
+import com.health.openscale.sync.gui.components.SyncDirectionSelector
+import com.health.openscale.sync.gui.components.UserScopeSection
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -57,12 +60,16 @@ class HealthConnectService(
         HealthPermission.getWritePermission(WeightRecord::class),
         HealthPermission.getWritePermission(BodyWaterMassRecord::class),
         HealthPermission.getWritePermission(BodyFatRecord::class),
+        // Read permissions enable bidirectional (inbound) sync: import weight written by other apps.
+        HealthPermission.getReadPermission(WeightRecord::class),
+        HealthPermission.getReadPermission(BodyWaterMassRecord::class),
+        HealthPermission.getReadPermission(BodyFatRecord::class),
     )
 
     private val healthConnectPermissionContract =
         PermissionController.createRequestPermissionResultContract()
 
-    override suspend fun doInit() {
+    override suspend fun connect() {
         detectHealthConnect()
     }
 
@@ -70,34 +77,51 @@ class HealthConnectService(
         return viewModel
     }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
-        val permissionResult = checkAllPermissionsGranted()
-        if (permissionResult is SyncResult.Failure) {
-            return permissionResult
-        }
+    // HealthConnect can read foreign records → bidirectional.
+    override val supportsInbound: Boolean get() = true
 
-        return healthConnectSync.fullSync(measurements)
+    // HealthConnect inserts the whole batch in one insertRecords call. Updates use the per-item
+    // default loop (rare in reconcile; each needs per-record resolution).
+    override suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult {
+        val perm = checkAllPermissionsGranted()
+        if (perm is SyncResult.Failure) return BulkResult(emptyList(), perm)
+        return when (val r = healthConnectSync.fullSync(measurements)) {
+            is SyncResult.Success -> BulkResult(measurements)
+            is SyncResult.Failure -> BulkResult(emptyList(), r)
+        }
     }
 
-    override suspend fun doInsert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+    override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
         checkAllPermissionsGranted().let {
             if (it is SyncResult.Failure) it else healthConnectSync.insert(measurement)
         }
 
-    override suspend fun doDelete(date: Date) : SyncResult<Unit> =
+    override suspend fun delete(userId: Int, date: Date) : SyncResult<Unit> =
         checkAllPermissionsGranted().let {
             if (it is SyncResult.Failure) it else healthConnectSync.delete(date)
         }
 
-    override suspend fun doClear() : SyncResult<Unit> =
+    override suspend fun clear(userId: Int) : SyncResult<Unit> =
         checkAllPermissionsGranted().let {
             if (it is SyncResult.Failure) it else healthConnectSync.clear()
         }
 
-    override suspend fun doUpdate(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+    override suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
         checkAllPermissionsGranted().let {
             if (it is SyncResult.Failure) it else healthConnectSync.update(measurement)
         }
+
+    /**
+     * Inbound source (bidirectional): read weight + fat + water written to Health Connect by OTHER
+     * apps. Echo is prevented via dataOrigin (own writes excluded). The base [runInbound] pipeline
+     * writes the results into openScale (master/gap-fill via IGNORE).
+     */
+    override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
+        val perm = checkAllPermissionsGranted()
+        if (perm is SyncResult.Failure) throw IllegalStateException("Health Connect permissions not granted")
+        return healthConnectSync.readInboundReadings(context.packageName, sinceMs)
+            .map { InboundMeasurement(it.timeMs, it.weightKg, it.fatPct, it.waterPct) }
+    }
 
     override fun registerActivityResultLauncher(activity: ComponentActivity) {
         healthConnectRequestPermissions = activity.registerForActivityResult(healthConnectPermissionContract) { granted ->
@@ -227,6 +251,22 @@ class HealthConnectService(
                 }
             }
         ) {
+            // Single-user backend: pick which openScale user this destination receives.
+            val osUsers = remember { openScaleDataService.getUsers() }
+            UserScopeSection(
+                isMultiUser = isMultiUser,
+                users = osUsers,
+                selectedUserId = viewModel.selectedUserId.value,
+                onUserSelected = { viewModel.setSelectedUserId(it.id) },
+                enabled = viewModel.syncEnabled.value
+            )
+            // Per-backend direction (export / import / both). Inbound is pulled by the global Sync button.
+            SyncDirectionSelector(
+                current = viewModel.syncDirection.value,
+                onChange = { viewModel.setSyncDirection(it) },
+                enabled = viewModel.syncEnabled.value,
+                serviceName = viewModel.getName()
+            )
             if (!viewModel.connectAvailable.value) {
                 Text(stringResource(id = R.string.health_connect_not_available_text))
                 SyncConnectButton(

@@ -28,32 +28,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import com.health.openscale.sync.R
-import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import timber.log.Timber
 
 class OpenScaleProvider (
     private val context: Context,
-    private val openScaleDataService : OpenScaleDataProvider,
+    openScaleDataService : OpenScaleDataProvider,
     sharedPreferences: SharedPreferences
 ) {
     private val viewModel: OpenScaleViewModel = OpenScaleViewModel(sharedPreferences)//ViewModelProvider(context)[OpenScaleViewModel::class.java]
@@ -62,12 +50,6 @@ class OpenScaleProvider (
 
      fun init() {
         checkPermissionGranted()
-
-        if (viewModel.allPermissionsGranted.value) {
-            viewModel.setOpenScaleUsers(openScaleDataService.getUsers())
-            viewModel.selectOpenScaleUser(getSelectedUser())
-            openScaleDataService.saveSelectedUserId(getSelectedUser().id)
-        }
     }
 
     fun viewModel(): ViewModelInterface {
@@ -88,8 +70,6 @@ class OpenScaleProvider (
 
                 if (isGranted) {
                     Timber.d("openScale permission is granted")
-                    viewModel.setOpenScaleUsers(openScaleDataService.getUsers())
-                    viewModel.selectOpenScaleUser(getSelectedUser())
                 } else {
                     Timber.d("openScale permission is not granted")
                 }
@@ -100,45 +80,23 @@ class OpenScaleProvider (
         requestPermission.launch(requiredPermissions)
     }
 
-    fun getSelectedUser(): OpenScaleUser {
-        val selectedUserId = openScaleDataService.getSavedSelectedUserId()
-        try {
-            if (selectedUserId != null) {
-                return viewModel.openScaleUsers.value.first { user -> user.id == selectedUserId }
-            } else {
-                return viewModel.openScaleUsers.value.first()
-            }
-        } catch (_: NoSuchElementException) {
-            viewModel.setErrorMessage(context.getString(R.string.open_scale_no_user_found_error))
-        }
-
-        return OpenScaleUser(Int.MAX_VALUE, context.getString(R.string.open_scale_user_select_placeholder))
-    }
-
     @Composable
     fun ComposeSettings(activity: ComponentActivity) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (viewModel.connectAvailable.value && viewModel.allPermissionsGranted.value) {
-                UserSelect()
-            } else {
-                if (!viewModel.connectAvailable.value) {
-                    Text(text = stringResource(id = R.string.open_scale_not_available_error))
-                    Button(onClick = {
-                        openAppStore(activity)
-                    }){
-                        Text(stringResource(id = R.string.open_scale_get_open_scale_button))
-                    }
+            // openScale availability / permission prompts only. The per-user selection now lives in
+            // each single-user backend's settings (HealthConnect/Wger); multi-user backends sync all.
+            if (!viewModel.connectAvailable.value) {
+                Text(text = stringResource(id = R.string.open_scale_not_available_error))
+                Button(onClick = { openAppStore(activity) }) {
+                    Text(stringResource(id = R.string.open_scale_get_open_scale_button))
                 }
-                else if (!viewModel.allPermissionsGranted.value)  {
-                    Text(text = stringResource(id = R.string.open_scale_permission_not_granted))
-                    Button(onClick = {
-                        requestPermissions()
-                    }){
-                        Text(stringResource(id = R.string.open_scale_request_permissions_button))
-                    }
+            } else if (!viewModel.allPermissionsGranted.value) {
+                Text(text = stringResource(id = R.string.open_scale_permission_not_granted))
+                Button(onClick = { requestPermissions() }) {
+                    Text(stringResource(id = R.string.open_scale_request_permissions_button))
                 }
             }
         }
@@ -161,46 +119,4 @@ class OpenScaleProvider (
         }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    fun UserSelect() {
-        var expanded by remember { mutableStateOf(false) }
-
-        ExposedDropdownMenuBox(
-            modifier = Modifier.fillMaxWidth(),
-            expanded = expanded,
-            onExpandedChange = {
-                expanded = !expanded
-            }
-        ) {
-            val selectedOpenScale by viewModel.openScaleSelectedUser.observeAsState()
-
-            TextField(
-                label = { Text(stringResource(id = R.string.open_scale_user_text)) },
-                value = selectedOpenScale?.username ?: "",
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier
-                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
-                    .fillMaxWidth()
-            )
-
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                viewModel.openScaleUsers.value.forEach { user ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(user.username)
-                        },
-                        onClick = {
-                            viewModel.selectOpenScaleUser(user)
-                            openScaleDataService.saveSelectedUserId(user.id)
-                            expanded = false
-                        }
-                    )
-                }
-
-            }
-        }
-    }
 }

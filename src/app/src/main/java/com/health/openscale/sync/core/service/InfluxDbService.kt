@@ -25,6 +25,7 @@ import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SecretOutlinedTextField
+import com.health.openscale.sync.gui.components.UserScopeSection
 import com.health.openscale.sync.core.model.InfluxDbViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.InfluxDbSync
@@ -43,9 +44,12 @@ class InfluxDbService(
 
     override val retryQueueKey = "influxdb"
 
+    // InfluxDB carries userId/username as tags → can serve all users.
+    override val isMultiUser: Boolean get() = true
+
     override fun viewModel(): ViewModelInterface = viewModel
 
-    override suspend fun doInit() {
+    override suspend fun connect() {
         connectInfluxDb()
     }
 
@@ -98,20 +102,30 @@ class InfluxDbService(
         return action(sync)
     }
 
-    override suspend fun doInsert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+    override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> =
         withSync { it.writePoint(measurement) }
 
-    override suspend fun doUpdate(measurement: OpenScaleMeasurement): SyncResult<Unit> =
+    override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> =
         withSync { it.writePoint(measurement) }
 
-    override suspend fun doDelete(date: Date): SyncResult<Unit> =
-        withSync { it.deleteByTimestamp(date) }
+    override suspend fun delete(userId: Int, date: Date): SyncResult<Unit> =
+        withSync { it.deleteByTimestamp(userId, date) }
 
-    override suspend fun doClear(): SyncResult<Unit> =
-        withSync { it.deleteAll() }
+    override suspend fun clear(userId: Int): SyncResult<Unit> =
+        withSync { it.deleteAll(userId) }
 
-    override suspend fun sync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
-        withSync { it.writePoints(measurements) }
+    // InfluxDB writes the whole batch as one line-protocol request (insert == update: upsert by time).
+    override suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        bulkWrite(measurements)
+
+    override suspend fun updateAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        bulkWrite(measurements)
+
+    private suspend fun bulkWrite(measurements: List<OpenScaleMeasurement>): BulkResult =
+        when (val r = withSync { it.writePoints(measurements) }) {
+            is SyncResult.Success -> BulkResult(measurements)
+            is SyncResult.Failure -> BulkResult(emptyList(), r)
+        }
 
     @Composable
     override fun ComposeSettings(activity: ComponentActivity) {
@@ -128,6 +142,14 @@ class InfluxDbService(
                 }
             }
         ) {
+            // Multi-user backend: states that every openScale user is synced (no per-user picker).
+            UserScopeSection(
+                isMultiUser = isMultiUser,
+                users = emptyList(),
+                selectedUserId = 0,
+                onUserSelected = {},
+                enabled = viewModel.syncEnabled.value
+            )
             val urlState by viewModel.url.observeAsState("")
             val isV2State by viewModel.isV2.observeAsState(true)
             val orgState by viewModel.org.observeAsState("")

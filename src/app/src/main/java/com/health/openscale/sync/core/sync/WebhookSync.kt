@@ -29,19 +29,37 @@ class WebhookSync(
         mutableMapOf<String, Any>(
             "id" to m.id,
             "userId" to m.userId,
+            "username" to m.username,
             "date" to dateFormat.format(m.date),
             "weight" to m.weight,
             "fat" to m.fat,
             "water" to m.water,
             "muscle" to m.muscle
-        ).also { map -> m.extraFields.forEach { (k, v) -> map[k] = v } }
+        )
+            // Full, self-describing generic value set (all types incl. custom + units).
+            .also { map ->
+                if (m.values.isNotEmpty()) {
+                    map["values"] = m.values.map { v ->
+                        mutableMapOf<String, Any>(
+                            "key" to v.backendKey(),
+                            "name" to v.name,
+                            "unit" to v.unit,
+                            "isDerived" to v.isDerived
+                        ).also { e ->
+                            v.value?.let { e["value"] = it }
+                            v.text?.let { e["text"] = it }
+                        }
+                    }
+                }
+            }
 
     suspend fun test(): SyncResult<Unit> =
         post(gson.toJson(mapOf("event" to "test")))
 
-    suspend fun fullSync(measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
+    /** One POST carrying a whole batch: {event, measurements:[…]} (used by reconcile's bulk apply). */
+    suspend fun postBatch(event: String, measurements: List<OpenScaleMeasurement>): SyncResult<Unit> =
         post(gson.toJson(mapOf(
-            "event" to "fullSync",
+            "event" to event,
             "measurements" to measurements.map { measurementToMap(it) }
         )))
 
@@ -51,11 +69,11 @@ class WebhookSync(
     suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> =
         post(gson.toJson(measurementToMap(measurement).also { it["event"] = "update" }))
 
-    suspend fun delete(date: Date): SyncResult<Unit> =
-        post(gson.toJson(mapOf("event" to "delete", "date" to dateFormat.format(date))))
+    suspend fun delete(userId: Int, date: Date): SyncResult<Unit> =
+        post(gson.toJson(mapOf("event" to "delete", "userId" to userId, "date" to dateFormat.format(date))))
 
-    suspend fun clear(): SyncResult<Unit> =
-        post(gson.toJson(mapOf("event" to "clear")))
+    suspend fun clear(userId: Int): SyncResult<Unit> =
+        post(gson.toJson(mapOf("event" to "clear", "userId" to userId)))
 
     private suspend fun post(json: String): SyncResult<Unit> = withContext(Dispatchers.IO) {
         try {

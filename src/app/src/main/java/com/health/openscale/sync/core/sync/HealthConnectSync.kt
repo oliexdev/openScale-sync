@@ -163,6 +163,37 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         }
     }
 
+    /** One inbound reading from Health Connect (foreign app), grouped by timestamp. */
+    data class InboundReading(val timeMs: Long, val weightKg: Float, val fatPct: Float?, val waterPct: Float?)
+
+    /**
+     * Inbound (bidirectional): read weight + body-fat + body-water records written by OTHER apps
+     * since [sinceMillis], excluding our own [ownPackage] writes (echo prevention via dataOrigin).
+     * Records are grouped by exact timestamp; water mass (kg) is converted to % of weight.
+     * Dedup against openScale happens on write (insert IGNORE).
+     */
+    suspend fun readInboundReadings(ownPackage: String, sinceMillis: Long): List<InboundReading> {
+        val range = TimeRangeFilter.after(Instant.ofEpochMilli(sinceMillis))
+        fun foreign(record: Record) = record.metadata.dataOrigin.packageName != ownPackage
+
+        val weights = healthConnectClient.readRecords(
+            ReadRecordsRequest(WeightRecord::class, range)
+        ).records.filter(::foreign).associate { it.time.toEpochMilli() to it.weight.inKilograms.toFloat() }
+
+        val fats = healthConnectClient.readRecords(
+            ReadRecordsRequest(BodyFatRecord::class, range)
+        ).records.filter(::foreign).associate { it.time.toEpochMilli() to it.percentage.value.toFloat() }
+
+        val waters = healthConnectClient.readRecords(
+            ReadRecordsRequest(BodyWaterMassRecord::class, range)
+        ).records.filter(::foreign).associate { it.time.toEpochMilli() to it.mass.inKilograms.toFloat() }
+
+        return weights.map { (t, kg) ->
+            val waterPct = waters[t]?.let { if (kg > 0f) it / kg * 100f else null }
+            InboundReading(t, kg, fats[t], waterPct)
+        }
+    }
+
     private suspend fun readWeightRecord(measurement: OpenScaleMeasurement): WeightRecord? {
         return readRecord(measurement, WeightRecord::class)
     }

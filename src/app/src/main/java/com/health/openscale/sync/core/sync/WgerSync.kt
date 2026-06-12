@@ -31,7 +31,6 @@ import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
-import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,28 +40,6 @@ class WgerSync(wgerRetrofit: Retrofit) : SyncInterface() {
     private val wgerApi : WgerApi = wgerRetrofit.create(WgerApi::class.java)
     // Locale.US: API wire format — must stay ASCII regardless of the device locale
     private val wgerDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).apply { timeZone = TimeZone.getDefault() }
-
-    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
-        var failureCount = 0
-
-        measurements.forEach { measurement ->
-            try {
-                val response: Response<Unit> = wgerApi.insert(wgerDateFormat.format(measurement.date), measurement.weight)
-                if (!response.isSuccessful) {
-                    Timber.d("wger ${wgerDateFormat.format(measurement.date)} insert response error ${response.errorBody()?.string()}")
-                    failureCount++
-                }
-            } catch (e: Exception) {
-                return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
-            }
-        }
-
-        if (failureCount > 0) {
-            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"$failureCount of ${measurements.size} measurements failed to sync",null)
-        } else {
-            return SyncResult.Success(Unit)
-        }
-    }
 
     suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
             try {
@@ -136,9 +113,27 @@ class WgerSync(wgerRetrofit: Retrofit) : SyncInterface() {
             }
     }
 
+    /**
+     * Inbound (bidirectional): read weight entries from Wger as (epochMillis, weightKg) pairs.
+     * Wger stores a date only (no time, no data origin), so entries are returned at local midnight;
+     * the caller applies openScale-as-master gap-fill (only import days openScale lacks) to avoid
+     * duplicates and echo. Weight is treated as kg (consistent with the export direction).
+     */
+    suspend fun readInboundWeights(): List<Pair<Long, Float>> {
+        val dateOnly = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getDefault() }
+        val list = wgerApi.getWeightEntries(limit = 999)
+        return list.results.orEmpty().mapNotNull { e ->
+            val parsed = e.date?.let { runCatching { dateOnly.parse(it) }.getOrNull() } ?: return@mapNotNull null
+            parsed.time to e.weight
+        }
+    }
+
     interface WgerApi {
         @GET("weightentry")
         suspend fun weightEntryList(): WgerWeightEntryList
+
+        @GET("weightentry/")
+        suspend fun getWeightEntries(@Query("limit") limit: Int): WgerWeightEntryList
 
         @GET("weightentry/")
         suspend fun getWeightEntry(@Query("date") wgerDate: String): WgerWeightEntryList

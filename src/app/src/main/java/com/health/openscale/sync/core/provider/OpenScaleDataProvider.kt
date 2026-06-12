@@ -17,26 +17,31 @@
  */
 package com.health.openscale.sync.core.provider
 
-import androidx.core.content.edit
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
 import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import timber.log.Timber
-import java.math.BigDecimal
-import java.math.RoundingMode
 import java.util.Date
 
-class OpenScaleDataProvider(
+open class OpenScaleDataProvider(
     private val context: Context,
     private val sharedPreferences: SharedPreferences
 ) {
     private val authority = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale") + ".provider"
 
-    fun getUsers(): List<OpenScaleUser> {
+    companion object {
+        /** Minimum openScale ContentProvider API version this sync app requires
+         *  (v2 = sync Intents carry userId on delete/clear). */
+        const val MIN_API_VERSION = 2
+    }
+
+    open fun getUsers(): List<OpenScaleUser> {
 
         val userUri = Uri.Builder()
             .scheme(ContentResolver.SCHEME_CONTENT)
@@ -82,50 +87,20 @@ class OpenScaleDataProvider(
         return users
     }
 
-    fun checkVersion(): Boolean {
-        val metaUri = Uri.Builder()
-            .scheme(ContentResolver.SCHEME_CONTENT)
-            .authority(authority)
-            .path("meta")
-            .build()
+    /** True only when the installed openScale is KNOWN to be older than the required API version
+     *  (false when the version can't be determined, so transient failures don't block/warn). */
+    fun isVersionTooOld(): Boolean = getApiVersion()?.let { it < MIN_API_VERSION } ?: false
 
-        val records = context.contentResolver.query(
-                metaUri,
-            null,
-            null,
-            null,
-            null
-        )
+    /** The installed openScale's user-facing version name (e.g. "3.1.1"), read straight from the
+     *  PackageManager — no provider round-trip needed, works even for too-old versions. Null if
+     *  openScale isn't installed or the name can't be read. Lets the version-gate banner name the
+     *  actual installed version instead of a hardcoded minimum. */
+    fun getInstalledVersionName(): String? = runCatching {
+        val pkg = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale")!!
+        context.packageManager.getPackageInfo(pkg, 0).versionName
+    }.getOrNull()
 
-        records.use { record ->
-            while (record?.moveToNext() == true) {
-                    var apiVersion : Int? = null
-                    var versionCode : Int? = null
-
-                    for (i in 0 until record.columnCount) {
-                        if (record.getColumnName(i).equals("apiVersion")) {
-                            apiVersion = record.getInt(i)
-                        }
-
-                        if (record.getColumnName(i).equals("versionCode")) {
-                            versionCode = record.getInt(i)
-                        }
-                    }
-
-                Timber.d("openScale version $versionCode with content provider API version $apiVersion")
-
-                    if (versionCode != null) {
-                        if (versionCode > 66) { // API version with real time support
-                            return true
-                        }
-                    }
-                }
-            }
-
-        return false
-    }
-
-    fun getApiVersion(): Int? {
+    open fun getApiVersion(): Int? {
         val metaUri = Uri.Builder()
             .scheme(ContentResolver.SCHEME_CONTENT)
             .authority(authority)
@@ -153,7 +128,7 @@ class OpenScaleDataProvider(
         return null
     }
 
-    fun getMeasurements(openScaleUser: OpenScaleUser): List<OpenScaleMeasurement> {
+    open fun getMeasurements(openScaleUser: OpenScaleUser): List<OpenScaleMeasurement> {
         Timber.d("Get measurements for user ${openScaleUser.id}")
         val measurementsUri = Uri.Builder()
             .scheme(ContentResolver.SCHEME_CONTENT)
@@ -175,37 +150,25 @@ class OpenScaleDataProvider(
             while (record?.moveToNext() == true) {
                 var id: Int? = null
                 var dateTime: Date? = null
-                var weight: Float? = null
-                var fat: Float? = null
-                var water: Float? = null
-                var muscle: Float? = null
-                val extraFields = mutableMapOf<String, Float>()
-                val userId = openScaleUser.id
+                var valuesJson: String? = null
 
                 for (i in 0 until record.columnCount) {
-                    val col = record.getColumnName(i)
-                    when (col) {
+                    when (record.getColumnName(i)) {
                         "_ID"      -> id = record.getInt(i)
                         "datetime" -> dateTime = Date(record.getLong(i))
-                        "weight"   -> weight = roundFloat(record.getFloat(i))
-                        "fat"      -> fat = roundFloat(record.getFloat(i))
-                        "water"    -> water = roundFloat(record.getFloat(i))
-                        "muscle"   -> muscle = roundFloat(record.getFloat(i))
-                        else -> {
-                            val type = record.getType(i)
-                            if (type == android.database.Cursor.FIELD_TYPE_FLOAT ||
-                                type == android.database.Cursor.FIELD_TYPE_INTEGER) {
-                                val value = roundFloat(record.getFloat(i))
-                                if (value != 0f) extraFields[col] = value
-                            }
-                        }
+                        "values_json" -> valuesJson = record.getString(i)
                     }
                 }
 
-                if (id != null && dateTime != null && weight != null && fat != null && water != null && muscle != null) {
-                    measurements.add(OpenScaleMeasurement(id, userId, dateTime, weight, fat, water, muscle, extraFields))
+                if (id != null && dateTime != null && valuesJson != null) {
+                    // weight/fat/water/muscle are derived from the generic value set (single source).
+                    measurements.add(
+                        OpenScaleMeasurement.fromValues(
+                            id, openScaleUser.id, dateTime, openScaleUser.username, OpenScaleMeasurementValue.parseList(valuesJson)
+                        )
+                    )
                 } else {
-                    Timber.e("Not all required parameters are set")
+                    Timber.e("Measurement row missing _ID/datetime/values_json")
                 }
             }
         }
@@ -215,27 +178,50 @@ class OpenScaleDataProvider(
         return measurements
     }
 
-    private fun roundFloat(number: Float): Float {
-        val bigDecimal = BigDecimal(number.toDouble())
-        val rounded = bigDecimal.setScale(2, RoundingMode.HALF_UP)
-        return rounded.toFloat()
-    }
-
-    fun getSavedSelectedUserId(): Int? {
-        val userId = sharedPreferences.getInt(OpenScaleViewModel.SELECTED_USER_ID, -1)
-
-        if (userId == -1) {
-            return null
+    /**
+     * Inbound (bidirectional sync): write a measurement INTO openScale for [userId] via the
+     * ContentProvider. openScale stays master — the provider's insert uses OnConflictStrategy.IGNORE
+     * on (userId, timestamp), so an existing openScale measurement is never overwritten (gap-fill).
+     * Weight is in kg; fat/water/muscle in percent (openScale converts to the user's unit).
+     */
+    fun insertMeasurement(
+        userId: Int, dateMs: Long, weightKg: Float,
+        fat: Float? = null, water: Float? = null, muscle: Float? = null
+    ): Boolean {
+        val uri = Uri.Builder()
+            .scheme(ContentResolver.SCHEME_CONTENT)
+            .authority(authority)
+            .path("measurements/$userId")
+            .build()
+        val cv = ContentValues().apply {
+            put("datetime", dateMs)
+            put("weight", weightKg)
+            fat?.let { put("fat", it) }
+            water?.let { put("water", it) }
+            muscle?.let { put("muscle", it) }
         }
-
-        return userId
+        return runCatching { context.contentResolver.insert(uri, cv); true }
+            .getOrElse { Timber.e(it, "inbound insert failed"); false }
     }
 
-    fun saveSelectedUserId(userId: Int?) {
-        if (userId != null) {
-            sharedPreferences.edit { putInt(OpenScaleViewModel.SELECTED_USER_ID, userId) }
-        } else {
-            sharedPreferences.edit { putInt(OpenScaleViewModel.SELECTED_USER_ID, -1) }
+    /**
+     * Inbound (flexible/future): write a measurement with an arbitrary generic value set
+     * ([valuesJson], same self-describing format as the outbound values) plus the mandatory weight.
+     * Lets future inbound sources import all data types (incl. custom), not just weight/fat/water.
+     */
+    fun insertMeasurementGeneric(userId: Int, dateMs: Long, weightKg: Float, valuesJson: String): Boolean {
+        val uri = Uri.Builder()
+            .scheme(ContentResolver.SCHEME_CONTENT)
+            .authority(authority)
+            .path("measurements/$userId")
+            .build()
+        val cv = ContentValues().apply {
+            put("datetime", dateMs)
+            put("weight", weightKg)
+            put("values_json", valuesJson)
         }
+        return runCatching { context.contentResolver.insert(uri, cv); true }
+            .getOrElse { Timber.e(it, "inbound generic insert failed"); false }
     }
+
 }
