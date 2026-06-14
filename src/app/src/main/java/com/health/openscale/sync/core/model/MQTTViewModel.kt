@@ -21,6 +21,8 @@ import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.health.openscale.sync.R
 
 class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
@@ -31,7 +33,7 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
         const val PASSWORD = "mqtt_password"
         const val USE_SSL = "mqtt_use_ssl"
         const val USE_DISCOVERY = "mqtt_use_discovery"
-        const val LAST_PUBLISHED_DATE = "last_published_date"
+        const val LAST_PUBLISHED_DATES = "last_published_dates"
     }
 
     private val _mqttServer = MutableLiveData<String>(sharedPreferences.getString(SERVER, ""))
@@ -43,7 +45,13 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
     private val _mqttUseSsl = MutableLiveData<Boolean>(sharedPreferences.getBoolean(USE_SSL, true))
     private val _mqttUseDiscovery = MutableLiveData<Boolean>(sharedPreferences.getBoolean(USE_DISCOVERY, true))
 
-    private val _lastPublishedDate = MutableLiveData<Long>(sharedPreferences.getLong(LAST_PUBLISHED_DATE, 0L))
+    private val gson = Gson()
+    private val lastPublishedDatesType = object : TypeToken<MutableMap<Int, Long>>() {}.type
+    private val lastPublishedDates: MutableMap<Int, Long> =
+        runCatching {
+            sharedPreferences.getString(LAST_PUBLISHED_DATES, null)
+                ?.let { gson.fromJson<MutableMap<Int, Long>>(it, lastPublishedDatesType) }
+        }.getOrNull() ?: mutableMapOf()
 
     override fun getName(): String {
         return "MQTT"
@@ -96,10 +104,20 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
         sharedPreferences.edit { putBoolean(USE_DISCOVERY, useDiscovery) }
     }
 
-    val lastPublishedDate: LiveData<Long> = _lastPublishedDate
+    /** Epoch millis of the newest measurement published to [userId]'s retained "last" topic, or 0. */
+    fun getLastPublishedDate(userId: Int): Long = lastPublishedDates[userId] ?: 0L
 
-    fun setLastPublishedDate(date: Long) {
-        _lastPublishedDate.value = date
-        sharedPreferences.edit { putLong(LAST_PUBLISHED_DATE, date) }
+    fun setLastPublishedDate(userId: Int, date: Long) {
+        lastPublishedDates[userId] = date
+        persistLastPublishedDates()
+    }
+
+    fun clearLastPublishedDate(userId: Int) {
+        lastPublishedDates.remove(userId)
+        persistLastPublishedDates()
+    }
+
+    private fun persistLastPublishedDates() {
+        sharedPreferences.edit { putString(LAST_PUBLISHED_DATES, gson.toJson(lastPublishedDates)) }
     }
 }

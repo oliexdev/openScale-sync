@@ -187,7 +187,9 @@ class MQTTService(
         val r = ensureConnectedAndExecute("reconcile") { syncHandler ->
             val result = syncHandler.fullSync(measurements)
             if (result is SyncResult.Success) {
-                measurements.maxByOrNull { it.date }?.let { publishLastMeasurement(it) }
+                measurements.groupBy { it.userId }.forEach { (_, perUser) ->
+                    perUser.maxByOrNull { it.date }?.let { publishLastMeasurement(it) }
+                }
             }
             result
         }
@@ -210,10 +212,10 @@ class MQTTService(
         ensureConnectedAndExecute("delete") { syncHandler ->
             val r = syncHandler.delete(userId, date)
             if (r is SyncResult.Success) {
-                val lastDate = viewModel.lastPublishedDate.value
-                if (lastDate != null && date.time >= lastDate) {
+                val lastDate = viewModel.getLastPublishedDate(userId)
+                if (lastDate != 0L && date.time >= lastDate) {
                     syncHandler.clearLastMeasurement(userId)
-                    viewModel.setLastPublishedDate(0L)
+                    viewModel.clearLastPublishedDate(userId)
                 }
             }
             r
@@ -224,7 +226,7 @@ class MQTTService(
             val r = syncHandler.clear(userId)
             if (r is SyncResult.Success) {
                 syncHandler.clearLastMeasurement(userId)
-                viewModel.setLastPublishedDate(0L)
+                viewModel.clearLastPublishedDate(userId)
             }
             r
         }
@@ -238,16 +240,11 @@ class MQTTService(
             r
         }
 
-    private fun publishLastMeasurement(measurement: OpenScaleMeasurement?) {
-        if (measurement != null) {
-            val lastDate = viewModel.lastPublishedDate.value
-            if (lastDate == null || measurement.date.time >= lastDate) {
-                mqttSync.publishLastMeasurement(measurement)
-                viewModel.setLastPublishedDate(measurement.date.time)
-            }
-        } else {
-            mqttSync.publishLastMeasurement(null)
-            viewModel.setLastPublishedDate(0L)
+    private fun publishLastMeasurement(measurement: OpenScaleMeasurement) {
+        val lastDate = viewModel.getLastPublishedDate(measurement.userId)
+        if (lastDate == 0L || measurement.date.time >= lastDate) {
+            mqttSync.publishLastMeasurement(measurement)
+            viewModel.setLastPublishedDate(measurement.userId, measurement.date.time)
         }
     }
 
