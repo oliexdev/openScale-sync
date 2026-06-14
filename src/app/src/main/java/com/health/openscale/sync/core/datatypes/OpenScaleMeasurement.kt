@@ -71,7 +71,7 @@ data class OpenScaleMeasurement(
     val userId: Int,
     val date: Date,
     val weight: Float,
-    val fat: Float,
+    val body_fat: Float,
     val water: Float,
     val muscle: Float,
     // Human-readable openScale user name; carried for multi-user routing/labelling
@@ -101,5 +101,24 @@ data class OpenScaleMeasurement(
                 id, userId, date, weight, pct("BODY_FAT"), pct("WATER"), pct("MUSCLE"), username, values
             )
         }
+
+        /** A canonical convenience metric: its openScale generic-value [key], UCUM [unit] and an
+         *  [accessor] for the derived convenience field. Its wire/field name is [backendKey] (the key
+         *  lower-cased), identical to [OpenScaleMeasurementValue.backendKey] and used uniformly by all
+         *  backends. Single source of truth — backends derive their columns/fields from this list. */
+        data class CanonicalMetric(
+            val key: String,
+            val unit: String,
+            val accessor: (OpenScaleMeasurement) -> Float
+        ) {
+            val backendKey: String get() = key.lowercase()
+        }
+
+        val CANONICAL_METRICS = listOf(
+            CanonicalMetric("WEIGHT", "kg") { it.weight },
+            CanonicalMetric("BODY_FAT", "%") { it.body_fat },
+            CanonicalMetric("WATER", "%") { it.water },
+            CanonicalMetric("MUSCLE", "%") { it.muscle },
+        )
     }
 }

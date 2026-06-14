@@ -259,8 +259,8 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         return BodyFatRecord(
             time = measurementInstant,
             zoneOffset = zoneOffset,
-            percentage = Percentage(measurement.fat.toDouble()),
-            metadata = buildMetadata(measurement, "fat")
+            percentage = Percentage(measurement.body_fat.toDouble()),
+            metadata = buildMetadata(measurement, "fat")   // HC clientRecordId suffix — internal dedup key, kept stable
         )
     }
 }

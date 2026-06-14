@@ -86,7 +86,7 @@ class MQTTService(
 
     /**
      * Inbound source: subscribe to the inbound topic tree and drain currently available (retained)
-     * measurement messages. Each message is a JSON `{date, weight[, fat, water, values, userId]}`;
+     * measurement messages. Each message is a JSON `{date, weight[, body_fat, water, values, userId]}`;
      * the target user comes from the topic segment `openScaleSync/inbound/<userId>/…` or the payload.
      */
     override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
@@ -109,7 +109,7 @@ class MQTTService(
             InboundMeasurement(
                 timeMs = date,
                 weightKg = o.getDouble("weight").toFloat(),
-                fatPct = if (o.has("fat")) o.getDouble("fat").toFloat() else null,
+                fatPct = if (o.has("body_fat")) o.getDouble("body_fat").toFloat() else null,
                 waterPct = if (o.has("water")) o.getDouble("water").toFloat() else null,
                 valuesJson = if (o.has("values")) o.getJSONArray("values").toString() else null,
                 userId = if (o.has("userId")) o.optInt("userId") else topicUser
@@ -175,8 +175,9 @@ class MQTTService(
         return action(mqttSync)
     }
 
-    // MQTT publishes the whole set to the per-user "all" topic (like a full sync) and refreshes the
-    // retained "last" topic with the newest. Both insert and update batches take this route.
+    // Bulk insert/update: refresh each user's retained "last" topic with that user's newest in the
+    // batch. The full retained history snapshot is published separately in onReconciled (which has
+    // the complete set, not just this delta). Both insert and update batches take this route.
     override suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult =
         bulkPublish(measurements)
 
@@ -184,18 +185,29 @@ class MQTTService(
         bulkPublish(measurements)
 
     private suspend fun bulkPublish(measurements: List<OpenScaleMeasurement>): BulkResult {
-        val r = ensureConnectedAndExecute("reconcile") { syncHandler ->
-            val result = syncHandler.fullSync(measurements)
-            if (result is SyncResult.Success) {
-                measurements.groupBy { it.userId }.forEach { (_, perUser) ->
-                    perUser.maxByOrNull { it.date }?.let { publishLastMeasurement(it) }
-                }
+        val r = ensureConnectedAndExecute("reconcile") { _ ->
+            measurements.groupBy { it.userId }.forEach { (_, perUser) ->
+                perUser.maxByOrNull { it.date }?.let { publishLastMeasurement(it) }
             }
-            result
+            SyncResult.Success(Unit)
         }
         return when (r) {
             is SyncResult.Success -> BulkResult(measurements)
             is SyncResult.Failure -> BulkResult(emptyList(), r)
+        }
+    }
+
+    // Post-reconcile: (re)publish the retained per-user history snapshot for the users whose data
+    // changed (or all of them on a forced/manual full sync). Best-effort — failures are swallowed by
+    // reconcile's runCatching; the next sync refreshes the snapshot.
+    override suspend fun onReconciled(current: List<OpenScaleMeasurement>, changedUserIds: Set<Int>) {
+        if (changedUserIds.isEmpty()) return
+        val byUser = current.groupBy { it.userId }
+        ensureConnectedAndExecute("history") { syncHandler ->
+            changedUserIds.forEach { userId ->
+                syncHandler.publishHistory(userId, byUser[userId] ?: emptyList())
+            }
+            SyncResult.Success(Unit)
         }
     }
 
@@ -226,6 +238,7 @@ class MQTTService(
             val r = syncHandler.clear(userId)
             if (r is SyncResult.Success) {
                 syncHandler.clearLastMeasurement(userId)
+                syncHandler.publishHistory(userId, emptyList())   // clear the retained history snapshot
                 viewModel.clearLastPublishedDate(userId)
             }
             r

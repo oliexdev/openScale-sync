@@ -42,7 +42,7 @@ class InfluxDbSync(
             numeric.joinToString(",") { "${it.backendKey()}=${it.value}" }
         } else {
             // Fallback (values should always be present); keep the core fixed fields.
-            "weight=${m.weight},body_fat=${m.fat},water=${m.water},muscle=${m.muscle}"
+            OpenScaleMeasurement.CANONICAL_METRICS.joinToString(",") { "${it.backendKey}=${it.accessor(m)}" }
         }
         return "$measurementName,source=openscale$userTags $fields ${m.date.time * 1_000_000L}"
     }

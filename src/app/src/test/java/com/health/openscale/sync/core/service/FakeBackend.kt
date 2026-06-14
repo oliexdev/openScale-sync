@@ -63,6 +63,16 @@ class FakeBackend(
     /** In batch mode: which measurements "succeeded" (default: all). Lets tests model partial bulk. */
     var batchSucceed: (List<OpenScaleMeasurement>) -> List<OpenScaleMeasurement> = { it }
 
+    /** Each onReconciled call recorded as (changedUserIds, currentMeasurementIds), in order. */
+    val reconciledCalls = mutableListOf<Pair<Set<Int>, List<Int>>>()
+    /** When true, onReconciled throws — to assert a hook failure doesn't break reconcile. */
+    var failOnReconciled = false
+
+    override suspend fun onReconciled(current: List<OpenScaleMeasurement>, changedUserIds: Set<Int>) {
+        if (failOnReconciled) throw RuntimeException("onReconciled boom")
+        reconciledCalls += changedUserIds to current.map { it.id }
+    }
+
     private fun next(): SyncResult<Unit> = when {
         failAll -> SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "failAll")
         scripted.isEmpty() -> SyncResult.Success(Unit)

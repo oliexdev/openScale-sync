@@ -584,7 +584,8 @@ class MainActivity : AppCompatActivity() {
                             if (service.exportEnabled()) {
                                 val measurements = if (service.isMultiUser) allMeasurements
                                     else allMeasurements.filter { it.userId == service.viewModel().selectedUserId.value }
-                                (service.reconcile(measurements) as? SyncResult.Failure)?.let { failure = it }
+                                // Manual full sync → force a retained history-snapshot refresh for all users.
+                                (service.reconcile(measurements, forceSnapshot = true) as? SyncResult.Failure)?.let { failure = it }
                             }
                             // Inbound: pull from the source into openScale (bidirectional backends, import/both direction).
                             if (failure == null && service.importEnabled()) {

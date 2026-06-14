@@ -88,7 +88,7 @@ class DataParsingTest {
     fun fromValues_emptyValues_yieldsZeroWeight() {
         val m = OpenScaleMeasurement.fromValues(1, 1, Date(0), "", emptyList())
         assertEquals(0f, m.weight, 0f)
-        assertEquals(0f, m.fat, 0f)
+        assertEquals(0f, m.body_fat, 0f)
     }
 
     @Test
@@ -101,7 +101,7 @@ class DataParsingTest {
             )
         )
         assertEquals(80f, m.weight, 0f)
-        assertEquals(25f, m.fat, 0.0001f)
+        assertEquals(25f, m.body_fat, 0.0001f)
     }
 
     @Test
@@ -114,7 +114,7 @@ class DataParsingTest {
                 OpenScaleMeasurementValue(0, "BODY_FAT", "Fat", "kg", false, 8f),
             )
         )
-        assertEquals(10f, m.fat, 0.0001f)
+        assertEquals(10f, m.body_fat, 0.0001f)
     }
 
     @Test
@@ -124,6 +124,6 @@ class DataParsingTest {
             listOf(OpenScaleMeasurementValue(0, "BODY_FAT", "Fat", "kg", false, 8f))
         )
         assertEquals(0f, m.weight, 0f)
-        assertEquals(0f, m.fat, 0f)   // weight 0 → guarded, no NaN/Infinity
+        assertEquals(0f, m.body_fat, 0f)   // weight 0 → guarded, no NaN/Infinity
     }
 }

@@ -32,7 +32,7 @@ class WebhookSync(
             "username" to m.username,
             "date" to dateFormat.format(m.date),
             "weight" to m.weight,
-            "fat" to m.fat,
+            "body_fat" to m.body_fat,
             "water" to m.water,
             "muscle" to m.muscle
         )

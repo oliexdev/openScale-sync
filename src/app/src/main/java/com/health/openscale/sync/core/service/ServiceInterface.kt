@@ -156,7 +156,9 @@ abstract class ServiceInterface (
         val allUsers = openScaleDataService.getUsers()
         val users = if (isMultiUser) allUsers else allUsers.filter { it.id == viewModel().selectedUserId.value }
         val measurements = users.flatMap { openScaleDataService.getMeasurements(it) }
-        return when (val result = reconcile(measurements)) {
+        // Manual full sync → force a retained history-snapshot refresh even if the ledger is already
+        // up to date (e.g. existing users upgrading), so every user gets an initial snapshot.
+        return when (val result = reconcile(measurements, forceSnapshot = true)) {
             is SyncResult.Success -> {
                 viewModel().setLastSync(Instant.now())
                 measurements.size
@@ -213,7 +215,7 @@ abstract class ServiceInterface (
      *  timestamp is deliberately NOT part of it — a time change is detected separately (ledger
      *  dateMs vs current) and handled as a move, since backends key records by (user, time). */
     private fun contentHash(m: OpenScaleMeasurement): Long =
-        listOf(m.weight, m.fat, m.water, m.muscle, m.values).hashCode().toLong()
+        listOf(m.weight, m.body_fat, m.water, m.muscle, m.values).hashCode().toLong()
 
     /**
      * Diffs [current] (the authoritative openScale measurements for this backend's users) against
@@ -222,9 +224,10 @@ abstract class ServiceInterface (
      * delete (heals a missed delete-push, which a plain re-push cannot). The ledger is the only way
      * to detect deletions and moves on push-only backends.
      */
-    suspend fun reconcile(current: List<OpenScaleMeasurement>): SyncResult<Unit> {
+    suspend fun reconcile(current: List<OpenScaleMeasurement>, forceSnapshot: Boolean = false): SyncResult<Unit> {
         val ledger = ledgerSnapshot()                       // read-only classification base
         val currentIds = current.mapTo(HashSet()) { it.id }
+        val changedUsers = HashSet<Int>()                   // userIds with an applied insert/update/move/delete
 
         // Classify the delta against the ledger:
         //   unknown id                     → insert
@@ -244,6 +247,9 @@ abstract class ServiceInterface (
                 // else unchanged → no-op
             }
         }
+        inserts.forEach { changedUsers += it.userId }
+        updates.forEach { changedUsers += it.userId }
+        moves.forEach { changedUsers += it.first.userId }
 
         var failure: SyncResult.Failure? = null
 
@@ -273,12 +279,29 @@ abstract class ServiceInterface (
         // don't batch deletes, and reconcile deletes are rare. submit() forgets them on success.
         for ((id, e) in ledger) {
             if (id !in currentIds) {
+                changedUsers += e.userId
                 (submit(PendingOp("delete", id = id, userId = e.userId, dateMs = e.dateMs)) as? SyncResult.Failure)?.let { failure = it }
             }
         }
 
+        // Post-reconcile snapshot hook (push backends refresh a retained per-user history). A manual
+        // full sync forces a refresh for every present user; otherwise only users that actually
+        // changed — so the periodic worker doesn't rewrite unchanged snapshots every run. Best-effort.
+        val snapshotUsers = if (forceSnapshot) current.mapTo(HashSet()) { it.userId } else changedUsers
+        if (snapshotUsers.isNotEmpty()) {
+            runCatching { onReconciled(current, snapshotUsers) }
+                .onFailure { Timber.w(it, "onReconciled hook failed") }
+        }
+
         return failure ?: SyncResult.Success(Unit)
     }
+
+    /**
+     * Called at the end of [reconcile] with openScale's FULL current set and the userIds whose data
+     * changed (or all present users when forceSnapshot). Push backends override this to (re)publish a
+     * retained full-history snapshot per user. Best-effort: a thrown error is logged, not propagated.
+     */
+    protected open suspend fun onReconciled(current: List<OpenScaleMeasurement>, changedUserIds: Set<Int>) {}
 
     // --- Inbound (Phase 4: external source → openScale) ---------------------------------
     /**

@@ -203,6 +203,53 @@ class ServiceInterfaceTest {
         assertEquals(listOf("insert#2@2000"), backend.wire)
     }
 
+    // --- onReconciled snapshot hook -------------------------------------------------------
+
+    @Test
+    fun onReconciled_firesWithFullSet_andChangedUsers_whenSomethingChanged() = runTest {
+        val r = backend.reconcile(listOf(m(1, 1000, user = 1), m(2, 2000, user = 2)))
+        assertTrue(r is SyncResult.Success)
+        assertEquals(1, backend.reconciledCalls.size)
+        val (changedUsers, currentIds) = backend.reconciledCalls.single()
+        assertEquals(setOf(1, 2), changedUsers)          // both users had an insert
+        assertEquals(listOf(1, 2), currentIds)           // hook sees the FULL current set
+    }
+
+    @Test
+    fun onReconciled_notCalled_onNoOpReconcile() = runTest {
+        val state = listOf(m(1, 1000, user = 1), m(2, 2000, user = 2))
+        backend.reconcile(state)
+        backend.reconciledCalls.clear()
+        backend.reconcile(state)                         // nothing changed
+        assertEquals(emptyList<Pair<Set<Int>, List<Int>>>(), backend.reconciledCalls)
+    }
+
+    @Test
+    fun onReconciled_forceSnapshot_firesForAllUsers_evenWhenUnchanged() = runTest {
+        val state = listOf(m(1, 1000, user = 1), m(2, 2000, user = 2))
+        backend.reconcile(state)
+        backend.reconciledCalls.clear()
+        backend.reconcile(state, forceSnapshot = true)   // no change, but forced
+        assertEquals(setOf(1, 2), backend.reconciledCalls.single().first)
+    }
+
+    @Test
+    fun onReconciled_onlyChangedUser_getsSnapshot() = runTest {
+        backend.reconcile(listOf(m(1, 1000, user = 1), m(2, 2000, user = 2)))
+        backend.reconciledCalls.clear()
+        // add a measurement for user 2 only → only user 2 changed
+        backend.reconcile(listOf(m(1, 1000, user = 1), m(2, 2000, user = 2), m(3, 3000, user = 2)))
+        assertEquals(setOf(2), backend.reconciledCalls.single().first)
+    }
+
+    @Test
+    fun onReconciled_failure_doesNotBreakReconcile() = runTest {
+        backend.failOnReconciled = true
+        val r = backend.reconcile(listOf(m(1, 1000, user = 1)))
+        assertTrue(r is SyncResult.Success)              // hook error swallowed
+        assertEquals(0, backend.pendingRetryCount())     // insert still applied, not queued
+    }
+
     // --- Direction / multi-user gating ----------------------------------------------------
 
     @Test

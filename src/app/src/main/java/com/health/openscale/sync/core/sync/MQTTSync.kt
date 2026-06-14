@@ -35,23 +35,13 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     // Per-user topic: the stable userId is the path segment; the username travels in the JSON payload.
     private fun userTopic(userId: Int, event: String) = "openScaleSync/$userId/measurements/$event"
 
-    fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
-        var failureCount = 0
-
-        measurements.sortedBy { measurements -> measurements.date.time }.forEach { measurement ->
-            val syncResult = publishMeasurement(measurement, userTopic(measurement.userId, "all"))
-
-            if (syncResult is SyncResult.Failure) {
-                failureCount++
-            }
-        }
-
-        if (failureCount > 0) {
-            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"$failureCount of ${measurements.size} measurements failed to sync",null)
-        } else {
-            return SyncResult.Success(Unit)
-        }
-    }
+    /**
+     * Publishes a user's complete, date-sorted measurement series as ONE retained, slim columnar
+     * message `{fields, units, rows}` on the per-user "history" topic. Passing an empty list clears
+     * the snapshot. The payload itself is built by the pure [buildHistoryPayload].
+     */
+    fun publishHistory(userId: Int, measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> =
+        publishMessage(buildHistoryPayload(measurements), userTopic(userId, "history"), true)
 
     fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
         return publishMeasurement(measurement, userTopic(measurement.userId, "insert"))
@@ -235,6 +225,51 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"Publishing failed $value to $topic" ,result.error.get())
         } else {
             return SyncResult.Success(Unit)
+        }
+    }
+
+    companion object {
+        /**
+         * Builds the slim, retained-friendly columnar history payload `{fields, units, rows}` from a
+         * user's measurements. Names/units live once in the header (not per row) → ~10× smaller than
+         * the per-measurement form. Canonical columns come from [OpenScaleMeasurement.CANONICAL_METRICS]
+         * (the single source of truth); every other generic value (incl. `custom_<id>`) becomes an
+         * extra column keyed by its stable `backendKey()`. `rows` are date-sorted; a cell is `null`
+         * when that metric is absent.
+         */
+        fun buildHistoryPayload(measurements: List<OpenScaleMeasurement>): Map<String, Any> {
+            val canonical = OpenScaleMeasurement.CANONICAL_METRICS
+            val canonicalKeys = canonical.map { it.backendKey }            // weight, body_fat, water, muscle
+            val canonicalKeySet = canonicalKeys.toHashSet()
+
+            // Stable, sorted union of non-canonical generic keys present anywhere (with their unit).
+            val extraUnits = sortedMapOf<String, String>()
+            measurements.forEach { m ->
+                m.values.forEach { v ->
+                    val key = v.backendKey()
+                    if (v.value != null && key !in canonicalKeySet) extraUnits.putIfAbsent(key, v.unit)
+                }
+            }
+            val extraKeys = extraUnits.keys.toList()
+            val fields = listOf("date") + canonicalKeys + extraKeys
+            val units = canonical.associate { it.backendKey to it.unit } + extraUnits
+
+            val rows = measurements.sortedBy { it.date.time }.map { m ->
+                // Old openScale (no generic values) → fall back to the convenience fields as-is;
+                // otherwise emit a canonical value only when that metric is actually present.
+                val hasValues = m.values.isNotEmpty()
+                val present = m.values.mapTo(HashSet()) { it.backendKey() }
+                val byKey = m.values.associateBy { it.backendKey() }
+                val row = ArrayList<Any?>(fields.size)
+                row.add(m.date.time)
+                canonical.forEach { metric ->
+                    row.add(if (!hasValues || metric.backendKey in present) metric.accessor(m) else null)
+                }
+                extraKeys.forEach { row.add(byKey[it]?.value) }
+                row
+            }
+
+            return mapOf("fields" to fields, "units" to units, "rows" to rows)
         }
     }
 }
