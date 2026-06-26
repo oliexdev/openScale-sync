@@ -74,6 +74,8 @@ data class OpenScaleMeasurement(
     val body_fat: Float,
     val water: Float,
     val muscle: Float,
+    val lbm: Float,
+    val bone: Float,
     // Human-readable openScale user name; carried for multi-user routing/labelling
     // (MQTT topic uses the stable userId, this is for the JSON payload / HA display name).
     val username: String = "",
@@ -81,6 +83,7 @@ data class OpenScaleMeasurement(
     // weight/fat/water/muscle above are convenience fields derived from it (see [fromValues]).
     val values: List<OpenScaleMeasurementValue> = emptyList()
 ) {
+
     companion object {
         /**
          * Builds a measurement from the generic value set, deriving the convenience weight/fat/
@@ -98,7 +101,7 @@ data class OpenScaleMeasurement(
                 return if (v.unit == "%") value else if (weight > 0f) value / weight * 100f else 0f
             }
             return OpenScaleMeasurement(
-                id, userId, date, weight, pct("BODY_FAT"), pct("WATER"), pct("MUSCLE"), username, values
+                id, userId, date, weight, pct("BODY_FAT"), pct("WATER"), pct("MUSCLE"), pct("LBM"), pct("BONE"),username, values
             )
         }
 
