@@ -19,6 +19,24 @@
         tools:ignore="HealthConnectPolicy" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT"
         tools:ignore="HealthConnectPolicy" />
+    <uses-permission android:name="android.permission.health.WRITE_BASAL_METABOLIC_RATE"
+        tools:ignore="HealthConnectPolicy" />
+    <uses-permission android:name="android.permission.health.WRITE_LEAN_BODY_MASS"
+        tools:ignore="HealthConnectPolicy" />
+    <uses-permission android:name="android.permission.health.WRITE_BONE_MASS"
+        tools:ignore="HealthConnectPolicy" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT"
+        tools:ignore="HealthConnectPolicy"/>
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT"
+        tools:ignore="HealthConnectPolicy"/>
+    <uses-permission android:name="android.permission.health.READ_BODY_WATER_MASS"
+        tools:ignore="HealthConnectPolicy"/>
+    <uses-permission android:name="android.permission.health.READ_BONE_MASS"
+        tools:ignore="HealthConnectPolicy"/>
+    <uses-permission android:name="android.permission.health.READ_BASAL_METABOLIC_RATE"
+        tools:ignore="HealthConnectPolicy"/>
+    <uses-permission android:name="android.permission.health.READ_LEAN_BODY_MASS"
+        tools:ignore="HealthConnectPolicy"/>
 
     <queries>
         <package android:name="com.health.openscale" />
