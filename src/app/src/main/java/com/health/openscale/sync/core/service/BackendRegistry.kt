@@ -15,6 +15,7 @@ object BackendRegistry {
         HealthConnectService(context, prefs),
         MQTTService(context, prefs),
         WgerService(context, prefs),
+        EndurainService(context, prefs),
         InfluxDbService(context, prefs),
         WebhookService(context, prefs)
     )
