@@ -17,35 +17,24 @@
  */
 package com.health.openscale.sync.core.sync
 
-import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import timber.log.Timber
 
 /**
- * Encrypted at-rest storage for the Endurain OAuth tokens. Endurain issues a short-lived access
- * token (~15 min) plus a longer-lived rotating refresh token (~7 days). We never store the user's
- * password — only the tokens — matching Gadgetbridge's model. Tokens are held in an
- * [EncryptedSharedPreferences] (AES256) file separate from the plain app prefs.
+ * At-rest storage for the Endurain OAuth tokens. Endurain issues a short-lived access token
+ * (~15 min) plus a longer-lived rotating refresh token (~7 days). We never store the user's
+ * password — only the tokens — matching Gadgetbridge's model.
+ *
+ * The tokens live in the app's shared preferences, key-prefixed to avoid collision with the other
+ * backends' settings. This matches how every other backend keeps its secrets (Wger token, InfluxDB
+ * token/password, MQTT password): plain `putString` in app-private storage, which on minSdk 31 is
+ * already sandboxed and file-based-encrypted at rest by the platform.
  *
  * Expiries are stored as ABSOLUTE epoch-seconds, computed from the `expires_in` /
  * `refresh_token_expires_in` (relative seconds) the server returns at login/refresh.
  */
-class EndurainTokenManager(context: Context) {
-    private val prefs: SharedPreferences = run {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            context,
-            PREFS_FILE,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-    }
+class EndurainTokenManager(private val prefs: SharedPreferences) {
 
     /**
      * Persist a freshly minted token pair. [expiresIn] / [refreshExpiresIn] are the relative
@@ -78,16 +67,20 @@ class EndurainTokenManager(context: Context) {
     fun isLoggedIn(): Boolean = getRefreshToken() != null && !isRefreshTokenExpired()
 
     fun clear() {
-        prefs.edit { clear() }
+        prefs.edit {
+            remove(KEY_ACCESS)
+            remove(KEY_REFRESH)
+            remove(KEY_ACCESS_EXP)
+            remove(KEY_REFRESH_EXP)
+        }
         Timber.d("Endurain tokens cleared")
     }
 
     companion object {
-        private const val PREFS_FILE = "endurain_tokens"
-        private const val KEY_ACCESS = "access_token"
-        private const val KEY_REFRESH = "refresh_token"
-        private const val KEY_ACCESS_EXP = "access_token_expires_at"
-        private const val KEY_REFRESH_EXP = "refresh_token_expires_at"
+        private const val KEY_ACCESS = "endurain_access_token"
+        private const val KEY_REFRESH = "endurain_refresh_token"
+        private const val KEY_ACCESS_EXP = "endurain_access_token_expires_at"
+        private const val KEY_REFRESH_EXP = "endurain_refresh_token_expires_at"
         private const val EXPIRY_SKEW_SECONDS = 30L
     }
 }

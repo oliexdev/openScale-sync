@@ -52,8 +52,8 @@ import java.util.Date
 /**
  * Export-only sync backend for Endurain (self-hosted FastAPI fitness server). Auth is OAuth2
  * username/password login → short-lived JWT access token + rotating refresh token; the tokens are
- * stored encrypted (no password kept) and refreshed proactively in [connect] and reactively on 401
- * inside [EndurainSync]. Body weight + composition is written to the `health_weight` table via
+ * stored in app-private prefs (no password kept) and refreshed proactively in [connect] and
+ * reactively on 401 inside [EndurainSync]. Body weight + composition is written to the `health_weight` table via
  * POST (upsert-by-date). MFA is supported; SSO/PKCE is out of scope.
  */
 class EndurainService(
@@ -61,7 +61,7 @@ class EndurainService(
     sharedPreferences: SharedPreferences
 ) : ServiceInterface(context) {
     private val viewModel: EndurainViewModel = EndurainViewModel(sharedPreferences)
-    private val tokenManager = EndurainTokenManager(context)
+    private val tokenManager = EndurainTokenManager(sharedPreferences)
     private var endurainSync: EndurainSync? = null
 
     override fun viewModel(): ViewModelInterface = viewModel

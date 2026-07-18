@@ -26,7 +26,7 @@ import com.health.openscale.sync.R
 /**
  * Persisted, non-secret settings for the Endurain backend: the server origin and the last-used
  * username (kept only to prefill the form and label the login status). The password is never
- * stored; OAuth tokens live encrypted in [com.health.openscale.sync.core.sync.EndurainTokenManager].
+ * stored; OAuth tokens live in the shared prefs via [com.health.openscale.sync.core.sync.EndurainTokenManager].
  */
 class EndurainViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
     companion object {
