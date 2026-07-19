@@ -93,6 +93,23 @@
     <string name="wger_server_name_hint">e.g. https://wger.de/api/v2/</string>
     <string name="wger_api_token_title">Wger Api token</string>
 
+    <string name="endurain_successful_connected_text">Successfully connected to Endurain</string>
+    <string name="endurain_not_successful_connected_error">Cannot connect to Endurain</string>
+    <string name="endurain_server_name_title">Server URL</string>
+    <string name="endurain_server_name_hint">e.g. https://endurain.example.com</string>
+    <string name="endurain_username_title">Username</string>
+    <string name="endurain_password_title">Password</string>
+    <string name="endurain_mfa_code_title">Two-factor code</string>
+    <string name="endurain_login_button">Log in</string>
+    <string name="endurain_verify_button">Verify code</string>
+    <string name="endurain_logout_button">Log out</string>
+    <string name="endurain_login_success">Logged in to Endurain</string>
+    <string name="endurain_login_failed">Endurain login failed</string>
+    <string name="endurain_logged_in_status">Logged in as %1$s</string>
+    <string name="endurain_refresh_expires">Session expires: %1$s</string>
+    <string name="endurain_not_logged_in">Not logged in — please log in</string>
+    <string name="endurain_session_expired">Session expired — please log in again</string>
+
     <string name="open_scale_version_unsupported_banner">This openScale-sync version requires a newer openScale. Please update openScale to continue synchronizing.</string>
     <string name="open_scale_version_unsupported_banner_versioned">openScale %1$s on this device is too old to synchronize. Please update openScale to the latest version.</string>
     <string name="sync_users_title">Synced users</string>
