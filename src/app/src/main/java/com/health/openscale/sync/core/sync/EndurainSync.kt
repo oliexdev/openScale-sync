@@ -39,12 +39,24 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
+ * Narrow token accessor the wire layer depends on, so it never references the Android ViewModel that
+ * actually stores the tokens ([com.health.openscale.sync.core.model.EndurainViewModel]).
+ */
+interface TokenStore {
+    fun getAccessToken(): String?
+    fun getRefreshToken(): String?
+    fun saveTokens(accessToken: String, refreshToken: String, expiresIn: Long, refreshExpiresIn: Long)
+    fun isAccessTokenExpired(): Boolean
+    fun isRefreshTokenExpired(): Boolean
+}
+
+/**
  * Wire layer for Endurain's health-weight REST API (export only).
  *
  * Auth model (clean-room from Endurain's own server spec, NOT copied from the AGPL Gadgetbridge
  * client): OAuth2 username/password login → short-lived JWT access token + rotating refresh token.
  * Every request carries `X-Client-Type: mobile`. Non-auth requests carry
- * `Authorization: Bearer <access>`, injected by the interceptor from the [tokenManager] on each call
+ * `Authorization: Bearer <access>`, injected by the interceptor from the [tokenStore] on each call
  * (so a token refreshed mid-batch is picked up automatically). Token refresh sends the refresh token
  * in its own Authorization header. On a 401 we refresh once and retry (reactive path).
  *
@@ -53,7 +65,7 @@ import java.util.TimeZone
  */
 class EndurainSync(
     serverOrigin: String,
-    private val tokenManager: EndurainTokenManager
+    private val tokenStore: TokenStore
 ) : SyncInterface() {
 
     // Locale.US: API wire format, must stay ASCII regardless of device locale. Endurain's `date`
@@ -72,7 +84,7 @@ class EndurainSync(
                 // its own header) — never overwrite them with the access token.
                 val isAuthEndpoint = original.url.encodedPath.contains("/auth/")
                 if (!isAuthEndpoint && original.header("Authorization") == null) {
-                    tokenManager.getAccessToken()?.let { builder.header("Authorization", "Bearer $it") }
+                    tokenStore.getAccessToken()?.let { builder.header("Authorization", "Bearer $it") }
                 }
                 chain.proceed(builder.build())
             }
@@ -115,7 +127,7 @@ class EndurainSync(
             body == null -> LoginResult.Failure("empty response")
             body.mfa_required == true -> LoginResult.MfaRequired(username)
             body.access_token != null && body.refresh_token != null -> {
-                tokenManager.saveTokens(
+                tokenStore.saveTokens(
                     body.access_token, body.refresh_token,
                     body.expires_in ?: 0L, body.refresh_token_expires_in ?: 0L
                 )
@@ -127,13 +139,13 @@ class EndurainSync(
 
     /** Exchange the refresh token for a fresh access/refresh pair. Returns true on success. */
     private suspend fun refreshAccessToken(): Boolean {
-        val refresh = tokenManager.getRefreshToken() ?: return false
-        if (tokenManager.isRefreshTokenExpired()) return false
+        val refresh = tokenStore.getRefreshToken() ?: return false
+        if (tokenStore.isRefreshTokenExpired()) return false
         return try {
             val resp = api.refresh("Bearer $refresh", emptyMap())
             val body = resp.body()
             if (resp.isSuccessful && body?.access_token != null && body.refresh_token != null) {
-                tokenManager.saveTokens(
+                tokenStore.saveTokens(
                     body.access_token, body.refresh_token,
                     body.expires_in ?: 0L, body.refresh_token_expires_in ?: 0L
                 )
@@ -150,7 +162,7 @@ class EndurainSync(
      * token is available afterwards.
      */
     suspend fun ensureFreshAccessToken(): Boolean {
-        if (!tokenManager.isAccessTokenExpired() && tokenManager.getAccessToken() != null) return true
+        if (!tokenStore.isAccessTokenExpired() && tokenStore.getAccessToken() != null) return true
         return refreshAccessToken()
     }
 

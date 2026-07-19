@@ -41,7 +41,6 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.EndurainViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.EndurainSync
-import com.health.openscale.sync.core.sync.EndurainTokenManager
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SecretOutlinedTextField
 import com.health.openscale.sync.gui.components.UserScopeSection
@@ -61,7 +60,6 @@ class EndurainService(
     sharedPreferences: SharedPreferences
 ) : ServiceInterface(context) {
     private val viewModel: EndurainViewModel = EndurainViewModel(sharedPreferences)
-    private val tokenManager = EndurainTokenManager(sharedPreferences)
     private var endurainSync: EndurainSync? = null
 
     override fun viewModel(): ViewModelInterface = viewModel
@@ -73,7 +71,7 @@ class EndurainService(
     override val retryQueueKey: String get() = "endurain"
 
     private fun buildSync(): EndurainSync =
-        EndurainSync(viewModel.endurainServer.value.orEmpty(), tokenManager).also { endurainSync = it }
+        EndurainSync(viewModel.endurainServer.value.orEmpty(), viewModel).also { endurainSync = it }
 
     override suspend fun connect() {
         if (!viewModel.syncEnabled.value) return
@@ -87,7 +85,7 @@ class EndurainService(
 
         val sync = buildSync()
 
-        if (!tokenManager.isLoggedIn()) {
+        if (!viewModel.isLoggedIn()) {
             viewModel.setConnectAvailable(false)
             viewModel.setAllPermissionsGranted(false)
             setErrorMessage(context.getString(R.string.endurain_not_logged_in))
@@ -176,11 +174,10 @@ class EndurainService(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
             )
 
-            // Login status (recomposes when tokens change via loginStateVersion).
-            val loginVersion by viewModel.loginStateVersion.observeAsState(0)
+            // Login status (recomposes when the token LiveData changes on login/logout/refresh).
             val usernameState by viewModel.endurainUsername.observeAsState("")
-            val loggedIn = remember(loginVersion) { tokenManager.isLoggedIn() }
-            val refreshExpiresAt = remember(loginVersion) { tokenManager.getRefreshTokenExpiresAt() }
+            val loggedIn by viewModel.loggedIn.observeAsState(false)
+            val refreshExpiresAt by viewModel.refreshTokenExpiresAt.observeAsState(0L)
 
             if (loggedIn) {
                 Text(stringResource(id = R.string.endurain_logged_in_status, usernameState))
@@ -192,8 +189,7 @@ class EndurainService(
                     enabled = enabled,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        tokenManager.clear()
-                        viewModel.notifyLoginStateChanged()
+                        viewModel.clearTokens()
                         viewModel.setConnectAvailable(false)
                         viewModel.setAllPermissionsGranted(false)
                         clearErrorMessage()
@@ -244,7 +240,6 @@ class EndurainService(
                                 when (val r = sync.verifyMfa(username, mfaCode)) {
                                     is EndurainSync.LoginResult.Success -> {
                                         viewModel.setEndurainUsername(username)
-                                        viewModel.notifyLoginStateChanged()
                                         mfaRequired = false
                                         connect()
                                         showMessage(context.getString(R.string.endurain_login_success))
@@ -268,7 +263,6 @@ class EndurainService(
                                 when (val r = sync.login(username, password)) {
                                     is EndurainSync.LoginResult.Success -> {
                                         viewModel.setEndurainUsername(username)
-                                        viewModel.notifyLoginStateChanged()
                                         connect()
                                         showMessage(context.getString(R.string.endurain_login_success))
                                     }
