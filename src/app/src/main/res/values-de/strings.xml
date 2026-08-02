@@ -51,10 +51,12 @@
     </plurals>
     <string name="retry_now_button">Erneut versuchen</string>
     <string name="retry_discard_button">Verwerfen</string>
-    <plurals name="sync_service_full_synced_info">
-        <item quantity="one">%1$d Messung synchronisiert</item>
-        <item quantity="other">%1$d Messungen synchronisiert</item>
+    <plurals name="sync_service_full_sent_info">
+        <item quantity="one">%1$d Messung gesendet</item>
+        <item quantity="other">%1$d Messungen gesendet</item>
     </plurals>
+    <string name="sync_service_full_nothing_sent_info">Nichts zu senden</string>
+    <string name="sync_service_full_failed_info">Synchronisation fehlgeschlagen — siehe Fehlermeldung</string>
     <string name="sync_service_measurement_inserted_info">%1$f kg (Datum: %2$s) Messung eingefügt</string>
     <string name="sync_service_measurement_deleted_info">Messung für %1$s gelöscht</string>
     <string name="sync_service_measurement_cleared_info">Alle Messungen gelöscht</string>

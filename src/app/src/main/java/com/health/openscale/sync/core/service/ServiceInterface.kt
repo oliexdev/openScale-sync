@@ -97,6 +97,29 @@ data class BulkResult(
 )
 
 /**
+ * What a [ServiceInterface.reconcile] run actually did. The counters are the ops the backend
+ * acknowledged — for push-only backends (MQTT/InfluxDB/Webhook) that is a transport/server ack, not
+ * proof the receiver stored anything; no push protocol can give us more. It is however exactly the
+ * same signal the export ledger is written on, so anything counted here is also something reconcile
+ * will not send again. [unchanged] are measurements the ledger already covered.
+ */
+data class ReconcileStats(
+    val inserted: Int = 0,
+    val updated: Int = 0,
+    val moved: Int = 0,
+    val deleted: Int = 0,
+    val unchanged: Int = 0
+) {
+    /** Total ops that went over the wire and were acknowledged. */
+    val sent: Int get() = inserted + updated + moved + deleted
+
+    operator fun plus(o: ReconcileStats) = ReconcileStats(
+        inserted + o.inserted, updated + o.updated, moved + o.moved,
+        deleted + o.deleted, unchanged + o.unchanged
+    )
+}
+
+/**
  * A single queued/dispatched operation (insert/update/delete/clear). Carries everything needed to
  * replay it after a failure; the generic value set is the single source of truth (weight/fat/water/
  * muscle are derived via [toMeasurement]). Persisted as Gson JSON in the per-service retry queue.
@@ -147,21 +170,20 @@ abstract class ServiceInterface (
 
     /**
      * Full manual sync of all measurements of the selected user to this backend.
-     * Returns the number of synced measurements on success, or null on failure
-     * (the error is surfaced via the error banner). Only call from the UI context
-     * where openScaleService/openScaleDataService are wired.
+     * Returns what was actually pushed on success, or null on failure (the error is surfaced via the
+     * error banner). Only call from the UI context where openScaleService/openScaleDataService are
+     * wired.
      */
-    suspend fun runFullSync() : Int? {
+    suspend fun runFullSync() : ReconcileStats? {
         // Multi-user backends sync all users; single-user backends only their selected user.
         val allUsers = openScaleDataService.getUsers()
         val users = if (isMultiUser) allUsers else allUsers.filter { it.id == viewModel().selectedUserId.value }
         val measurements = users.flatMap { openScaleDataService.getMeasurements(it) }
-        // Manual full sync → force a retained history-snapshot refresh even if the ledger is already
-        // up to date (e.g. existing users upgrading), so every user gets an initial snapshot.
-        return when (val result = reconcile(measurements, forceSnapshot = true)) {
+        // Manual full sync → force, see [reconcile].
+        return when (val result = reconcile(measurements, force = true)) {
             is SyncResult.Success -> {
                 viewModel().setLastSync(Instant.now())
-                measurements.size
+                result.data
             }
             is SyncResult.Failure -> {
                 setErrorMessage(result)
@@ -223,8 +245,18 @@ abstract class ServiceInterface (
      * changed timestamp → move (delete old + insert new), id in ledger but gone from openScale →
      * delete (heals a missed delete-push, which a plain re-push cannot). The ledger is the only way
      * to detect deletions and moves on push-only backends.
+     *
+     * [force] re-pushes measurements the ledger considers up to date, and refreshes the retained
+     * history snapshot for every present user instead of only the changed ones. The automatic
+     * callers (periodic worker, "changed" wake-up) leave it false — for them the diff is the whole
+     * point. The manual full sync sets it, because a deliberate button press is the user telling us
+     * the receiver does not match: on push-only backends the ledger describes only what we believe
+     * we sent, and receiver-side data loss (server reinstalled, DB wiped, broker without
+     * persistence) is undetectable from here, so the ledger diff can never heal it on its own.
+     * Note this forces re-pushes into the *update* branch rather than blind inserts — Wger rejects a
+     * duplicate POST for an existing date, so the insert/update classification has to survive.
      */
-    suspend fun reconcile(current: List<OpenScaleMeasurement>, forceSnapshot: Boolean = false): SyncResult<Unit> {
+    suspend fun reconcile(current: List<OpenScaleMeasurement>, force: Boolean = false): SyncResult<ReconcileStats> {
         val ledger = ledgerSnapshot()                       // read-only classification base
         val currentIds = current.mapTo(HashSet()) { it.id }
         val changedUsers = HashSet<Int>()                   // userIds with an applied insert/update/move/delete
@@ -234,17 +266,18 @@ abstract class ServiceInterface (
         //   known id, timestamp changed    → move (backends key by time, so the old record would
         //                                     orphan: delete it at the old time, insert at the new)
         //   known id, same time, new hash  → update
-        //   known id, same time, same hash → no-op
+        //   known id, same time, same hash → no-op (unless [force])
         val inserts = ArrayList<OpenScaleMeasurement>()
         val updates = ArrayList<OpenScaleMeasurement>()
         val moves = ArrayList<Pair<OpenScaleMeasurement, LedgerEntry>>()
+        var unchanged = 0
         for (m in current) {
             val prev = ledger[m.id]
             when {
                 prev == null -> inserts += m
                 prev.dateMs != m.date.time -> moves += (m to prev)
-                prev.hash != contentHash(m) -> updates += m
-                // else unchanged → no-op
+                force || prev.hash != contentHash(m) -> updates += m
+                else -> unchanged++
             }
         }
         inserts.forEach { changedUsers += it.userId }
@@ -252,13 +285,21 @@ abstract class ServiceInterface (
         moves.forEach { changedUsers += it.first.userId }
 
         var failure: SyncResult.Failure? = null
+        // Only ops the backend acknowledged are counted — the same result that gates ledgerRecord().
+        var movedOk = 0
+        var insertedOk = 0
+        var updatedOk = 0
+        var deletedOk = 0
 
         // Moved measurements: remove the stale record at the OLD timestamp (best-effort, via the raw
         // delete so a since-gone record doesn't pollute the retry queue), then insert at the new one.
         // submit() records the new ledger entry on success.
         for ((m, prev) in moves) {
             runCatching { delete(prev.userId, Date(prev.dateMs)) }
-            (submit(pendingOp("insert", m)) as? SyncResult.Failure)?.let { failure = it }
+            when (val r = submit(pendingOp("insert", m))) {
+                is SyncResult.Success -> movedOk++
+                is SyncResult.Failure -> failure = r
+            }
         }
 
         // Apply inserts/updates through the bulk operator (one call for batch-capable backends,
@@ -272,6 +313,7 @@ abstract class ServiceInterface (
                 if (m.id in appliedIds) ledgerRecord(m.id, m)
                 else retryEnqueue(pendingOp(if (isInsert) "insert" else "update", m))
             }
+            if (isInsert) insertedOk += appliedIds.size else updatedOk += appliedIds.size
             res.failure?.let { failure = it }
         }
 
@@ -280,25 +322,33 @@ abstract class ServiceInterface (
         for ((id, e) in ledger) {
             if (id !in currentIds) {
                 changedUsers += e.userId
-                (submit(PendingOp("delete", id = id, userId = e.userId, dateMs = e.dateMs)) as? SyncResult.Failure)?.let { failure = it }
+                when (val r = submit(PendingOp("delete", id = id, userId = e.userId, dateMs = e.dateMs))) {
+                    is SyncResult.Success -> deletedOk++
+                    is SyncResult.Failure -> failure = r
+                }
             }
         }
 
-        // Post-reconcile snapshot hook (push backends refresh a retained per-user history). A manual
-        // full sync forces a refresh for every present user; otherwise only users that actually
-        // changed — so the periodic worker doesn't rewrite unchanged snapshots every run. Best-effort.
-        val snapshotUsers = if (forceSnapshot) current.mapTo(HashSet()) { it.userId } else changedUsers
+        // Post-reconcile snapshot hook (push backends refresh a retained per-user history). A forced
+        // (manual) run refreshes every present user; otherwise only users that actually changed —
+        // so the periodic worker doesn't rewrite unchanged snapshots every run. Best-effort.
+        val snapshotUsers = if (force) current.mapTo(HashSet()) { it.userId } else changedUsers
         if (snapshotUsers.isNotEmpty()) {
             runCatching { onReconciled(current, snapshotUsers) }
                 .onFailure { Timber.w(it, "onReconciled hook failed") }
         }
 
-        return failure ?: SyncResult.Success(Unit)
+        return failure ?: SyncResult.Success(
+            ReconcileStats(
+                inserted = insertedOk, updated = updatedOk, moved = movedOk,
+                deleted = deletedOk, unchanged = unchanged
+            )
+        )
     }
 
     /**
      * Called at the end of [reconcile] with openScale's FULL current set and the userIds whose data
-     * changed (or all present users when forceSnapshot). Push backends override this to (re)publish a
+     * changed (or all present users when forced). Push backends override this to (re)publish a
      * retained full-history snapshot per user. Best-effort: a thrown error is logged, not propagated.
      */
     protected open suspend fun onReconciled(current: List<OpenScaleMeasurement>, changedUserIds: Set<Int>) {}

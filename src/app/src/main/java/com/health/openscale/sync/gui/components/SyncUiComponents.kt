@@ -148,8 +148,15 @@ fun SyncActionButtons(
             if (!fullSyncing) {
                 fullSyncing = true
                 activity.lifecycleScope.launch {
-                    val count = service.runFullSync()
-                    if (count != null) showMessage(activity.resources.getQuantityString(R.plurals.sync_service_full_synced_info, count, count))
+                    // null → failed; the error banner carries the reason. Otherwise report what was
+                    // actually acknowledged by the backend, not how much openScale holds.
+                    val stats = service.runFullSync()
+                    showMessage(when {
+                        stats == null -> activity.getString(R.string.sync_service_full_failed_info)
+                        stats.sent == 0 -> activity.getString(R.string.sync_service_full_nothing_sent_info)
+                        else -> activity.resources.getQuantityString(
+                            R.plurals.sync_service_full_sent_info, stats.sent, stats.sent)
+                    })
                     fullSyncing = false
                 }
             }

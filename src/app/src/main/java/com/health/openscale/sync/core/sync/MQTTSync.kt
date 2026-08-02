@@ -23,6 +23,7 @@ import com.health.openscale.sync.BuildConfig
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.service.SyncResult
 import com.hivemq.client.mqtt.MqttGlobalPublishFilter
+import com.hivemq.client.mqtt.datatypes.MqttQos
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish
 import timber.log.Timber
@@ -31,6 +32,52 @@ import java.util.concurrent.TimeUnit
 
 class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     private val gson = GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mmZ").create()
+
+    /**
+     * QoS for outgoing publishes: AT_LEAST_ONCE, capped by what the broker accepts.
+     *
+     * With the default AT_MOST_ONCE a successful publish only means the message was handed to the
+     * transport — there is no broker acknowledgement, so a `Success` would not prove the broker ever
+     * saw it. That matters because the export ledger records a measurement as exported on exactly
+     * this result and then suppresses every future push of it. QoS 1 makes the result a real PUBACK.
+     *
+     * QoS 1 is mandatory for every spec-compliant broker, but an MQTT 5 server may still advertise a
+     * lower Maximum QoS in its CONNACK, and publishing above it is a protocol violation the broker
+     * answers with a disconnect. The client does not downgrade by itself (its outgoing QoS handler
+     * sends whatever QoS the publish carries), so we cap here. Falls back to AT_LEAST_ONCE while no
+     * connection config is available — the publish then fails as "not connected" anyway.
+     */
+    private fun publishQos(): MqttQos {
+        // restrictionsForClient = what the server allows THIS client to send (from the CONNACK).
+        val maximum = mqttClient.config.connectionConfig.orElse(null)
+            ?.restrictionsForClient?.maximumQos ?: return MqttQos.AT_LEAST_ONCE
+        return if (maximum.code < MqttQos.AT_LEAST_ONCE.code) maximum else MqttQos.AT_LEAST_ONCE
+    }
+
+    /**
+     * Single send path for every publish. Exceptions are mapped to a [SyncResult.Failure] instead of
+     * escaping: a QoS 1 publish blocks until the broker's PUBACK and *throws* (rather than returning
+     * an error result) when the connection dies inside that window, and callers up to reconcile()
+     * expect a SyncResult, not a thrown exception.
+     */
+    private fun publishPayload(payload: ByteArray, topic: String, retain: Boolean, what: String): SyncResult<Unit> {
+        val publish = Mqtt5Publish.builder()
+            .topic(topic)
+            .payload(payload)
+            .qos(publishQos())
+            .retain(retain)
+            .build()
+        return try {
+            val result = mqttClient.publish(publish)
+            if (result.error.isPresent) {
+                SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Publishing failed $what to $topic", result.error.get())
+            } else {
+                SyncResult.Success(Unit)
+            }
+        } catch (e: Exception) {
+            SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Publishing failed $what to $topic", e)
+        }
+    }
 
     // Per-user topic: the stable userId is the path segment; the username travels in the JSON payload.
     private fun userTopic(userId: Int, event: String) = "openScaleSync/$userId/measurements/$event"
@@ -132,6 +179,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
                 Mqtt5Publish.builder()
                     .topic("homeassistant/device/openscale_$userId/config")
                     .payload(bytes)
+                    .qos(publishQos())
                     .retain(true)
                     .build()
             )
@@ -184,49 +232,14 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
         return out
     }
 
-    private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String, retain : Boolean = false) : SyncResult<Unit> {
-        val payload = gson.toJson(measurement).toByteArray()
-        val publish = Mqtt5Publish.builder()
-            .topic(topic)
-            .payload(payload)
-            .retain(retain)
-            .build()
-        val result = mqttClient.publish(publish)
-        if (result.error.isPresent) {
-            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"Publishing failed ${measurement.date} to $topic" ,result.error.get())
-        } else {
-            return SyncResult.Success(Unit)
-        }
-    }
+    private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String, retain : Boolean = false) : SyncResult<Unit> =
+        publishPayload(gson.toJson(measurement).toByteArray(), topic, retain, "${measurement.date}")
 
-    private fun publishMessage(message: Map<String, Any>, topic: String, retain : Boolean = false) : SyncResult<Unit> {
-        val payload = gson.toJson(message).toByteArray()
-        val publish = Mqtt5Publish.builder()
-            .topic(topic)
-            .payload(payload)
-            .retain(retain)
-            .build()
-        val result = mqttClient.publish(publish)
-        if (result.error.isPresent) {
-            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"Publishing failed ${message.values} to $topic" ,result.error.get())
-        } else {
-            return SyncResult.Success(Unit)
-        }
-    }
+    private fun publishMessage(message: Map<String, Any>, topic: String, retain : Boolean = false) : SyncResult<Unit> =
+        publishPayload(gson.toJson(message).toByteArray(), topic, retain, "${message.values}")
 
-    private fun publishMessage(value : Boolean, topic: String, retain : Boolean = false) : SyncResult<Unit> {
-        val publish = Mqtt5Publish.builder()
-            .topic(topic)
-            .payload(value.toString().toByteArray())
-            .retain(retain)
-            .build()
-        val result = mqttClient.publish(publish)
-        if (result.error.isPresent) {
-            return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"Publishing failed $value to $topic" ,result.error.get())
-        } else {
-            return SyncResult.Success(Unit)
-        }
-    }
+    private fun publishMessage(value : Boolean, topic: String, retain : Boolean = false) : SyncResult<Unit> =
+        publishPayload(value.toString().toByteArray(), topic, retain, "$value")
 
     companion object {
         /**

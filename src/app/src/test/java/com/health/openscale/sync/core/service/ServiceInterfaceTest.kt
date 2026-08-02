@@ -177,6 +177,64 @@ class ServiceInterfaceTest {
         assertEquals(emptyList<String>(), backend.wire)
     }
 
+    /** The issue-32 case: the receiver lost data, so the manual (forced) sync must re-push even
+     *  though the ledger considers everything up to date — as updates, not duplicate inserts. */
+    @Test
+    fun reconcile_force_rePushesLedgerKnownMeasurements_asUpdates() = runTest {
+        val state = listOf(m(1, 1000), m(2, 2000))
+        backend.reconcile(state)
+        backend.wire.clear()
+
+        val r = backend.reconcile(state, force = true)
+        assertTrue(r is SyncResult.Success)
+        assertEquals(listOf("update#1@1000", "update#2@2000"), backend.wire)
+    }
+
+    // --- Reconcile statistics -------------------------------------------------------------
+
+    @Test
+    fun reconcileStats_countAcknowledgedOpsOnly() = runTest {
+        backend.reconcile(listOf(m(1, 1000), m(2, 2000), m(3, 3000)))   // seed ledger
+
+        // 1 unchanged · 2 value-changed (update) · 3 time-changed (move) · 4 new (insert)
+        val r = backend.reconcile(listOf(m(1, 1000), m(2, 2000, weight = 99f), m(3, 3500), m(4, 4000)))
+        assertTrue(r is SyncResult.Success)
+        val stats = (r as SyncResult.Success).data
+        assertEquals(1, stats.inserted)
+        assertEquals(1, stats.updated)
+        assertEquals(1, stats.moved)
+        assertEquals(1, stats.unchanged)
+        assertEquals(3, stats.sent)                 // unchanged is NOT part of sent
+    }
+
+    @Test
+    fun reconcileStats_noOpRunSendsNothing() = runTest {
+        val state = listOf(m(1, 1000), m(2, 2000))
+        backend.reconcile(state)
+        val r = backend.reconcile(state)
+        assertEquals(0, (r as SyncResult.Success).data.sent)
+        assertEquals(2, r.data.unchanged)
+    }
+
+    @Test
+    fun reconcileStats_countsDeletes() = runTest {
+        backend.reconcile(listOf(m(1, 1000), m(2, 2000)))
+        val r = backend.reconcile(listOf(m(1, 1000)))       // id 2 removed in openScale
+        assertEquals(1, (r as SyncResult.Success).data.deleted)
+        assertEquals(1, r.data.sent)
+    }
+
+    /** A failed op must not be counted as sent — the ledger doesn't record it either. */
+    @Test
+    fun reconcileStats_partialBulkFailure_countsOnlyApplied() = runTest {
+        backend.batch = true
+        backend.batchSucceed = { ms -> ms.filter { it.id != 2 } }   // id 2 fails in the batch
+
+        val r = backend.reconcile(listOf(m(1, 1000), m(2, 2000), m(3, 3000)))
+        assertTrue(r is SyncResult.Failure)                 // failure still wins the return value
+        assertEquals(1, backend.pendingRetryCount())        // id 2 queued, not counted anywhere
+    }
+
     // --- Bulk operators -------------------------------------------------------------------
 
     @Test
@@ -225,11 +283,11 @@ class ServiceInterfaceTest {
     }
 
     @Test
-    fun onReconciled_forceSnapshot_firesForAllUsers_evenWhenUnchanged() = runTest {
+    fun onReconciled_force_firesForAllUsers_evenWhenUnchanged() = runTest {
         val state = listOf(m(1, 1000, user = 1), m(2, 2000, user = 2))
         backend.reconcile(state)
         backend.reconciledCalls.clear()
-        backend.reconcile(state, forceSnapshot = true)   // no change, but forced
+        backend.reconcile(state, force = true)           // no change, but forced
         assertEquals(setOf(1, 2), backend.reconciledCalls.single().first)
     }
 

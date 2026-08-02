@@ -275,7 +275,8 @@ class SyncService : Service() {
                             when (res) {
                                 is SyncResult.Success -> {
                                     vm.setLastSync(Instant.now())
-                                    Timber.d("%s.reconcile() success (%d measurements)", name, measurements.size)
+                                    Timber.d("%s.reconcile() success (%d of %d measurements sent, %d unchanged)",
+                                        name, res.data.sent, measurements.size, res.data.unchanged)
                                 }
                                 is SyncResult.Failure -> {
                                     syncService.setErrorMessage(res)
