@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-def appVersionName = "0.5"
+def appVersionName = "0.6"
 
 base {
     archivesName = "openScale-sync-$appVersionName"
@@ -17,7 +17,7 @@ android {
         applicationId "com.health.openscale.sync"
         minSdkVersion 31
         targetSdkVersion 36
-        versionCode 15
+        versionCode 16
         versionName appVersionName
         multiDexEnabled = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

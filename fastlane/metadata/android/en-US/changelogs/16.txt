@@ -1,0 +1,6 @@
+- New Endurain sync backend.
+- Two-way sync: measurements can now also be imported from Health Connect, Wger and MQTT.
+- Optional background sync every 6 hours.
+- Health Connect: bone mass, lean mass and BMR are synced, edits now arrive on F-Droid builds, and deleting one measurement no longer removes others that day.
+- A failed sync no longer blocks the ones behind it and is retried with current data.
+- Choose which openScale to sync with when several are installed.

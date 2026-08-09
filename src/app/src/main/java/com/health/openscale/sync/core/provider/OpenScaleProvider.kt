@@ -305,7 +305,9 @@ class OpenScaleProvider (
     @Composable
     private fun ActionCard(message: String, actionLabel: String, onAction: () -> Unit) {
         Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            // fillMaxWidth is what makes the centred button below actually centred: without it the
+            // Column is only as wide as the message row, and align() centres against that instead.
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         painter = painterResource(R.drawable.ic_warning),
