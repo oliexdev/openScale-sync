@@ -178,50 +178,67 @@ open class OpenScaleDataProvider(
         return measurements
     }
 
+    private fun measurementUri(userId: Int): Uri = Uri.Builder()
+        .scheme(ContentResolver.SCHEME_CONTENT)
+        .authority(authority)
+        .path("measurements/$userId")
+        .build()
+
     /**
-     * Inbound (bidirectional sync): write a measurement INTO openScale for [userId] via the
-     * ContentProvider. openScale stays master — the provider's insert uses OnConflictStrategy.IGNORE
-     * on (userId, timestamp), so an existing openScale measurement is never overwritten (gap-fill).
      * Weight is in kg; fat/water/muscle in percent (openScale converts to the user's unit).
+     * [valuesJson] is the same self-describing format as the outbound values and carries everything
+     * the fixed columns cannot (bone mass, lean mass, custom types); openScale reads both in one go
+     * and lets the fixed columns win on overlap.
      */
-    fun insertMeasurement(
-        userId: Int, dateMs: Long, weightKg: Float,
-        fat: Float? = null, water: Float? = null, muscle: Float? = null
-    ): Boolean {
-        val uri = Uri.Builder()
-            .scheme(ContentResolver.SCHEME_CONTENT)
-            .authority(authority)
-            .path("measurements/$userId")
-            .build()
-        val cv = ContentValues().apply {
-            put("datetime", dateMs)
-            put("weight", weightKg)
-            fat?.let { put("fat", it) }
-            water?.let { put("water", it) }
-            muscle?.let { put("muscle", it) }
-        }
-        return runCatching { context.contentResolver.insert(uri, cv); true }
-            .getOrElse { Timber.e(it, "inbound insert failed"); false }
+    private fun measurementValues(
+        dateMs: Long, weightKg: Float,
+        fat: Float?, water: Float?, muscle: Float?, valuesJson: String?
+    ) = ContentValues().apply {
+        put("datetime", dateMs)
+        put("weight", weightKg)
+        fat?.let { put("fat", it) }
+        water?.let { put("water", it) }
+        muscle?.let { put("muscle", it) }
+        valuesJson?.let { put("values_json", it) }
     }
 
     /**
-     * Inbound (flexible/future): write a measurement with an arbitrary generic value set
-     * ([valuesJson], same self-describing format as the outbound values) plus the mandatory weight.
-     * Lets future inbound sources import all data types (incl. custom), not just weight/fat/water.
+     * Inbound (bidirectional sync): add a measurement to openScale for [userId] via the
+     * ContentProvider. openScale's insert uses OnConflictStrategy.IGNORE on (userId, timestamp), so
+     * this can never overwrite an existing measurement — and it reports back nothing either way (the
+     * provider returns a null Uri on success and on conflict alike), which is why the caller decides
+     * insert vs. [updateMeasurement] by comparing timestamps itself.
      */
-    fun insertMeasurementGeneric(userId: Int, dateMs: Long, weightKg: Float, valuesJson: String): Boolean {
-        val uri = Uri.Builder()
-            .scheme(ContentResolver.SCHEME_CONTENT)
-            .authority(authority)
-            .path("measurements/$userId")
-            .build()
-        val cv = ContentValues().apply {
-            put("datetime", dateMs)
-            put("weight", weightKg)
-            put("values_json", valuesJson)
-        }
-        return runCatching { context.contentResolver.insert(uri, cv); true }
-            .getOrElse { Timber.e(it, "inbound generic insert failed"); false }
-    }
+    open fun insertMeasurement(
+        userId: Int, dateMs: Long, weightKg: Float,
+        fat: Float? = null, water: Float? = null, muscle: Float? = null, valuesJson: String? = null
+    ): Boolean =
+        runCatching {
+            context.contentResolver.insert(
+                measurementUri(userId),
+                measurementValues(dateMs, weightKg, fat, water, muscle, valuesJson)
+            )
+            true
+        }.getOrElse { Timber.e(it, "inbound insert failed"); false }
+
+    /**
+     * Inbound: enrich the measurement openScale already holds at [dateMs] for [userId]. Only the
+     * values passed here are touched; anything openScale has beyond them stays as it is.
+     *
+     * Returns whether openScale actually changed something — it reports 0 rows both when no
+     * measurement matches the timestamp and when every value already had that exact value, so this
+     * is a real "was anything imported" signal, not just "the call went through".
+     */
+    open fun updateMeasurement(
+        userId: Int, dateMs: Long, weightKg: Float,
+        fat: Float? = null, water: Float? = null, muscle: Float? = null, valuesJson: String? = null
+    ): Boolean =
+        runCatching {
+            context.contentResolver.update(
+                measurementUri(userId),
+                measurementValues(dateMs, weightKg, fat, water, muscle, valuesJson),
+                null, null
+            ) > 0
+        }.getOrElse { Timber.e(it, "inbound update failed"); false }
 
 }

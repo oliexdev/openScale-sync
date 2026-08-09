@@ -17,6 +17,7 @@
  */
 package com.health.openscale.sync.core.sync
 
+import androidx.annotation.VisibleForTesting
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.BasalMetabolicRateRecord
 import androidx.health.connect.client.records.BodyFatRecord
@@ -25,10 +26,8 @@ import androidx.health.connect.client.records.BoneMassRecord
 import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.WeightRecord
-import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
-import androidx.health.connect.client.response.ReadRecordsResponse
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Mass
 import androidx.health.connect.client.units.Percentage
@@ -38,122 +37,78 @@ import com.health.openscale.sync.core.service.SyncResult
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Date
+import kotlin.math.abs
 import kotlin.reflect.KClass
 
 class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : SyncInterface(){
-    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> {
+    /**
+     * The record set one measurement maps to. Weight/water/fat are always written; lean body mass,
+     * bone mass and BMR only when openScale actually has that value. Every record carries a stable
+     * [buildMetadata] clientRecordId, which is what makes a re-insert an upsert (see [insert]).
+     */
+    private fun buildRecords(measurement: OpenScaleMeasurement): List<Record> {
         val records = mutableListOf<Record>()
 
-        measurements.forEach { measurement ->
-            val weightRecord = buildWeightRecord(measurement)
-            records.add(weightRecord)
-
-            val waterRecord = buildWaterRecord(measurement)
-            records.add(waterRecord)
-
-            val fatRecord = buildFatRecord(measurement)
-            records.add(fatRecord)
-
-            if (measurement.lbm > 0f) {
-                val leanBodyMassRecord = buildLeanBodyMassRecord(measurement)
-                records.add(leanBodyMassRecord)
-            }
-
-            if (measurement.bone > 0f) {
-                val boneMassRecord = buildBoneMassRecord(measurement)
-                records.add(boneMassRecord)
-            }
-
-            val bmrValue = measurement.values.firstOrNull { it.key == "BMR" }?.value ?: 0f
-            if (bmrValue > 0f) {
-                val bmrRecord = buildBMRRecord(measurement)
-                records.add(bmrRecord)
-            }
-
-        }
-
-        try {
-            healthConnectClient.insertRecords(records)
-            return SyncResult.Success(Unit)
-        } catch (e: Exception) {
-            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
-        }
-    }
-
-    suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        val records = mutableListOf<Record>()
-
-        val weightRecord = buildWeightRecord(measurement)
-        records.add(weightRecord)
-
-        val waterRecord = buildWaterRecord(measurement)
-        records.add(waterRecord)
-
-        val fatRecord = buildFatRecord(measurement)
-        records.add(fatRecord)
+        records.add(buildWeightRecord(measurement))
+        records.add(buildWaterRecord(measurement))
+        records.add(buildFatRecord(measurement))
 
         if (measurement.lbm > 0f) {
-            val leanBodyMassRecord = buildLeanBodyMassRecord(measurement)
-            records.add(leanBodyMassRecord)
+            records.add(buildLeanBodyMassRecord(measurement))
         }
 
         if (measurement.bone > 0f) {
-            val boneMassRecord = buildBoneMassRecord(measurement)
-            records.add(boneMassRecord)
+            records.add(buildBoneMassRecord(measurement))
         }
 
         val bmrValue = measurement.values.firstOrNull { it.key == "BMR" }?.value ?: 0f
         if (bmrValue > 0f) {
-            val bmrRecord = buildBMRRecord(measurement)
-            records.add(bmrRecord)
+            records.add(buildBMRRecord(measurement))
         }
 
-        try {
+        return records
+    }
+
+    private suspend fun writeRecords(records: List<Record>) : SyncResult<Unit> {
+        return try {
             healthConnectClient.insertRecords(records)
-            return SyncResult.Success(Unit)
+            SyncResult.Success(Unit)
         } catch (e: Exception) {
-            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
+            SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
         }
     }
 
+    suspend fun fullSync(measurements: List<OpenScaleMeasurement>) : SyncResult<Unit> =
+        writeRecords(measurements.flatMap { buildRecords(it) })
+
+    /**
+     * Write one measurement. This is an UPSERT, not a blind add: every record carries a
+     * clientRecordId derived from the openScale measurement id, and Health Connect replaces an
+     * existing record of the same clientRecordId when the clientRecordVersion is higher (which
+     * [buildMetadata] guarantees by stamping the current time). That is why [fullSync] can re-push
+     * the whole history without duplicating it — and why [update] is the same operation.
+     */
+    suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
+        writeRecords(buildRecords(measurement))
+
+    /**
+     * Delete the one measurement taken at [date] — meaning the records we wrote at exactly that
+     * instant, which is where [buildRecords] puts them. The window around it only absorbs rounding;
+     * openScale cannot hold two measurements of one user a second apart.
+     *
+     * It deliberately does not span the calendar day, as it used to: that wiped every measurement we
+     * had written that day, so deleting the morning weigh-in took the evening one with it, and the
+     * move branch (delete at the old time, insert at the new) did the same to a same-day neighbour.
+     *
+     * Deleting by clientRecordId would be exact, but Health Connect fails the call for a
+     * non-existing identifier, and the optional records (lean mass, bone mass, BMR) are only written
+     * when openScale has that value — a missing one would turn into a failed delete.
+     */
     suspend fun delete(date: Date) : SyncResult<Unit> {
-        val localDate = date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
-        val startOfDay = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val endOfDay = localDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val instant = date.toInstant()
+        val timeRange = TimeRangeFilter.between(instant.minusSeconds(1), instant.plusSeconds(1))
 
-        val timeRange = TimeRangeFilter.between(startOfDay, endOfDay)
-
-        try {
-            healthConnectClient.deleteRecords(
-                    WeightRecord::class,
-                    timeRange
-                )
-            healthConnectClient.deleteRecords(
-                    BodyFatRecord::class,
-                    timeRange
-                )
-            healthConnectClient.deleteRecords(
-                    BodyWaterMassRecord::class,
-                    timeRange
-                )
-            healthConnectClient.deleteRecords(
-                LeanBodyMassRecord::class,
-                timeRange
-            )
-            healthConnectClient.deleteRecords(
-                BasalMetabolicRateRecord::class,
-                timeRange
-            )
-            healthConnectClient.deleteRecords(
-                BoneMassRecord::class,
-                timeRange
-            )
-
-
-            return SyncResult.Success(Unit)
-        } catch (e: Exception) {
-            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
-        }
+        return deleteRange(timeRange)
     }
 
     suspend fun clear() : SyncResult<Unit> {
@@ -161,144 +116,146 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         val startOfDay = localDate.minusYears(10).atStartOfDay(ZoneId.systemDefault()).toInstant()
         val endOfDay = localDate.plusYears(10).atStartOfDay(ZoneId.systemDefault()).toInstant()
 
-        val timeRange = TimeRangeFilter.between(startOfDay, endOfDay)
-
-        try {
-            healthConnectClient.deleteRecords(
-                WeightRecord::class,
-                timeRange
-            )
-            healthConnectClient.deleteRecords(
-                BodyFatRecord::class,
-                timeRange
-            )
-            healthConnectClient.deleteRecords(
-                BodyWaterMassRecord::class,
-                timeRange
-            )
-            healthConnectClient.deleteRecords(
-                LeanBodyMassRecord::class,
-                timeRange
-            )
-            healthConnectClient.deleteRecords(
-                BasalMetabolicRateRecord::class,
-                timeRange
-            )
-            healthConnectClient.deleteRecords(
-                BoneMassRecord::class,
-                timeRange
-            )
-
-            return SyncResult.Success(Unit)
-        } catch (e: Exception) {
-            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
-        }
+        return deleteRange(TimeRangeFilter.between(startOfDay, endOfDay))
     }
-
-    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
-        val records = mutableListOf<Record>()
-
-        try {
-            val weightRecord = readWeightRecord(measurement)
-            val waterRecord = readWaterRecord(measurement)
-            val fatRecord = readFatRecord(measurement)
-            val leanBodyMassRecord = readLeanMassRecord(measurement)
-            val boneMassRecord = readBoneRecord(measurement)
-
-
-            if (weightRecord != null) {
-                records.add(buildWeightRecord(measurement))
-            }
-            if (waterRecord != null) {
-                records.add(buildWaterRecord(measurement))
-            }
-            if (fatRecord != null) {
-                records.add(buildFatRecord(measurement))
-            }
-            if (leanBodyMassRecord != null) {
-                records.add(buildLeanBodyMassRecord(measurement))
-            }
-            if (boneMassRecord != null) {
-                records.add(buildBoneMassRecord(measurement))
-            }
-            records.add(buildBMRRecord(measurement))
-
-            if (records.isNotEmpty()) {
-                healthConnectClient.insertRecords(records)
-                return SyncResult.Success(Unit)
-            } else {
-                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR,"No records found to update for measurement: ${measurement.id}")
-            }
-
-        } catch (e: Exception) {
-            return SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
-        }
-    }
-
-    /** One inbound reading from Health Connect (foreign app), grouped by timestamp. */
-    data class InboundReading(val timeMs: Long, val weightKg: Float, val fatPct: Float?, val waterPct: Float?)
 
     /**
-     * Inbound (bidirectional): read weight + body-fat + body-water records written by OTHER apps
-     * since [sinceMillis], excluding our own [ownPackage] writes (echo prevention via dataOrigin).
-     * Records are grouped by exact timestamp; water mass (kg) is converted to % of weight.
-     * Dedup against openScale happens on write (insert IGNORE).
+     * Drop every record type we write in [timeRange]. Health Connect scopes deletes to the calling
+     * app, so this never reaches another app's data.
+     */
+    private suspend fun deleteRange(timeRange: TimeRangeFilter) : SyncResult<Unit> {
+        return try {
+            listOf(
+                WeightRecord::class,
+                BodyFatRecord::class,
+                BodyWaterMassRecord::class,
+                LeanBodyMassRecord::class,
+                BasalMetabolicRateRecord::class,
+                BoneMassRecord::class
+            ).forEach { healthConnectClient.deleteRecords(it, timeRange) }
+
+            SyncResult.Success(Unit)
+        } catch (e: Exception) {
+            SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR,null ,e)
+        }
+    }
+
+    /**
+     * Updating is writing: the clientRecordId upsert in [insert] already replaces the existing
+     * records of this measurement in place.
+     *
+     * This deliberately does NOT read the current records back first. Doing so needed a dataOrigin
+     * filter on our own package name, which is only correct for the Play build — the OSS and debug
+     * flavors carry an applicationIdSuffix, so the filter named a foreign app there: with write-only
+     * permissions Health Connect rejected the read outright (SecurityException, the op then stuck in
+     * the retry queue forever), and with read permissions granted it silently matched nothing, so
+     * every value except BMR was dropped from the update. Writing unconditionally is both correct on
+     * every flavor and independent of the read permissions, which only the inbound path needs.
+     *
+     * It also fixes a second asymmetry: a value added in openScale after the first sync (say a fat
+     * percentage) could never reach Health Connect, because the read found no record to update.
+     */
+    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> = insert(measurement)
+
+    /**
+     * One inbound reading from Health Connect (foreign app): a weight plus whatever other metrics
+     * the same weigh-in produced. [boneKg]/[leanKg] stay masses because that is openScale's own unit
+     * for them, while fat and water are percentages of the weight.
+     */
+    data class InboundReading(
+        val timeMs: Long,
+        val weightKg: Float,
+        val fatPct: Float? = null,
+        val waterPct: Float? = null,
+        val boneKg: Float? = null,
+        val leanKg: Float? = null
+    )
+
+    /**
+     * Inbound (bidirectional): read the records written by OTHER apps since [sinceMillis], excluding
+     * our own [ownPackage] writes (echo prevention via dataOrigin).
+     *
+     * The weight record is the anchor — Health Connect has no notion of "one weigh-in", so a reading
+     * is a weight plus the other records closest to it within [INBOUND_GROUPING_TOLERANCE]. Matching
+     * on the exact millisecond, as this did, silently dropped everything from apps that write their
+     * records a moment apart or round to whole seconds. Each record is consumed once, by its nearest
+     * weight, so two weigh-ins close together cannot both claim the same body-fat value.
+     *
+     * Basal metabolic rate is deliberately not imported: openScale derives it itself, so a foreign
+     * value would be overwritten by its own calculation anyway.
      */
     suspend fun readInboundReadings(ownPackage: String, sinceMillis: Long): List<InboundReading> {
         val range = TimeRangeFilter.after(Instant.ofEpochMilli(sinceMillis))
         fun foreign(record: Record) = record.metadata.dataOrigin.packageName != ownPackage
 
-        val weights = healthConnectClient.readRecords(
-            ReadRecordsRequest(WeightRecord::class, range)
-        ).records.filter(::foreign).associate { it.time.toEpochMilli() to it.weight.inKilograms.toFloat() }
+        // The record types carry their instant on their own class (the shared interface is internal
+        // to androidx), so each caller maps its record to (time, value) itself.
+        suspend fun <T : Record> readForeign(type: KClass<T>, sample: (T) -> Pair<Long, Float>): List<Pair<Long, Float>> =
+            healthConnectClient.readRecords(ReadRecordsRequest(type, range))
+                .records.filter(::foreign).map(sample)
 
-        val fats = healthConnectClient.readRecords(
-            ReadRecordsRequest(BodyFatRecord::class, range)
-        ).records.filter(::foreign).associate { it.time.toEpochMilli() to it.percentage.value.toFloat() }
+        return groupInboundReadings(
+            weights = readForeign(WeightRecord::class) {
+                it.time.toEpochMilli() to it.weight.inKilograms.toFloat()
+            },
+            fatsPct = readForeign(BodyFatRecord::class) {
+                it.time.toEpochMilli() to it.percentage.value.toFloat()
+            },
+            watersKg = readForeign(BodyWaterMassRecord::class) {
+                it.time.toEpochMilli() to it.mass.inKilograms.toFloat()
+            },
+            bonesKg = readForeign(BoneMassRecord::class) {
+                it.time.toEpochMilli() to it.mass.inKilograms.toFloat()
+            },
+            leansKg = readForeign(LeanBodyMassRecord::class) {
+                it.time.toEpochMilli() to it.mass.inKilograms.toFloat()
+            }
+        )
+    }
 
-        val waters = healthConnectClient.readRecords(
-            ReadRecordsRequest(BodyWaterMassRecord::class, range)
-        ).records.filter(::foreign).associate { it.time.toEpochMilli() to it.mass.inKilograms.toFloat() }
+    /**
+     * Turn the per-type (timestamp, value) lists into one reading per weigh-in. Pure, so the
+     * grouping rules are testable without a Health Connect client.
+     */
+    @VisibleForTesting
+    internal fun groupInboundReadings(
+        weights: List<Pair<Long, Float>>,
+        fatsPct: List<Pair<Long, Float>> = emptyList(),
+        watersKg: List<Pair<Long, Float>> = emptyList(),
+        bonesKg: List<Pair<Long, Float>> = emptyList(),
+        leansKg: List<Pair<Long, Float>> = emptyList()
+    ): List<InboundReading> {
+        if (weights.isEmpty()) return emptyList()
+        val weightTimes = weights.map { it.first }
+
+        /** Attach each candidate to its nearest weigh-in, closest candidate winning a contest. */
+        fun near(candidates: List<Pair<Long, Float>>): Map<Long, Float> {
+            val best = HashMap<Long, Pair<Long, Float>>()   // anchor -> (distance, value)
+            for ((time, value) in candidates) {
+                val anchor = weightTimes.minByOrNull { abs(it - time) } ?: continue
+                val distance = abs(anchor - time)
+                if (distance > INBOUND_GROUPING_TOLERANCE_MS) continue
+                val held = best[anchor]
+                if (held == null || distance < held.first) best[anchor] = distance to value
+            }
+            return best.mapValues { it.value.second }
+        }
+
+        val fatAt = near(fatsPct)
+        val waterAt = near(watersKg)
+        val boneAt = near(bonesKg)
+        val leanAt = near(leansKg)
 
         return weights.map { (t, kg) ->
-            val waterPct = waters[t]?.let { if (kg > 0f) it / kg * 100f else null }
-            InboundReading(t, kg, fats[t], waterPct)
+            InboundReading(
+                timeMs = t,
+                weightKg = kg,
+                fatPct = fatAt[t],
+                waterPct = waterAt[t]?.let { if (kg > 0f) it / kg * 100f else null },
+                boneKg = boneAt[t],
+                leanKg = leanAt[t]
+            )
         }
-    }
-
-    private suspend fun readWeightRecord(measurement: OpenScaleMeasurement): WeightRecord? {
-        return readRecord(measurement, WeightRecord::class)
-    }
-
-    private suspend fun readWaterRecord(measurement: OpenScaleMeasurement): BodyWaterMassRecord? {
-        return readRecord(measurement, BodyWaterMassRecord::class)
-    }
-
-    private suspend fun readFatRecord(measurement: OpenScaleMeasurement): BodyFatRecord? {
-        return readRecord(measurement,BodyFatRecord::class)
-    }
-
-    private suspend fun readBoneRecord(measurement: OpenScaleMeasurement): BoneMassRecord? {
-        return readRecord(measurement, BoneMassRecord::class)
-    }
-
-    private suspend fun readLeanMassRecord(measurement: OpenScaleMeasurement): LeanBodyMassRecord? {
-        return readRecord(measurement, LeanBodyMassRecord::class)
-    }
-
-    private suspend fun <T : Record> readRecord(
-        measurement: OpenScaleMeasurement,
-        recordType: KClass<T>,
-    ): T? {
-        val timeRangeFilter = TimeRangeFilter.between(measurement.date.toInstant().minusSeconds(1), measurement.date.toInstant().plusSeconds(1))
-        val dataOriginFilter = setOf(DataOrigin("com.health.openscale.sync"))
-        val readRequest = ReadRecordsRequest(
-            recordType = recordType,
-            timeRangeFilter = timeRangeFilter,
-            dataOriginFilter = dataOriginFilter
-        )
-        val response: ReadRecordsResponse<T> = healthConnectClient.readRecords(readRequest)
-        return response.records.firstOrNull()
     }
 
     private fun buildMetadata(measurement: OpenScaleMeasurement, type: String): Metadata {
@@ -380,5 +337,14 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
             basalMetabolicRate = Power.watts(bmrWatts),
             metadata = buildMetadata(measurement, "bmr")
         )
+    }
+
+    companion object {
+        /**
+         * How far from the weight record a body-composition record may sit and still count as the
+         * same weigh-in. Wide enough for apps that write their records sequentially or round to
+         * whole seconds, far too narrow to reach a neighbouring weigh-in.
+         */
+        private const val INBOUND_GROUPING_TOLERANCE_MS = 2_000L
     }
 }

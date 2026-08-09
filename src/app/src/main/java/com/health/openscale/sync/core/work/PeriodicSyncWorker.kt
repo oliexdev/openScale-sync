@@ -79,8 +79,14 @@ class PeriodicSyncWorker(
                 if (r is SyncResult.Failure) anyFailure = true
             }
             if (service.importEnabled()) {
-                val r = runCatching { service.runInbound(vm.selectedUserId.value) }.getOrNull()
-                if (r is SyncResult.Failure) anyFailure = true
+                when (val r = runCatching { service.runInbound(vm.selectedUserId.value) }.getOrNull()) {
+                    is SyncResult.Failure -> anyFailure = true
+                    is SyncResult.Success -> if (r.data.total > 0) Timber.d(
+                        "%s: imported %d new and enriched %d existing measurement(s)",
+                        vm.getName(), r.data.imported, r.data.updated
+                    )
+                    null -> {}
+                }
             }
         }
 

@@ -39,6 +39,7 @@ import com.google.gson.reflect.TypeToken
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
+import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import com.health.openscale.sync.core.model.SyncDirection
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
@@ -85,6 +86,18 @@ data class InboundMeasurement(
     // the pipeline writes to the userId passed to runInbound (single-user sources).
     val userId: Int? = null
 )
+
+/**
+ * What a [ServiceInterface.runInbound] run actually wrote into openScale: measurements it did not
+ * have before, and existing ones whose values openScale really changed. Both are confirmed against
+ * openScale rather than counted optimistically per attempt.
+ */
+data class InboundStats(
+    val imported: Int = 0,
+    val updated: Int = 0
+) {
+    val total: Int get() = imported + updated
+}
 
 /**
  * Result of a bulk apply ([ServiceInterface.insertAll]/[ServiceInterface.updateAll]): which measurements were
@@ -309,9 +322,10 @@ abstract class ServiceInterface (
             if (batch.isEmpty()) continue
             val res = if (isInsert) insertAll(batch) else updateAll(batch)
             val appliedIds = res.succeeded.mapTo(HashSet()) { it.id }
-            for (m in batch) {
-                if (m.id in appliedIds) ledgerRecord(m.id, m)
-                else retryEnqueue(pendingOp(if (isInsert) "insert" else "update", m))
+            val outstanding = batch.filterNot { it.id in appliedIds }
+            batch.filter { it.id in appliedIds }.forEach { ledgerRecord(it.id, it) }
+            outstanding.groupBy { it.userId }.forEach { (userId, ms) ->
+                dirtyMark(ms.mapTo(HashSet()) { it.id }, userId)
             }
             if (isInsert) insertedOk += appliedIds.size else updatedOk += appliedIds.size
             res.failure?.let { failure = it }
@@ -362,27 +376,59 @@ abstract class ServiceInterface (
     open suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> = emptyList()
 
     /**
-     * Generic inbound pipeline: read from the source and write into openScale. openScale stays
-     * master — the provider insert uses IGNORE on (userId,timestamp), so existing measurements are
-     * never overwritten (gap-fill). Returns the number of newly imported measurements.
+     * Generic inbound pipeline: read from the source and reconcile it into openScale.
+     *
+     * A reading whose timestamp openScale does not have yet is added; one it already has is used to
+     * fill in what is missing there (a plain insert could not — openScale's provider ignores a
+     * duplicate (userId,timestamp), so a value the source learned later, or a metric openScale never
+     * had, was silently dropped). openScale stays master in the sense that its own measurements are
+     * never removed and untouched values keep their content.
+     *
+     * The counts are verified, not assumed: the provider's insert reports nothing back (null Uri on
+     * success and on conflict alike), so [InboundStats.imported] is confirmed by re-reading the
+     * affected users afterwards, and [InboundStats.updated] comes from openScale's own row count,
+     * which is 0 when nothing actually changed.
      */
-    suspend fun runInbound(userId: Int): SyncResult<Int> {
+    suspend fun runInbound(userId: Int): SyncResult<InboundStats> {
         if (!importEnabled()) {
             return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Import is not enabled for this backend")
         }
         return try {
             val since = Instant.now().minus(Duration.ofDays(730)).toEpochMilli()
             val items = readInbound(userId, since)
-            var imported = 0
-            for (m in items) {
-                val targetUser = m.userId ?: userId
-                val ok = if (m.valuesJson != null)
-                    openScaleDataService.insertMeasurementGeneric(targetUser, m.timeMs, m.weightKg, m.valuesJson)
-                else
-                    openScaleDataService.insertMeasurement(targetUser, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct)
-                if (ok) imported++
+            if (items.isEmpty()) return SyncResult.Success(InboundStats())
+
+            // One read per affected user, reused for every reading of that user.
+            val known = HashMap<Int, Set<Long>>()
+            fun timestampsOf(target: Int): Set<Long> = known.getOrPut(target) {
+                openScaleDataService.getMeasurements(OpenScaleUser(target, ""))
+                    .mapTo(HashSet()) { it.date.time }
             }
-            SyncResult.Success(imported)
+
+            var updated = 0
+            val attempted = HashMap<Int, MutableList<Long>>()
+            for (m in items) {
+                val target = m.userId ?: userId
+                if (m.timeMs in timestampsOf(target)) {
+                    if (openScaleDataService.updateMeasurement(
+                            target, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct, m.valuesJson)
+                    ) updated++
+                } else {
+                    if (openScaleDataService.insertMeasurement(
+                            target, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct, m.valuesJson)
+                    ) attempted.getOrPut(target) { mutableListOf() } += m.timeMs
+                }
+            }
+
+            // Confirm the inserts against openScale instead of trusting "the call did not throw".
+            var imported = 0
+            attempted.forEach { (target, times) ->
+                val now = openScaleDataService.getMeasurements(OpenScaleUser(target, ""))
+                    .mapTo(HashSet()) { it.date.time }
+                imported += times.count { it in now }
+            }
+
+            SyncResult.Success(InboundStats(imported, updated))
         } catch (e: Exception) {
             SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
         }
@@ -429,12 +475,12 @@ abstract class ServiceInterface (
 
     /**
      * The one central place a real-time op flows through: run it via [dispatch], and on failure
-     * remember it in the retry queue so the next init() replays it. reconcile() routes its deletes
-     * through here too. submit() is the only thing that touches the queue.
+     * remember the measurement as outstanding so the next init() re-derives and replays it.
+     * reconcile() routes its deletes through here too.
      */
     suspend fun submit(op: PendingOp): SyncResult<Unit> {
         val result = dispatch(op)
-        if (result is SyncResult.Failure) retryEnqueue(op)
+        if (result is SyncResult.Failure) dirtyMark(op)
         return result
     }
 
@@ -464,61 +510,158 @@ abstract class ServiceInterface (
         else     -> SyncResult.Success(Unit)
     }
 
+    /**
+     * Replay everything still outstanding. Each id is re-derived against openScale's CURRENT state
+     * and the ledger — the same classification [reconcile] uses — rather than replayed from a
+     * snapshot taken when the op failed. So an edited measurement goes out with its new values, one
+     * deleted in the meantime goes out as a delete instead of being resurrected, and a measurement
+     * the backend keeps rejecting blocks nothing but itself.
+     *
+     * Only a run of [DRAIN_FAILURE_LIMIT] consecutive failures ends the pass: that many in a row
+     * means the backend is down, not that these measurements are bad, and hammering it costs battery
+     * for nothing. Whatever was not processed simply stays outstanding.
+     */
     private suspend fun drainQueue() {
-        val ops = retryPeek()
-        if (ops.isEmpty()) return
-        var failedIndex = ops.size
-        for ((index, op) in ops.withIndex()) {
-            if (dispatch(op) is SyncResult.Failure) {
-                failedIndex = index
+        val dirty = dirtyLoad()
+        if (dirty.isEmpty()) return
+
+        if (!::openScaleDataService.isInitialized) {
+            Timber.w("%s: %d measurement(s) outstanding but no openScale provider wired -> keeping them",
+                viewModel().getName(), dirty.size)
+            return
+        }
+
+        // openScale is the authority on what these ids currently are. Only the affected users are
+        // read, and only when something is actually outstanding — an empty set costs nothing.
+        val affectedUsers = dirty.values.toSet()
+        val live = runCatching {
+            openScaleDataService.getUsers()
+                .filter { it.id in affectedUsers }
+                .flatMap { openScaleDataService.getMeasurements(it) }
+                .associateBy { it.id }
+        }.getOrElse {
+            Timber.w(it, "%s: cannot read openScale -> keeping the outstanding set", viewModel().getName())
+            return
+        }
+
+        var consecutiveFailures = 0
+        // No user gating here: an id only ever enters the set through submit()/reconcile(), which
+        // their callers already gate — and re-checking a *current* setting would silently drop work
+        // that was legitimately owed when it failed.
+        for ((id, _) in dirty) {
+            val current = live[id]
+            val ledgerEntry = ledgerEntry(id)
+            val op = when {
+                // dispatch() turns an update whose timestamp moved into delete-old + insert-new.
+                current != null -> pendingOp(if (ledgerEntry == null) "insert" else "update", current)
+                // Gone from openScale but exported before → the delete never made it out.
+                ledgerEntry != null ->
+                    PendingOp("delete", id = id, userId = ledgerEntry.userId, dateMs = ledgerEntry.dateMs)
+                // Neither side knows it any more: nothing left to push.
+                else -> null
+            }
+
+            if (op == null) {
+                dirtyForget(id)
+                continue
+            }
+
+            if (dispatch(op) is SyncResult.Success) {
+                dirtyForget(id)
+                consecutiveFailures = 0
+            } else if (++consecutiveFailures >= DRAIN_FAILURE_LIMIT) {
+                Timber.w("%s: %d consecutive failures -> backend looks down, stopping this drain",
+                    viewModel().getName(), consecutiveFailures)
                 break
             }
         }
-        retryReplace(ops.subList(failedIndex, ops.size))
     }
 
-    // --- Persisted retry queue (inlined; no separate class) ----------------------------
-    // Per-service queue of failed ops, replayed transparently on the next init()/connect.
-    // Override the key only to keep an existing on-disk queue file.
+    // --- Persisted outstanding set (inlined; no separate class) -------------------------
+    // Per-service set of measurements this backend still owes the receiver, stored as
+    // measurementId → userId. Deliberately NOT a log of the failed ops themselves: an op snapshot
+    // ages badly — the measurement can be edited or deleted before the replay gets a chance, and the
+    // same measurement failing over and over piled up duplicate entries that then pushed older,
+    // still-unsent ops out of the capped queue. An id carries no stale data and can always be
+    // re-derived against openScale's current state, which is what [drainQueue] does.
+    // Override the key only to keep an existing on-disk file.
     protected open val retryQueueKey: String get() = viewModel().getName()
     private val retryPrefs by lazy {
         context.getSharedPreferences("retry_queue_$retryQueueKey", Context.MODE_PRIVATE)
     }
     private val retryGson = Gson()
-    private val retryListType = object : TypeToken<List<PendingOp>>() {}.type
+    private val dirtyMapType = object : TypeToken<MutableMap<Int, Int>>() {}.type
+    private val legacyQueueType = object : TypeToken<List<PendingOp>>() {}.type
 
     fun pendingOp(type: String, m: OpenScaleMeasurement) =
         PendingOp(type, m.id, m.userId, m.date.time, m.username, m.values)
 
+    /**
+     * The outstanding ids, upgrading a queue written by an older version on first read: its ops
+     * collapse to the ids they mentioned, which is all the new drain needs (and it heals a backlog
+     * that the old head-of-line-blocking drain could never work off).
+     */
     @Synchronized
-    private fun retryPeek(): List<PendingOp> {
-        val json = retryPrefs.getString("queue", null) ?: return emptyList()
-        return runCatching { retryGson.fromJson<List<PendingOp>>(json, retryListType) ?: emptyList() }
-            .getOrElse { emptyList() }
+    private fun dirtyLoad(): MutableMap<Int, Int> {
+        val json = retryPrefs.getString(DIRTY_KEY, null)
+        val map: MutableMap<Int, Int> = if (json == null) LinkedHashMap() else
+            runCatching { retryGson.fromJson<MutableMap<Int, Int>>(json, dirtyMapType) ?: LinkedHashMap() }
+                .getOrElse { LinkedHashMap() }
+
+        retryPrefs.getString(LEGACY_QUEUE_KEY, null)?.let { legacy ->
+            runCatching { retryGson.fromJson<List<PendingOp>>(legacy, legacyQueueType) ?: emptyList() }
+                .getOrElse { emptyList() }
+                .filter { it.id != 0 }
+                .forEach { map.putIfAbsent(it.id, it.userId) }
+            retryPrefs.edit {
+                remove(LEGACY_QUEUE_KEY)
+                putString(DIRTY_KEY, retryGson.toJson(map))
+            }
+        }
+        return map
     }
 
     @Synchronized
-    private fun retryEnqueue(op: PendingOp) {
-        val current = if (op.type == "clear") mutableListOf() else retryPeek().toMutableList()
-        current.add(op)
-        if (current.size > RETRY_MAX_SIZE) current.subList(0, current.size - RETRY_MAX_SIZE).clear()
-        retryPrefs.edit { putString("queue", retryGson.toJson(current)) }
+    private fun dirtyStore(map: Map<Int, Int>) =
+        retryPrefs.edit { putString(DIRTY_KEY, retryGson.toJson(map)) }
+
+    /** Remember [op]'s measurement as outstanding. */
+    @Synchronized
+    private fun dirtyMark(op: PendingOp) {
+        // A failed clear leaves every measurement we ever exported for that user outstanding; the
+        // ledger knows which those are, and they re-derive as deletes on the next drain.
+        val ids = if (op.type == "clear")
+            ledgerSnapshot().filterValues { it.userId == op.userId }.keys
+        else if (op.id != 0) setOf(op.id) else emptySet()
+
+        if (ids.isNotEmpty()) dirtyMark(ids, op.userId)
     }
 
     @Synchronized
-    private fun retryReplace(ops: List<PendingOp>) {
-        retryPrefs.edit { putString("queue", retryGson.toJson(ops)) }
+    private fun dirtyMark(ids: Set<Int>, userId: Int) {
+        val map = dirtyLoad()
+        ids.forEach { map[it] = userId }
+        // Past the cap the export ledger takes over: reconcile() re-derives anything dropped here
+        // from openScale's current state, so trimming delays a push, it does not lose a measurement.
+        while (map.size > RETRY_MAX_SIZE) map.remove(map.keys.first())
+        dirtyStore(map)
     }
 
-    // --- Minimal read/action API for the UI (queue stays otherwise private) -------------
-    /** Number of failed ops currently waiting to be retried. */
-    fun pendingRetryCount(): Int = retryPeek().size
+    @Synchronized
+    private fun dirtyForget(id: Int) {
+        val map = dirtyLoad()
+        if (map.remove(id) != null) dirtyStore(map)
+    }
+
+    // --- Minimal read/action API for the UI (the set stays otherwise private) -----------
+    /** Number of measurements this backend still owes the receiver. */
+    fun pendingRetryCount(): Int = dirtyLoad().size
 
     /** Replay the backlog now (e.g. user tapped "retry"). Keeps anything that still fails. */
     suspend fun retryPending() = drainQueue()
 
     /** Drop the whole backlog (e.g. user tapped "discard"). */
-    fun clearPending() = retryReplace(emptyList())
+    fun clearPending() = dirtyStore(emptyMap())
 
     fun setErrorMessage(message : String) {
         viewModel().setErrorMessage(message)
@@ -612,6 +755,12 @@ abstract class ServiceInterface (
     }
 
     companion object {
+        /** Cap on the outstanding set; past it reconcile() is the healing path (see [dirtyMark]). */
         private const val RETRY_MAX_SIZE = 500
+        /** Consecutive failures that make a drain give up on this pass — the backend is down. */
+        private const val DRAIN_FAILURE_LIMIT = 3
+        private const val DIRTY_KEY = "outstanding"
+        /** Pre-0.6 per-op queue, folded into [DIRTY_KEY] on first read. */
+        private const val LEGACY_QUEUE_KEY = "queue"
     }
 }

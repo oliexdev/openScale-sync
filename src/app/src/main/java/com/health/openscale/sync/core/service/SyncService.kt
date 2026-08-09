@@ -81,6 +81,12 @@ class SyncService : Service() {
         // Prepare all sync backends (single source of truth in BackendRegistry; a test may inject fakes)
         syncServiceList = (backendFactory ?: { c, p -> BackendRegistry.create(c, p) })(applicationContext, prefs)
 
+        // init() replays what a backend still owes, and that replay re-derives each measurement from
+        // openScale instead of from a stale snapshot — so the provider has to be wired up front, not
+        // only in onHandleIntent().
+        val dataProvider = (dataProviderFactory ?: { c, p -> OpenScaleDataProvider(c, p) })(applicationContext, prefs)
+        syncServiceList.forEach { it.openScaleDataService = dataProvider }
+
         CoroutineScope(Dispatchers.Main).launch {
             // Initialize only enabled services
             for (syncService in syncServiceList) {
@@ -98,7 +104,7 @@ class SyncService : Service() {
             }
 
             delay(500.milliseconds) // small delay to give init a chance to complete
-            onHandleIntent(intent)
+            onHandleIntent(intent, dataProvider)
 
             Timber.d("onStartCommand done in %d ms", (System.nanoTime() - t0) / 1_000_000)
         }
@@ -106,13 +112,12 @@ class SyncService : Service() {
         return START_STICKY
     }
 
-    private suspend fun onHandleIntent(intent: Intent?) {
+    private suspend fun onHandleIntent(intent: Intent?, dataProvider: OpenScaleDataProvider) {
         Timber.d("onHandleIntent extras: %s", intent.safeExtras())
 
         // Version gate: this sync app requires a minimum openScale ContentProvider API version
         // (hard gate, no legacy fallbacks). If the installed openScale is too old, flag it for the
         // UI ("please update openScale") and drop the event instead of mis-handling old-format data.
-        val dataProvider = (dataProviderFactory ?: { c, p -> OpenScaleDataProvider(c, p) })(applicationContext, prefs)
         val apiVersion = runCatching { dataProvider.getApiVersion() }.getOrNull()
         if (apiVersion != null && apiVersion < OpenScaleDataProvider.MIN_API_VERSION) {
             prefs.edit { putBoolean(OpenScaleViewModel.OPENSCALE_VERSION_UNSUPPORTED, true) }

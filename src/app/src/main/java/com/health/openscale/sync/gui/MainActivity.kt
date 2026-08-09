@@ -120,6 +120,7 @@ import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import timber.log.Timber.DebugTree
 import timber.log.Timber.Forest.plant
 import java.time.Instant
@@ -596,7 +597,13 @@ class MainActivity : AppCompatActivity() {
                             // Inbound: pull from the source into openScale (bidirectional backends, import/both direction).
                             if (failure == null && service.importEnabled()) {
                                 val userId = if (service.isMultiUser) -1 else service.viewModel().selectedUserId.value
-                                (service.runInbound(userId) as? SyncResult.Failure)?.let { failure = it }
+                                when (val r = service.runInbound(userId)) {
+                                    is SyncResult.Failure -> failure = r
+                                    is SyncResult.Success -> Timber.d(
+                                        "%s: imported %d new and enriched %d existing measurement(s)",
+                                        service.viewModel().getName(), r.data.imported, r.data.updated
+                                    )
+                                }
                             }
                             failure?.let { service.setErrorMessage(it); anyFailure = true }
                                 ?: service.viewModel().setLastSync(Instant.now())

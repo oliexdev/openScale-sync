@@ -89,8 +89,10 @@ class HealthConnectService(
     // HealthConnect can read foreign records → bidirectional.
     override val supportsInbound: Boolean get() = true
 
-    // HealthConnect inserts the whole batch in one insertRecords call. Updates use the per-item
-    // default loop (rare in reconcile; each needs per-record resolution).
+    // HealthConnect writes the whole batch in one insertRecords call. Updates take the same path:
+    // the write is a clientRecordId upsert, so a batch of updates is a batch of writes — no reason
+    // to fall back to the per-item default loop (a forced full sync would otherwise be one round
+    // trip per measurement).
     override suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult {
         val perm = checkAllPermissionsGranted()
         if (perm is SyncResult.Failure) return BulkResult(emptyList(), perm)
@@ -99,6 +101,9 @@ class HealthConnectService(
             is SyncResult.Failure -> BulkResult(emptyList(), r)
         }
     }
+
+    override suspend fun updateAll(measurements: List<OpenScaleMeasurement>): BulkResult =
+        insertAll(measurements)
 
     override suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
         checkAllPermissionsGranted().let {
@@ -121,15 +126,38 @@ class HealthConnectService(
         }
 
     /**
-     * Inbound source (bidirectional): read weight + fat + water written to Health Connect by OTHER
-     * apps. Echo is prevented via dataOrigin (own writes excluded). The base [runInbound] pipeline
-     * writes the results into openScale (master/gap-fill via IGNORE).
+     * Inbound source (bidirectional): read what OTHER apps wrote to Health Connect. Echo is
+     * prevented via dataOrigin (own writes excluded). The base [runInbound] pipeline reconciles the
+     * results into openScale.
+     *
+     * Fat and water ride openScale's fixed columns; bone and lean mass have none, so they go through
+     * the generic value payload — which is also why they stay in kg, the unit openScale keeps those
+     * two types in.
      */
     override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
         val perm = checkAllPermissionsGranted()
         if (perm is SyncResult.Failure) throw IllegalStateException("Health Connect permissions not granted")
-        return healthConnectSync.readInboundReadings(context.packageName, sinceMs)
-            .map { InboundMeasurement(it.timeMs, it.weightKg, it.fatPct, it.waterPct) }
+        return healthConnectSync.readInboundReadings(context.packageName, sinceMs).map { reading ->
+            InboundMeasurement(
+                timeMs = reading.timeMs,
+                weightKg = reading.weightKg,
+                fatPct = reading.fatPct,
+                waterPct = reading.waterPct,
+                valuesJson = genericValues(
+                    "BONE" to reading.boneKg,
+                    "LBM" to reading.leanKg
+                )
+            )
+        }
+    }
+
+    /** openScale's generic value format, or null when there is nothing to put in it. */
+    private fun genericValues(vararg values: Pair<String, Float?>): String? {
+        val present = values.filter { it.second != null }
+        if (present.isEmpty()) return null
+        return present.joinToString(prefix = "[", postfix = "]") { (key, value) ->
+            """{"key":"$key","value":$value}"""
+        }
     }
 
     override fun registerActivityResultLauncher(activity: ComponentActivity) {

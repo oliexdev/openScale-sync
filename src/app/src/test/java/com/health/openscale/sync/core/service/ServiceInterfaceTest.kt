@@ -48,15 +48,19 @@ class ServiceInterfaceTest {
     private lateinit var ctx: Context
     private lateinit var prefs: SharedPreferences
     private lateinit var backend: FakeBackend
+    private lateinit var openScale: FakeDataProvider
 
     @Before
     fun setUp() {
         ctx = RuntimeEnvironment.getApplication()
         prefs = ctx.getSharedPreferences("test_settings", Context.MODE_PRIVATE)
-        // Start every test with an empty ledger + retry queue for the "Fake" backend.
+        // Start every test with an empty ledger + outstanding set for the "Fake" backend.
         ctx.getSharedPreferences("export_ledger_Fake", Context.MODE_PRIVATE).edit().clear().commit()
         ctx.getSharedPreferences("retry_queue_Fake", Context.MODE_PRIVATE).edit().clear().commit()
         backend = FakeBackend(ctx, prefs)
+        // The drain re-derives outstanding ids from openScale, so the provider is part of the setup.
+        openScale = FakeDataProvider(ctx, prefs)
+        backend.openScaleDataService = openScale
     }
 
     // Build like the real pipeline: the generic value set is the source of truth (weight is derived),
@@ -116,6 +120,7 @@ class ServiceInterfaceTest {
 
     @Test
     fun failedOp_isQueued_andReplayedOnInit() = runTest {
+        openScale.put(m(7, 1000))
         backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "boom"))
         val r = backend.submit(backend.pendingOp("insert", m(7, 1000)))
         assertTrue(r is SyncResult.Failure)
@@ -128,18 +133,127 @@ class ServiceInterfaceTest {
     }
 
     @Test
-    fun drain_stopsAtFirstFailure_andKeepsTail() = runTest {
-        // queue two ops, both fail on submit
+    fun drain_replaysCurrentValues_notTheSnapshotOfTheFailedOp() = runTest {
         backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR))
+        backend.submit(backend.pendingOp("insert", m(7, 1000)))
+
+        // The user corrects the measurement in openScale before the replay gets its chance.
+        openScale.put(m(7, 2000, weight = 77f))
+
+        backend.wire.clear()
+        backend.retryPending()
+        assertEquals(listOf("insert#7@2000"), backend.wire)
+        assertEquals(0, backend.pendingRetryCount())
+
+        // And the ledger holds the corrected state, so a reconcile over it is a no-op.
+        val r = backend.reconcile(listOf(m(7, 2000, weight = 77f)))
+        assertEquals(1, (r as SyncResult.Success).data.unchanged)
+    }
+
+    @Test
+    fun drain_pushesADelete_whenTheMeasurementIsGoneFromOpenScale() = runTest {
+        openScale.put(m(7, 1000))
+        backend.submit(backend.pendingOp("insert", m(7, 1000)))       // exported → in the ledger
+        backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR))
+        backend.submit(backend.pendingOp("update", m(7, 1000)))       // fails → outstanding
+
+        openScale.measurements.remove(7)                              // deleted in openScale meanwhile
+
+        backend.wire.clear()
+        backend.retryPending()
+        // The stale op would have resurrected it; re-deriving turns it into the delete that never
+        // made it out.
+        assertEquals(listOf("delete@1000/u1"), backend.wire)
+        assertEquals(0, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun drain_dropsWhatNeitherOpenScaleNorTheLedgerKnows() = runTest {
+        backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR))
+        backend.submit(backend.pendingOp("insert", m(7, 1000)))       // never exported, then removed
+
+        backend.wire.clear()
+        backend.retryPending()
+        assertEquals(emptyList<String>(), backend.wire)
+        assertEquals(0, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun drain_isolatesAPermanentlyFailingMeasurement() = runTest {
+        openScale.put(m(1, 1000), m(2, 2000))
+        backend.failAll = true
         backend.submit(backend.pendingOp("insert", m(1, 1000)))
-        backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR))
         backend.submit(backend.pendingOp("insert", m(2, 2000)))
         assertEquals(2, backend.pendingRetryCount())
 
-        // drain: first op fails again → both stay queued
+        // id 1 keeps failing, id 2 would work — the old drain stopped at the head and never tried it.
+        backend.failAll = false
         backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR))
+        backend.wire.clear()
         backend.retryPending()
+
+        assertEquals(listOf("insert#1@1000", "insert#2@2000"), backend.wire)
+        assertEquals(1, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun drain_givesUpAfterConsecutiveFailures_andKeepsEverythingOutstanding() = runTest {
+        val all = (1..5).map { m(it, it * 1000L) }
+        all.forEach { openScale.put(it) }
+        backend.failAll = true
+        backend.reconcile(all)
+        assertEquals(5, backend.pendingRetryCount())
+
+        backend.wire.clear()
+        backend.retryPending()
+
+        // Three failures in a row read as "backend down": stop, waste no more battery, lose nothing.
+        assertEquals(3, backend.wire.size)
+        assertEquals(5, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun outstandingSet_countsMeasurements_notRetries() = runTest {
+        openScale.put(m(7, 1000))
+        backend.failAll = true
+        repeat(5) { backend.submit(backend.pendingOp("update", m(7, 1000))) }
+
+        // The old per-op queue grew by one entry per attempt and reported "5 measurements pending".
+        assertEquals(1, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun drain_keepsTheSetWhenOpenScaleCannotBeRead() = runTest {
+        openScale.put(m(7, 1000))
+        backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR))
+        backend.submit(backend.pendingOp("insert", m(7, 1000)))
+
+        openScale.readFails = true
+        backend.wire.clear()
+        backend.retryPending()
+
+        assertEquals(emptyList<String>(), backend.wire)
+        assertEquals(1, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun legacyQueue_isUpgradedToTheOutstandingSet() = runTest {
+        // A backlog written by an older version: two ops for the same measurement plus one for
+        // another. The old drain could never work these off once one of them failed permanently.
+        ctx.getSharedPreferences("retry_queue_Fake", Context.MODE_PRIVATE).edit().putString(
+            "queue",
+            """[{"type":"insert","id":7,"userId":1,"dateMs":1000,"username":"","values":[]},
+                {"type":"update","id":7,"userId":1,"dateMs":1000,"username":"","values":[]},
+                {"type":"insert","id":8,"userId":1,"dateMs":2000,"username":"","values":[]}]"""
+        ).commit()
+
         assertEquals(2, backend.pendingRetryCount())
+
+        openScale.put(m(7, 1000), m(8, 2000))
+        backend.wire.clear()
+        backend.retryPending()
+        assertEquals(listOf("insert#7@1000", "insert#8@2000"), backend.wire)
+        assertEquals(0, backend.pendingRetryCount())
     }
 
     // --- Reconcile ------------------------------------------------------------------------
@@ -259,6 +373,67 @@ class ServiceInterfaceTest {
         backend.wire.clear()
         backend.reconcile(listOf(m(1, 1000), m(2, 2000), m(3, 3000)))
         assertEquals(listOf("insert#2@2000"), backend.wire)
+    }
+
+    // --- Inbound (external source → openScale) --------------------------------------------
+
+    /** An inbound-capable backend set to import, with openScale already holding [existing]. */
+    private fun inboundBackend(vararg existing: OpenScaleMeasurement): FakeBackend {
+        val b = FakeBackend(ctx, prefs, name = "Fake", inbound = true)
+        b.openScaleDataService = openScale
+        b.viewModel().setSyncDirection(SyncDirection.BOTH)
+        existing.forEach { openScale.put(it) }
+        return b
+    }
+
+    @Test
+    fun inbound_addsUnknownTimestamps_andEnrichesTheOnesOpenScaleAlreadyHas() = runTest {
+        val b = inboundBackend(m(1, 1000))
+        b.inboundReadings += InboundMeasurement(timeMs = 1000, weightKg = 80f, fatPct = 21f)  // known
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f)                // new
+
+        val r = b.runInbound(1)
+
+        // The old pipeline blind-inserted both; openScale ignored the duplicate, so the fat value
+        // that reading carried was dropped without a trace.
+        assertEquals(listOf("update@1000/u1", "insert@5000/u1"), openScale.inboundWrites)
+        assertEquals(InboundStats(imported = 1, updated = 1), (r as SyncResult.Success).data)
+    }
+
+    @Test
+    fun inbound_doesNotCountAnUpdateThatChangedNothing() = runTest {
+        val b = inboundBackend(m(1, 1000))
+        openScale.updateChangesNothing += 1000L
+        b.inboundReadings += InboundMeasurement(timeMs = 1000, weightKg = 80f)
+
+        val r = b.runInbound(1)
+
+        // openScale reports 0 rows when every value already matched — that is not an import.
+        assertEquals(InboundStats(), (r as SyncResult.Success).data)
+    }
+
+    @Test
+    fun inbound_countsOnlyInsertsOpenScaleReallyStored() = runTest {
+        val b = inboundBackend()
+        openScale.insertRejects += 5000L                       // provider drops it, reports nothing
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f)
+        b.inboundReadings += InboundMeasurement(timeMs = 6000, weightKg = 82f)
+
+        val r = b.runInbound(1)
+
+        // "The call did not throw" used to count as imported; the result is verified against
+        // openScale now, so only the row that actually landed counts.
+        assertEquals(InboundStats(imported = 1), (r as SyncResult.Success).data)
+    }
+
+    @Test
+    fun inbound_isSkipped_whenTheBackendIsExportOnly() = runTest {
+        val b = inboundBackend()
+        b.viewModel().setSyncDirection(SyncDirection.EXPORT)
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f)
+
+        assertTrue(b.runInbound(1) is SyncResult.Failure)
+        assertEquals(emptyList<String>(), openScale.inboundWrites)
     }
 
     // --- onReconciled snapshot hook -------------------------------------------------------
@@ -399,13 +574,24 @@ class ServiceInterfaceTest {
     }
 
     @Test
-    fun clearOp_failing_resetsTheQueue() = runTest {
-        backend.failAll = true
+    fun clearOp_failing_leavesTheExportedMeasurementsOutstanding() = runTest {
+        openScale.put(m(1, 1000), m(2, 2000))
         backend.submit(backend.pendingOp("insert", m(1, 1000)))
         backend.submit(backend.pendingOp("insert", m(2, 2000)))
+        assertEquals(0, backend.pendingRetryCount())
+
+        // openScale wiped the user; our clear does not reach the backend.
+        openScale.measurements.clear()
+        backend.scripted.addLast(SyncResult.Failure(SyncResult.ErrorType.API_ERROR))
+        backend.submit(PendingOp("clear", userId = 1))
+
+        // What the receiver still wrongly holds is exactly what the ledger recorded, so both ids are
+        // outstanding — and re-deriving them turns each into the delete the clear owed.
         assertEquals(2, backend.pendingRetryCount())
-        backend.submit(PendingOp("clear", userId = 1))              // clear supersedes the backlog
-        assertEquals(1, backend.pendingRetryCount())
+        backend.wire.clear()
+        backend.retryPending()
+        assertEquals(listOf("delete@1000/u1", "delete@2000/u1"), backend.wire)
+        assertEquals(0, backend.pendingRetryCount())
     }
 
     @Test

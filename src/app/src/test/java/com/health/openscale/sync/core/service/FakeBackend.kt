@@ -22,13 +22,78 @@ import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
+import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import com.health.openscale.sync.core.model.ViewModelInterface
+import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import java.util.Date
 
 /** Minimal ViewModel for tests — only name/icon are abstract; the rest comes from the base. */
 class FakeViewModel(prefs: SharedPreferences, private val name: String) : ViewModelInterface(prefs) {
     override fun getName(): String = name
     override fun getIcon(): Int = 0
+}
+
+/**
+ * Stands in for openScale's ContentProvider. The drain re-derives outstanding measurements from
+ * whatever openScale currently holds, so tests express "the user edited/deleted it meanwhile" by
+ * changing [measurements] between the failure and the replay.
+ */
+class FakeDataProvider(
+    context: Context,
+    prefs: SharedPreferences
+) : OpenScaleDataProvider(context, prefs) {
+
+    /** openScale's current content, keyed by measurement id. Tests mutate this directly. */
+    val measurements = linkedMapOf<Int, OpenScaleMeasurement>()
+
+    /** When set, reading openScale fails — the outstanding set must survive that untouched. */
+    var readFails = false
+
+    /** Inbound writes, in order: "insert@<time>/u<user>" / "update@<time>/u<user>". */
+    val inboundWrites = mutableListOf<String>()
+
+    /** Timestamps whose update openScale reports as "nothing actually changed" (0 rows). */
+    val updateChangesNothing = mutableSetOf<Long>()
+
+    /** Timestamps openScale refuses to insert, to prove they are not counted as imported. */
+    val insertRejects = mutableSetOf<Long>()
+
+    fun put(vararg ms: OpenScaleMeasurement) = ms.forEach { measurements[it.id] = it }
+
+    override fun getUsers(): List<OpenScaleUser> {
+        if (readFails) throw IllegalStateException("openScale unreachable")
+        return measurements.values.map { it.userId }.distinct().map { OpenScaleUser(it, "u$it") }
+    }
+
+    override fun getMeasurements(openScaleUser: OpenScaleUser): List<OpenScaleMeasurement> {
+        if (readFails) throw IllegalStateException("openScale unreachable")
+        return measurements.values.filter { it.userId == openScaleUser.id }
+    }
+
+    // The real provider cannot tell a suppressed duplicate from a stored row (openScale returns a
+    // null Uri either way), which is exactly why runInbound verifies its inserts by re-reading.
+    override fun insertMeasurement(
+        userId: Int, dateMs: Long, weightKg: Float,
+        fat: Float?, water: Float?, muscle: Float?, valuesJson: String?
+    ): Boolean {
+        inboundWrites += "insert@$dateMs/u$userId"
+        if (dateMs in insertRejects) return true
+        val id = (measurements.keys.maxOrNull() ?: 0) + 1
+        measurements[id] = OpenScaleMeasurement.fromValues(
+            id, userId, Date(dateMs), "",
+            listOf(OpenScaleMeasurementValue(0, "WEIGHT", "Weight", "kg", false, weightKg))
+        )
+        return true
+    }
+
+    override fun updateMeasurement(
+        userId: Int, dateMs: Long, weightKg: Float,
+        fat: Float?, water: Float?, muscle: Float?, valuesJson: String?
+    ): Boolean {
+        inboundWrites += "update@$dateMs/u$userId"
+        return dateMs !in updateChangesNothing
+    }
 }
 
 /**
@@ -62,6 +127,11 @@ class FakeBackend(
     var batch = false
     /** In batch mode: which measurements "succeeded" (default: all). Lets tests model partial bulk. */
     var batchSucceed: (List<OpenScaleMeasurement>) -> List<OpenScaleMeasurement> = { it }
+
+    /** What [readInbound] hands to the inbound pipeline. */
+    val inboundReadings = mutableListOf<InboundMeasurement>()
+
+    override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> = inboundReadings
 
     /** Each onReconciled call recorded as (changedUserIds, currentMeasurementIds), in order. */
     val reconciledCalls = mutableListOf<Pair<Set<Int>, List<Int>>>()
