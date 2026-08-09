@@ -663,6 +663,21 @@ abstract class ServiceInterface (
     /** Drop the whole backlog (e.g. user tapped "discard"). */
     fun clearPending() = dirtyStore(emptyMap())
 
+    /**
+     * Forget everything this backend believes about openScale's content.
+     *
+     * Both the ledger and the outstanding set are keyed by openScale's measurement id, which is a
+     * primary key of one particular install's database. Point the app at a different openScale
+     * variant and those ids describe other measurements — reconcile() would read the mismatch as
+     * edits and deletions and push them out. Starting empty means the next sync re-exports, which
+     * is redundant but harmless; keeping the old state would corrupt the receiver.
+     */
+    fun resetSyncState() {
+        ledgerStore(emptyMap())
+        dirtyStore(emptyMap())
+        viewModel().setSelectedUserId(-1)   // user ids belong to that install too
+    }
+
     fun setErrorMessage(message : String) {
         viewModel().setErrorMessage(message)
         Timber.e("[ERROR] %s: %s", viewModel().getName(), message)

@@ -37,6 +37,7 @@
         <item quantity="other">%1$d Messungen ausstehend</item>
     </plurals>
     <string name="dashboard_status_no_service">Kein Dienst aktiv</string>
+    <string name="dashboard_status_no_service_hint">Tippe unten auf einen Dienst, um ihn einzurichten.</string>
     <string name="service_status_off">aus</string>
     <string name="sync_status_on">Sync am %1$s</string>
     <string name="sync_status_never">noch nie synchronisiert</string>
@@ -71,6 +72,26 @@
     <string name="open_scale_no_user_found_error">Kein openScale-Benutzer gefunden. Bitte erstellen Sie ein Profil in der openScale-App.</string>
     <string name="open_scale_user_select_placeholder">openScale-Benutzer auswählen</string>
     <string name="open_scale_permission_not_granted">openScale-Berechtigung nicht erteilt.</string>
+    <string name="open_scale_permission_denied_permanently">Berechtigung abgelehnt. Android zeigt die Abfrage nicht mehr an — erlaube den openScale-Zugriff in den App-Einstellungen.</string>
+    <string name="open_scale_open_app_settings_button">App-Einstellungen</string>
+
+    <!-- Auswahl der openScale-Variante (nur sichtbar, wenn mehrere parallel installiert sind) -->
+    <string name="open_scale_variant_section_title">Datenquelle</string>
+    <string name="open_scale_variant_default">openScale</string>
+    <string name="open_scale_variant_pro">openScale Pro</string>
+    <string name="open_scale_variant_oss">openScale (F-Droid)</string>
+    <string name="open_scale_variant_beta">openScale (Beta)</string>
+    <string name="open_scale_variant_light">openScale Light</string>
+    <string name="open_scale_variant_debug">openScale (Debug)</string>
+    <string name="open_scale_variant_change_button">Ändern</string>
+    <string name="open_scale_variant_choose_title">Welches openScale?</string>
+    <string name="open_scale_variant_no_access">Zugriff nicht erteilt</string>
+    <string name="open_scale_variant_summary">%1$d Benutzer, %2$d Messungen</string>
+    <string name="open_scale_variant_switch_title">Auf %1$s wechseln?</string>
+    <string name="open_scale_variant_switch_message">Der Abgleichsstand wird zurückgesetzt, weil Messungen der anderen Installation eigene IDs haben. Beim nächsten Sync senden alle Backends erneut. Bereits übertragene Daten bleiben dort erhalten.</string>
+    <string name="open_scale_variant_switch_confirm">Wechseln</string>
+    <string name="open_scale_variant_switched">Synchronisiert jetzt mit %1$s</string>
+    <string name="cancel">Abbrechen</string>
     <string name="open_scale_request_permissions_button">openScale-Berechtigungen anfordern</string>
 
     <string name="health_connect_get_health_connect_button">Health Connect herunterladen</string>

@@ -36,6 +36,7 @@
         <item quantity="other">%1$d measurements pending</item>
     </plurals>
     <string name="dashboard_status_no_service">No sync service enabled</string>
+    <string name="dashboard_status_no_service_hint">Tap a service below to set it up.</string>
     <string name="service_status_off">off</string>
     <string name="sync_status_on">sync on %1$s</string>
     <string name="sync_status_never">sync never</string>
@@ -70,6 +71,26 @@
     <string name="open_scale_no_user_found_error">openScale user not found</string>
     <string name="open_scale_user_select_placeholder">Select openScale user</string>
     <string name="open_scale_permission_not_granted">openScale permission not granted</string>
+    <string name="open_scale_permission_denied_permanently">Permission denied. Android no longer shows the request — allow openScale access in the app settings.</string>
+    <string name="open_scale_open_app_settings_button">App settings</string>
+
+    <!-- openScale variant picker (only shown when several flavors are installed side by side) -->
+    <string name="open_scale_variant_section_title">Data source</string>
+    <string name="open_scale_variant_default">openScale</string>
+    <string name="open_scale_variant_pro">openScale Pro</string>
+    <string name="open_scale_variant_oss">openScale (F-Droid)</string>
+    <string name="open_scale_variant_beta">openScale (Beta)</string>
+    <string name="open_scale_variant_light">openScale Light</string>
+    <string name="open_scale_variant_debug">openScale (Debug)</string>
+    <string name="open_scale_variant_change_button">Change</string>
+    <string name="open_scale_variant_choose_title">Which openScale?</string>
+    <string name="open_scale_variant_no_access">Access not granted</string>
+    <string name="open_scale_variant_summary">%1$d users, %2$d measurements</string>
+    <string name="open_scale_variant_switch_title">Switch to %1$s?</string>
+    <string name="open_scale_variant_switch_message">The sync state is reset, because measurements in the other installation have ids of their own. All backends will send again on the next sync. Data already transferred stays where it is.</string>
+    <string name="open_scale_variant_switch_confirm">Switch</string>
+    <string name="open_scale_variant_switched">Now syncing with %1$s</string>
+    <string name="cancel">Cancel</string>
     <string name="open_scale_request_permissions_button">Request openScale permissions</string>
 
     <string name="health_connect_get_health_connect_button">Get Health Connect</string>

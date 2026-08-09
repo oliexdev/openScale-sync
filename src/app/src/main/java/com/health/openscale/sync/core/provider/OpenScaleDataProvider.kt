@@ -29,11 +29,22 @@ import com.health.openscale.sync.core.model.OpenScaleViewModel
 import timber.log.Timber
 import java.util.Date
 
+/**
+ * Reads openScale's ContentProvider. Normally it follows the openScale variant the user selected;
+ * [packageOverride] points it at a specific one instead, which is what lets the variant picker look
+ * into a candidate before switching to it.
+ */
 open class OpenScaleDataProvider(
     private val context: Context,
-    private val sharedPreferences: SharedPreferences
+    private val sharedPreferences: SharedPreferences,
+    private val packageOverride: String? = null
 ) {
-    private val authority = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale") + ".provider"
+    // Resolved per access, not once in the constructor: switching variants has to take effect on the
+    // instances already handed to the backends, not only after the next app start.
+    private val openScalePackage: String
+        get() = packageOverride
+            ?: sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale")!!
+    private val authority: String get() = "$openScalePackage.provider"
 
     companion object {
         /** Minimum openScale ContentProvider API version this sync app requires
@@ -96,8 +107,24 @@ open class OpenScaleDataProvider(
      *  openScale isn't installed or the name can't be read. Lets the version-gate banner name the
      *  actual installed version instead of a hardcoded minimum. */
     fun getInstalledVersionName(): String? = runCatching {
-        val pkg = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale")!!
-        context.packageManager.getPackageInfo(pkg, 0).versionName
+        context.packageManager.getPackageInfo(openScalePackage, 0).versionName
+    }.getOrNull()
+
+    /**
+     * How many measurements this openScale holds for [userId], counted on the cursor without
+     * building a single measurement object. The variant picker shows this for every candidate, and
+     * materialising whole histories just to size them up would be wasteful.
+     *
+     * Null when the provider cannot be read at all — most likely because this variant's
+     * READ_WRITE_DATA permission was never granted.
+     */
+    open fun countMeasurements(userId: Int): Int? = runCatching {
+        val uri = Uri.Builder()
+            .scheme(ContentResolver.SCHEME_CONTENT)
+            .authority(authority)
+            .path("measurements/$userId")
+            .build()
+        context.contentResolver.query(uri, null, null, null, null).use { it?.count }
     }.getOrNull()
 
     open fun getApiVersion(): Int? {

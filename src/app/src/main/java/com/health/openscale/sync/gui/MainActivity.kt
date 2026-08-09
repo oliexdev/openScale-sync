@@ -20,7 +20,6 @@ package com.health.openscale.sync.gui
 import androidx.core.content.edit
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.text.format.DateFormat
 import androidx.activity.ComponentActivity
@@ -44,9 +43,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -65,6 +66,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
@@ -145,23 +147,25 @@ class MainActivity : AppCompatActivity() {
         currentTitle.value = getString(R.string.title_overview)
         val sharedPreferences: SharedPreferences = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, MODE_PRIVATE)
 
-        sharedPreferences.edit { putString(OpenScaleViewModel.PACKAGE_NAME, detectPackage()) }
+        resolveOpenScaleVariant(sharedPreferences)
 
         LogManager.init(this, sharedPreferences)
 
         openScaleDataService = OpenScaleDataProvider(this, sharedPreferences)
         openScaleService = OpenScaleProvider(this, openScaleDataService, sharedPreferences)
 
+        // Switching variants invalidates every id-keyed belief the backends hold about openScale.
+        openScaleService.onVariantChanged = { packageName ->
+            sharedPreferences.edit { putString(OpenScaleViewModel.PACKAGE_NAME, packageName) }
+            syncServiceList.forEach { it.resetSyncState() }
+            Timber.i("openScale variant switched to %s, sync state reset", packageName)
+        }
+
         openScaleService.registerActivityResultLauncher(this)
+        openScaleService.refreshVariants()
 
         lifecycleScope.launch {
             openScaleService.init()
-        }
-
-        if (sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "null") == "null") {
-            openScaleService.viewModel().setConnectAvailable(false)
-        } else {
-            openScaleService.viewModel().setConnectAvailable(true)
         }
 
         syncServiceList = BackendRegistry.create(applicationContext, sharedPreferences)
@@ -229,43 +233,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-    private fun detectPackage(): String {
-        if (doesExist("com.health.openscale")) {
-            return "com.health.openscale"
-        }
-
-        if (doesExist("com.health.openscale.debug")) {
-            return "com.health.openscale.debug"
-        }
-
-        if (doesExist("com.health.openscale.oss")) {
-            return "com.health.openscale.oss"
-        }
-
-        if (doesExist("com.health.openscale.beta")) {
-            return "com.health.openscale.beta"
-        }
-
-        if (doesExist("com.health.openscale.light")) {
-            return "com.health.openscale.light"
-        }
-
-        if (doesExist("com.health.openscale.pro")) {
-            return "com.health.openscale.pro"
-        }
-
-        return "null"
+    override fun onResume() {
+        super.onResume()
+        // openScale can be installed, updated or uninstalled while this app sits in the background —
+        // most obviously right after the user tapped "Get openScale".
+        val sharedPreferences = getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, MODE_PRIVATE)
+        resolveOpenScaleVariant(sharedPreferences)
+        openScaleService.refreshVariants()
+        openScaleService.checkPermissionGranted()
     }
 
-    private fun doesExist(packageName: String): Boolean {
-        return try {
-            packageManager.getPackageInfo(packageName, 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
+    /**
+     * Settle which openScale this app syncs with. Discovery runs every time; the stored choice only
+     * decides the outcome for as long as that variant is still installed, so a pick survives
+     * restarts while an uninstall (or a first-ever install) is picked up on its own.
+     */
+    private fun resolveOpenScaleVariant(sharedPreferences: SharedPreferences) {
+        val installed = OpenScaleProvider.installedVariants(this, sharedPreferences)
+        val stored = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, null)
+        val resolved = OpenScaleProvider.resolveVariant(installed, stored)
+
+        if (resolved != stored) {
+            Timber.i("openScale variant resolved to %s (was %s)", resolved, stored)
+        }
+        sharedPreferences.edit {
+            putString(OpenScaleViewModel.PACKAGE_NAME, resolved ?: "null")
         }
     }
+
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
@@ -468,20 +463,73 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Single-glance answer to "is my data flowing?" */
+    /**
+     * Single-glance answer to "is my data flowing?".
+     *
+     * With nothing enabled this is not a status but the app's zero state — the one moment where the
+     * screen has to say what to do next, so it gets a card and a sentence rather than the quietest
+     * grey line on the page. The other two are confirmations of an running setup and stay compact.
+     */
     @Composable
     fun OverallStatusBanner() {
         val enabled = syncServiceList.filter { it.viewModel().syncEnabled.value }
         val pending = enabled.sumOf { it.pendingRetryCount() }
-        val (text, color) = when {
-            enabled.isEmpty() ->
-                stringResource(R.string.dashboard_status_no_service) to MaterialTheme.colorScheme.onSurfaceVariant
-            pending > 0 ->
-                pluralStringResource(R.plurals.dashboard_status_pending, pending, pending) to MaterialTheme.colorScheme.error
-            else ->
-                stringResource(R.string.dashboard_status_all_synced) to MaterialTheme.colorScheme.primary
+
+        if (enabled.isEmpty()) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            stringResource(R.string.dashboard_status_no_service),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        // The list is right below, so point at it instead of adding a second button
+                        // next to the (correctly) disabled sync one.
+                        Text(
+                            stringResource(R.string.dashboard_status_no_service_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            return
         }
-        Text(text, style = MaterialTheme.typography.titleMedium, color = color)
+
+        // Pending is not a failure — the next sync replays it — so it stays clear of the error
+        // colour that a genuinely broken backend uses in its own row.
+        val (text, color, icon) = if (pending > 0)
+            Triple(
+                pluralStringResource(R.plurals.dashboard_status_pending, pending, pending),
+                MaterialTheme.colorScheme.tertiary,
+                Icons.Filled.Schedule
+            )
+        else
+            Triple(
+                stringResource(R.string.dashboard_status_all_synced),
+                MaterialTheme.colorScheme.primary,
+                Icons.Filled.CheckCircle
+            )
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(text, style = MaterialTheme.typography.titleMedium, color = color)
+        }
     }
 
     /** One status row per backend. Tap → opens that service's detail screen. */

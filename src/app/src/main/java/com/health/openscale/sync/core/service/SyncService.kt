@@ -18,6 +18,7 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
+import com.health.openscale.sync.core.provider.OpenScaleProvider
 import com.health.openscale.sync.core.utils.LogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +82,11 @@ class SyncService : Service() {
         // Prepare all sync backends (single source of truth in BackendRegistry; a test may inject fakes)
         syncServiceList = (backendFactory ?: { c, p -> BackendRegistry.create(c, p) })(applicationContext, prefs)
 
+        // The variant picker lives in the UI, but this service can run before the app has ever been
+        // opened after an openScale install — resolve here too, or every provider read would go to
+        // "null.provider".
+        OpenScaleProvider.ensureVariantResolved(applicationContext, prefs)
+
         // init() replays what a backend still owes, and that replay re-derives each measurement from
         // openScale instead of from a stale snapshot — so the provider has to be wired up front, not
         // only in onHandleIntent().
@@ -132,6 +138,18 @@ class SyncService : Service() {
         val userMap: Map<Int, String> = runCatching {
             dataProvider.getUsers().associate { it.id to it.username }
         }.getOrElse { emptyMap() }
+
+        // Several openScale variants can be installed side by side, and this service is exported to
+        // all of them. Measurement ids only mean something within one install, so an op from the
+        // variant we are NOT synced with would poison the export ledger. openScale names itself in
+        // the intent; builds that do not send it are simply trusted, as before.
+        val sender = intent?.extras?.getString("package")
+        val selected = prefs.getString(OpenScaleViewModel.PACKAGE_NAME, null)
+        if (sender != null && selected != null && sender != selected) {
+            Timber.w("Ignoring sync intent from %s -> synced with %s", sender, selected)
+            stopServiceCleanly()
+            return
+        }
 
         val mode = intent?.extras?.getString("mode") ?: "none"
         if (mode !in setOf("insert", "update", "delete", "clear", "changed")) {

@@ -18,9 +18,12 @@
 package com.health.openscale.sync.core.model
 
 import android.content.SharedPreferences
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.edit
 import com.health.openscale.sync.R
 
-class OpenScaleViewModel(sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
+class OpenScaleViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
     companion object {
         /** The app's main settings store. */
         const val SETTINGS_FILE = "openScaleSyncSettings"
@@ -29,6 +32,17 @@ class OpenScaleViewModel(sharedPreferences: SharedPreferences) : ViewModelInterf
         // Set by SyncService when the installed openScale is older than MIN_API_VERSION;
         // observed by the UI to show an "update openScale" warning banner.
         const val OPENSCALE_VERSION_UNSUPPORTED = "openScaleVersionUnsupported"
+    }
+
+    /** The openScale variant being synced with, as observable state so the picker updates the UI. */
+    private val _openScalePackage = mutableStateOf(
+        sharedPreferences.getString(PACKAGE_NAME, "com.health.openscale")!!
+    )
+    val openScalePackage: State<String> get() = _openScalePackage
+
+    fun setOpenScalePackage(value: String) {
+        _openScalePackage.value = value
+        sharedPreferences.edit { putString(PACKAGE_NAME, value) }
     }
 
     override fun getName(): String {
