@@ -23,7 +23,7 @@ default_platform(:android)
 platform :android do 
     versionName = get_version_name(
         gradle_file_path:"src/app/build.gradle",
-        ext_constant_name:"appVersionName"
+        ext_constant_name:"versionName"
     )
 
     versionCode = get_version_name(

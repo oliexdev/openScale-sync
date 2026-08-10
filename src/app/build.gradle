@@ -5,12 +5,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-def appVersionName = "0.6"
-
-base {
-    archivesName = "openScale-sync-$appVersionName"
-}
-
 android {
     compileSdk 36
     defaultConfig {
@@ -18,7 +12,7 @@ android {
         minSdkVersion 31
         targetSdkVersion 36
         versionCode 16
-        versionName appVersionName
+        versionName "0.6"
         multiDexEnabled = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -118,6 +112,10 @@ android {
         }
     }
 
+}
+
+base {
+    archivesName = "openScale-sync-${android.defaultConfig.versionName}"
 }
 
 kotlin {
