@@ -11,8 +11,8 @@ android {
         applicationId "com.health.openscale.sync"
         minSdkVersion 31
         targetSdkVersion 36
-        versionCode 16
-        versionName "0.6"
+        versionCode 17
+        versionName "0.6.1"
         multiDexEnabled = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

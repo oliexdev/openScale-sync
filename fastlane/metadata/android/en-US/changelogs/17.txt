@@ -1,0 +1,6 @@
+- New Endurain sync backend.
+- Two-way sync: import measurements from Health Connect, Wger and MQTT.
+- Optional background sync every 6 hours.
+- Health Connect syncs bone mass, lean mass and BMR, and starts export-only: it reads only when you turn on import.
+- A failed sync no longer blocks later ones and is retried automatically.
+- Pick which openScale to sync with when several are installed.
