@@ -27,25 +27,39 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.health.openscale.sync.R
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 
+/**
+ * The Health Connect permissions rationale, reached from the Health Connect permission dialog
+ * (ACTION_SHOW_PERMISSIONS_RATIONALE on Android 13 and below, the ViewPermissionUsageActivity alias
+ * on 14 and later — see AndroidManifest).
+ *
+ * Health Connect policy requires this screen to say how the data is used, per direction, which is
+ * why it spells out what is written and what is read rather than only linking the privacy policy.
+ * The read section names the setting that turns reading on, because with the default Export
+ * direction the app requests no read permissions at all (HealthConnectService.neededPermissions).
+ */
 class PermissionsRationaleActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,30 +90,58 @@ class PermissionsRationaleActivity : AppCompatActivity() {
                         }
 
                         Column (
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .verticalScroll(rememberScrollState())
                         ){
-                            val annotatedString = buildAnnotatedString {
-                                val regularText = "You can find detailed information of the openScale sync privacy policy at "
-                                val linkText = "https://github.com/oliexdev/openScale-sync"
-                                append(regularText)
+                            Text(
+                                text = stringResource(id = R.string.rationale_title),
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(id = R.string.rationale_intro),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+
+                            Section(R.string.rationale_write_title, R.string.rationale_write_text)
+                            Section(R.string.rationale_read_title, R.string.rationale_read_text)
+                            Section(R.string.rationale_privacy_title, R.string.rationale_privacy_text)
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            val linkText = stringResource(id = R.string.rationale_privacy_link)
+                            val url = stringResource(id = R.string.rationale_privacy_url)
+                            Text(buildAnnotatedString {
                                 withStyle(
                                     SpanStyle(
                                         color = MaterialTheme.colorScheme.primary,
-                                        fontSize = 16.sp,
                                         textDecoration = TextDecoration.Underline
                                     )
                                 ) {
-                                append(linkText)
+                                    append(linkText)
                                 }
-                                addLink(LinkAnnotation.Url(linkText), regularText.length, regularText.length + linkText.length)
-                            }
-
-                            Text(annotatedString)
+                                addLink(LinkAnnotation.Url(url), 0, linkText.length)
+                            })
                         }
                     }
                 }
             }
         }
+    }
+
+    /** One titled paragraph of the rationale (written / read / privacy). */
+    @Composable
+    private fun Section(titleRes: Int, textRes: Int) {
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = stringResource(id = titleRes),
+            style = MaterialTheme.typography.titleMedium
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = stringResource(id = textRes),
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }

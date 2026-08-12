@@ -21,6 +21,14 @@ import android.content.SharedPreferences
 import com.health.openscale.sync.R
 
 class HealthConnectViewModel(private val sharedPreferences: SharedPreferences) : ViewModelInterface(sharedPreferences) {
+    /**
+     * Export-only until the user asks for more. Health Connect is the one backend whose inbound half
+     * needs its own permission grant (read access to five body-measurement types), and a permission
+     * that arrives with the default is a permission the user never decided to give. Picking
+     * Import/Both in the settings is what triggers the read request.
+     */
+    override val defaultSyncDirection: SyncDirection get() = SyncDirection.EXPORT
+
     override fun getName(): String {
         return "Health Connect"
     }

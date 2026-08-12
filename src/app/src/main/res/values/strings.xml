@@ -166,4 +166,15 @@
     <string name="webhook_auth_header_title">Authorization header (optional)</string>
     <string name="webhook_connected_text">Webhook connection successful</string>
     <string name="webhook_url_empty_error">Webhook URL must not be empty</string>
+
+    <string name="rationale_title">How openScale sync uses your Health Connect data</string>
+    <string name="rationale_intro">openScale sync connects the openScale app, where your body measurements are recorded, with Health Connect. It keeps no measurements of its own.</string>
+    <string name="rationale_write_title">Data written to Health Connect</string>
+    <string name="rationale_write_text">Weight, body fat, body water mass, bone mass, lean body mass and basal metabolic rate from your openScale measurements are written to Health Connect, so that other health apps can use them. This is what the app is for.</string>
+    <string name="rationale_read_title">Data read from Health Connect</string>
+    <string name="rationale_read_text">Only when you set the Health Connect sync direction to Import or Both: weight, body fat, body water mass, bone mass and lean body mass written by other apps are read and added to your openScale history, so a weigh-in taken elsewhere is not lost. The default setting is Export, which reads nothing at all.</string>
+    <string name="rationale_privacy_title">Your data</string>
+    <string name="rationale_privacy_text">Your health data stays on your device and is only sent to the services you enable and configure yourself. The app has no ads, no analytics and no user accounts.</string>
+    <string name="rationale_privacy_link">Read the full privacy policy</string>
+    <string name="rationale_privacy_url" translatable="false">https://github.com/oliexdev/openScale-sync/wiki/Privacy-Policy</string>
 </resources>

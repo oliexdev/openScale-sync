@@ -59,21 +59,36 @@ class HealthConnectService(
     private var healthConnectClient: HealthConnectClient? = null
     private lateinit var healthConnectRequestPermissions : ActivityResultLauncher<Set<String>>
 
-    private val requiredPermissions = setOf(
+    /**
+     * Writing openScale's measurements into Health Connect is what this backend exists for, so
+     * these are unconditional — without them the service has nothing to offer.
+     */
+    private val writePermissions = setOf(
         HealthPermission.getWritePermission(WeightRecord::class),
         HealthPermission.getWritePermission(BodyWaterMassRecord::class),
         HealthPermission.getWritePermission(BodyFatRecord::class),
         HealthPermission.getWritePermission(BoneMassRecord::class),
         HealthPermission.getWritePermission(BasalMetabolicRateRecord::class),
         HealthPermission.getWritePermission(LeanBodyMassRecord::class),
-        // Read permissions enable bidirectional (inbound) sync: import weight written by other apps.
+    )
+
+    /**
+     * Reading serves the inbound half of the two-way sync ([readInbound]) and nothing else, so it is
+     * requested and checked only once the user has picked Import/Both — an export-only setup never
+     * asks for read access. Health Connect's "Minimum Scope" policy requires exactly that coupling:
+     * a permission has to follow the feature that needs it, not the backend as a whole.
+     */
+    private val readPermissions = setOf(
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(BodyWaterMassRecord::class),
         HealthPermission.getReadPermission(BodyFatRecord::class),
         HealthPermission.getReadPermission(BoneMassRecord::class),
-        HealthPermission.getReadPermission(BasalMetabolicRateRecord::class),
         HealthPermission.getReadPermission(LeanBodyMassRecord::class),
     )
+
+    /** What the current direction setting actually needs granted. */
+    private fun neededPermissions(): Set<String> =
+        if (importEnabled()) writePermissions + readPermissions else writePermissions
 
     private val healthConnectPermissionContract =
         PermissionController.createRequestPermissionResultContract()
@@ -166,7 +181,7 @@ class HealthConnectService(
                 checkAllPermissionsGranted()
 
                 setDebugMessage(granted.toString())
-                if (granted.containsAll(requiredPermissions)) {
+                if (granted.containsAll(neededPermissions())) {
                     setDebugMessage("health connect permissions granted")
                 } else {
                     setDebugMessage("health connect lack of required permissions")
@@ -191,8 +206,9 @@ class HealthConnectService(
 
         try {
             val granted = currentClient.permissionController.getGrantedPermissions()
+            val needed = neededPermissions()
 
-            if (granted.containsAll(requiredPermissions)) {
+            if (granted.containsAll(needed)) {
                 viewModel.setAllPermissionsGranted(true)
 
                 if (!this::healthConnectSync.isInitialized) {
@@ -205,7 +221,7 @@ class HealthConnectService(
                 return SyncResult.Success(Unit)
             } else {
                 viewModel.setAllPermissionsGranted(false)
-                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Not all required Health Connect permissions are granted. Granted: $granted, Required: $requiredPermissions")
+                return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Not all required Health Connect permissions are granted. Granted: $granted, Required: $needed")
             }
         } catch (e: Exception) {
             viewModel.setAllPermissionsGranted(false)
@@ -230,7 +246,7 @@ class HealthConnectService(
                 return
             }
 
-            healthConnectRequestPermissions.launch(requiredPermissions)
+            healthConnectRequestPermissions.launch(neededPermissions())
         } catch (e: Exception) {
             setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
         }
@@ -298,9 +314,14 @@ class HealthConnectService(
                 enabled = viewModel.syncEnabled.value
             )
             // Per-backend direction (export / import / both). Inbound is pulled by the global Sync button.
+            // Switching it changes which permissions are needed (reads only for import/both), so the
+            // grant state is re-evaluated right away — that is what surfaces the request button below.
             SyncDirectionSelector(
                 current = viewModel.syncDirection.value,
-                onChange = { viewModel.setSyncDirection(it) },
+                onChange = {
+                    viewModel.setSyncDirection(it)
+                    activity.lifecycleScope.launch { checkAllPermissionsGranted() }
+                },
                 enabled = viewModel.syncEnabled.value,
                 serviceName = viewModel.getName()
             )

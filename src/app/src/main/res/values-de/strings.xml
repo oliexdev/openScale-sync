@@ -169,4 +169,13 @@
     <string name="webhook_connected_text">Webhook-Verbindung erfolgreich</string>
     <string name="webhook_url_empty_error">Webhook-URL darf nicht leer sein</string>
 
+    <string name="rationale_title">Wie openScale sync deine Health-Connect-Daten verwendet</string>
+    <string name="rationale_intro">openScale sync verbindet die openScale-App, in der deine Körpermesswerte erfasst werden, mit Health Connect. Die App speichert selbst keine Messwerte.</string>
+    <string name="rationale_write_title">Daten, die nach Health Connect geschrieben werden</string>
+    <string name="rationale_write_text">Gewicht, Körperfett, Körperwasser, Knochenmasse, Magermasse und Grundumsatz aus deinen openScale-Messungen werden nach Health Connect geschrieben, damit andere Gesundheits-Apps sie nutzen können. Dafür ist die App da.</string>
+    <string name="rationale_read_title">Daten, die aus Health Connect gelesen werden</string>
+    <string name="rationale_read_text">Nur wenn du die Health-Connect-Synchronisationsrichtung auf Import oder Beide stellst: Gewicht, Körperfett, Körperwasser, Knochenmasse und Magermasse, die andere Apps geschrieben haben, werden gelesen und deinem openScale-Verlauf hinzugefügt, damit eine anderswo erfasste Messung nicht verloren geht. Voreingestellt ist Export — dabei wird gar nichts gelesen.</string>
+    <string name="rationale_privacy_title">Deine Daten</string>
+    <string name="rationale_privacy_text">Deine Gesundheitsdaten bleiben auf deinem Gerät und werden nur an die Dienste gesendet, die du selbst aktivierst und einrichtest. Die App hat keine Werbung, keine Analyse und keine Benutzerkonten.</string>
+    <string name="rationale_privacy_link">Vollständige Datenschutzerklärung lesen</string>
 </resources>

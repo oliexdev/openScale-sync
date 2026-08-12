@@ -33,8 +33,6 @@
         tools:ignore="HealthConnectPolicy"/>
     <uses-permission android:name="android.permission.health.READ_BONE_MASS"
         tools:ignore="HealthConnectPolicy"/>
-    <uses-permission android:name="android.permission.health.READ_BASAL_METABOLIC_RATE"
-        tools:ignore="HealthConnectPolicy"/>
     <uses-permission android:name="android.permission.health.READ_LEAN_BODY_MASS"
         tools:ignore="HealthConnectPolicy"/>
 

@@ -99,13 +99,21 @@ abstract class ViewModelInterface(private val sharedPreferences: SharedPreferenc
         sharedPreferences.edit { putInt(SELECTED_USER_PREFIX+getName(), value) }
     }
 
+    /**
+     * What [syncDirection] is before the user has touched the selector. BOTH for most backends —
+     * a two-way backend should be two-way out of the box. Backends whose inbound half costs the
+     * user an extra permission grant override this to EXPORT, so that permission follows a
+     * deliberate choice rather than a default (see HealthConnectViewModel).
+     */
+    protected open val defaultSyncDirection: SyncDirection get() = SyncDirection.BOTH
+
     private val _syncDirection = mutableStateOf(
         runCatching {
-            SyncDirection.valueOf(sharedPreferences.getString(SYNC_DIRECTION_PREFIX + getName(), null) ?: SyncDirection.BOTH.name)
-        }.getOrDefault(SyncDirection.BOTH)
+            SyncDirection.valueOf(sharedPreferences.getString(SYNC_DIRECTION_PREFIX + getName(), null) ?: defaultSyncDirection.name)
+        }.getOrDefault(defaultSyncDirection)
     )
 
-    /** Per-service sync direction (EXPORT default). Inbound-capable backends may set IMPORT/BOTH. */
+    /** Per-service sync direction. Inbound-capable backends may set IMPORT/BOTH. */
     val syncDirection: State<SyncDirection> get() = _syncDirection
 
     fun setSyncDirection(value: SyncDirection) {
