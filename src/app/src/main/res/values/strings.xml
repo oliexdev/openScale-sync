@@ -176,5 +176,15 @@
     <string name="rationale_privacy_title">Your data</string>
     <string name="rationale_privacy_text">Your health data stays on your device and is only sent to the services you enable and configure yourself. The app has no ads, no analytics and no user accounts.</string>
     <string name="rationale_privacy_link">Read the full privacy policy</string>
+
+    <!-- Prominent disclosure, shown in-app immediately before the Health Connect permission
+         prompt. Health Connect policy requires it to name each data type, the feature it serves,
+         and to take an affirmative action before the system prompt appears. -->
+    <string name="disclosure_title">Before you continue</string>
+    <string name="disclosure_write">openScale sync will write the measurements recorded in openScale to Health Connect — weight, body fat, body water mass, bone mass, lean body mass and basal metabolic rate — so that other health apps on this device can use them.</string>
+    <string name="disclosure_read">Because you set the sync direction to import, openScale sync will also read weight, body fat, body water mass, bone mass and lean body mass that other apps have written to Health Connect, and add those weigh-ins to your openScale history so your body-composition log stays complete.</string>
+    <string name="disclosure_how">This data is used only for that synchronization. It stays on your device except for the services you enable yourself, and is never used for advertising, sold or shared with third parties.</string>
+    <string name="disclosure_accept">Accept</string>
+    <string name="disclosure_decline">Not now</string>
     <string name="rationale_privacy_url" translatable="false">https://github.com/oliexdev/openScale-sync/wiki/Privacy-Policy</string>
 </resources>

@@ -23,10 +23,27 @@ import android.content.Intent
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
 import com.health.openscale.sync.gui.components.SyncDirectionSelector
 import com.health.openscale.sync.gui.components.UserScopeSection
 import androidx.health.connect.client.HealthConnectClient
@@ -336,14 +353,65 @@ class HealthConnectService(
                 )
             }
             if (!viewModel.allPermissionsGranted.value) {
+                // Prominent disclosure: Health Connect policy wants the what/why/how stated in the
+                // app, with an affirmative action, BEFORE the system prompt appears — the rationale
+                // screen does not count, since it sits behind a link inside that very prompt.
+                var showDisclosure by remember { mutableStateOf(false) }
+
                 Text(stringResource(id = R.string.health_connect_permission_not_granted))
                 SyncConnectButton(
                     text = stringResource(id = R.string.health_connect_request_permissions_button),
                     connectingText = stringResource(id = R.string.health_connect_request_permissions_button),
                     connecting = false,
                     enabled = viewModel.syncEnabled.value,
-                    onClick = { activity.lifecycleScope.launch { requestPermissions() } }
+                    onClick = { showDisclosure = true }
                 )
+
+                if (showDisclosure) {
+                    AlertDialog(
+                        onDismissRequest = { showDisclosure = false },
+                        title = { Text(stringResource(id = R.string.disclosure_title)) },
+                        text = {
+                            Column(
+                                modifier = Modifier.verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(stringResource(id = R.string.disclosure_write))
+                                // Only named when it is actually about to be requested.
+                                if (importEnabled()) {
+                                    Text(stringResource(id = R.string.disclosure_read))
+                                }
+                                Text(stringResource(id = R.string.disclosure_how))
+                                // Same link the rationale screen carries, so the full policy is one
+                                // tap away at the moment consent is actually given.
+                                val linkText = stringResource(id = R.string.rationale_privacy_link)
+                                val url = stringResource(id = R.string.rationale_privacy_url)
+                                Text(buildAnnotatedString {
+                                    withStyle(
+                                        SpanStyle(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            textDecoration = TextDecoration.Underline
+                                        )
+                                    ) {
+                                        append(linkText)
+                                    }
+                                    addLink(LinkAnnotation.Url(url), 0, linkText.length)
+                                })
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showDisclosure = false
+                                activity.lifecycleScope.launch { requestPermissions() }
+                            }) { Text(stringResource(id = R.string.disclosure_accept)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDisclosure = false }) {
+                                Text(stringResource(id = R.string.disclosure_decline))
+                            }
+                        }
+                    )
+                }
             }
         }
     }

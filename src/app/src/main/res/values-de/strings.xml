@@ -178,4 +178,11 @@
     <string name="rationale_privacy_title">Deine Daten</string>
     <string name="rationale_privacy_text">Deine Gesundheitsdaten bleiben auf deinem Gerät und werden nur an die Dienste gesendet, die du selbst aktivierst und einrichtest. Die App hat keine Werbung, keine Analyse und keine Benutzerkonten.</string>
     <string name="rationale_privacy_link">Vollständige Datenschutzerklärung lesen</string>
+
+    <string name="disclosure_title">Bevor du fortfährst</string>
+    <string name="disclosure_write">openScale sync schreibt die in openScale erfassten Messwerte nach Health Connect — Gewicht, Körperfett, Körperwasser, Knochenmasse, Magermasse und Grundumsatz —, damit andere Gesundheits-Apps auf diesem Gerät sie nutzen können.</string>
+    <string name="disclosure_read">Da du die Synchronisationsrichtung auf Import gestellt hast, liest openScale sync außerdem Gewicht, Körperfett, Körperwasser, Knochenmasse und Magermasse, die andere Apps nach Health Connect geschrieben haben, und fügt diese Messungen deinem openScale-Verlauf hinzu, damit dein Verlauf vollständig bleibt.</string>
+    <string name="disclosure_how">Diese Daten werden ausschließlich für diese Synchronisation verwendet. Sie bleiben auf deinem Gerät, abgesehen von den Diensten, die du selbst aktivierst, und werden nie für Werbung genutzt, verkauft oder an Dritte weitergegeben.</string>
+    <string name="disclosure_accept">Zustimmen</string>
+    <string name="disclosure_decline">Jetzt nicht</string>
 </resources>
