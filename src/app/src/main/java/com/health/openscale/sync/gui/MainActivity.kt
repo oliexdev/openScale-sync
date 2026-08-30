@@ -119,6 +119,7 @@ import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.utils.LogManager
 import com.health.openscale.sync.gui.components.LocalSnackbar
+import com.health.openscale.sync.gui.components.fullSyncMessage
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -127,6 +128,7 @@ import timber.log.Timber.DebugTree
 import timber.log.Timber.Forest.plant
 import java.time.Instant
 import java.util.Date
+import kotlin.coroutines.cancellation.CancellationException
 
 
 class MainActivity : AppCompatActivity() {
@@ -637,7 +639,16 @@ class MainActivity : AppCompatActivity() {
                                 val measurements = if (service.isMultiUser) allMeasurements
                                     else allMeasurements.filter { it.userId == service.viewModel().selectedUserId.value }
                                 // Manual full sync → force, so a receiver that lost data gets everything back.
-                                when (val r = service.reconcile(measurements, force = true)) {
+                                // Guarded like runFullSync(): a throwing backend must not take the
+                                // click handler (and with it the app) down (issues #34/#35).
+                                val r = try {
+                                    service.reconcile(measurements, force = true)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
+                                }
+                                when (r) {
                                     is SyncResult.Success -> stats += r.data
                                     is SyncResult.Failure -> failure = r
                                 }
@@ -659,12 +670,10 @@ class MainActivity : AppCompatActivity() {
                         running = false
                         // Report what the backends acknowledged, not how many measurements openScale
                         // holds — and never claim success when a backend failed.
-                        showMessage(when {
-                            anyFailure -> getString(R.string.sync_service_full_failed_info)
-                            stats.sent == 0 -> getString(R.string.sync_service_full_nothing_sent_info)
-                            else -> resources.getQuantityString(
-                                R.plurals.sync_service_full_sent_info, stats.sent, stats.sent)
-                        })
+                        showMessage(
+                            if (anyFailure) getString(R.string.sync_service_full_failed_info)
+                            else fullSyncMessage(resources, stats)
+                        )
                     }
                 }
             },

@@ -55,6 +55,10 @@
         <item quantity="one">%1$d measurement sent</item>
         <item quantity="other">%1$d measurements sent</item>
     </plurals>
+    <plurals name="sync_service_full_skipped_info">
+        <item quantity="one">%1$d measurement skipped (invalid values)</item>
+        <item quantity="other">%1$d measurements skipped (invalid values)</item>
+    </plurals>
     <string name="sync_service_full_nothing_sent_info">Nothing to send</string>
     <string name="sync_service_full_failed_info">Sync failed — see the error message</string>
     <string name="sync_service_measurement_inserted_info">%1$f kg (date: %2$s) measurement inserted</string>
@@ -63,6 +67,7 @@
     <string name="sync_service_measurement_updated_info">%1$f kg (date: %2$s) measurement updated</string>
     <string name="sync_service_unknown_error">Unknown error</string>
     <string name="sync_service_api_error">Api error</string>
+    <string name="sync_service_invalid_data_error">Measurement contains invalid values</string>
     <string name="sync_service_permission_error">Permission denied</string>
 
     <string name="open_scale_user_text">openScale user</string>

@@ -65,6 +65,7 @@ import com.health.openscale.sync.core.sync.HealthConnectSync
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SyncConnectButton
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.Date
 
 class HealthConnectService(
@@ -128,9 +129,18 @@ class HealthConnectService(
     override suspend fun insertAll(measurements: List<OpenScaleMeasurement>): BulkResult {
         val perm = checkAllPermissionsGranted()
         if (perm is SyncResult.Failure) return BulkResult(emptyList(), perm)
-        return when (val r = healthConnectSync.fullSync(measurements)) {
-            is SyncResult.Success -> BulkResult(measurements)
-            is SyncResult.Failure -> BulkResult(emptyList(), r)
+        // Drop what Health Connect would refuse BEFORE building the batch: its record constructors
+        // throw on an out-of-range value, and insertRecords() is all-or-nothing, so a single bad
+        // measurement would otherwise take the whole history down with it (issues #34/#35).
+        val (skipped, valid) = measurements.partition { m ->
+            healthConnectSync.rejectionReason(m)?.also { reason ->
+                Timber.w("Health Connect: skipping measurement id=%d date=%s (%s)", m.id, m.date, reason)
+            } != null
+        }
+        if (valid.isEmpty()) return BulkResult(emptyList(), null, skipped)
+        return when (val r = healthConnectSync.fullSync(valid)) {
+            is SyncResult.Success -> BulkResult(valid, null, skipped)
+            is SyncResult.Failure -> BulkResult(emptyList(), r, skipped)
         }
     }
 

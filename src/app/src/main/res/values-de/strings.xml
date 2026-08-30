@@ -56,6 +56,10 @@
         <item quantity="one">%1$d Messung gesendet</item>
         <item quantity="other">%1$d Messungen gesendet</item>
     </plurals>
+    <plurals name="sync_service_full_skipped_info">
+        <item quantity="one">%1$d Messung übersprungen (ungültige Werte)</item>
+        <item quantity="other">%1$d Messungen übersprungen (ungültige Werte)</item>
+    </plurals>
     <string name="sync_service_full_nothing_sent_info">Nichts zu senden</string>
     <string name="sync_service_full_failed_info">Synchronisation fehlgeschlagen — siehe Fehlermeldung</string>
     <string name="sync_service_measurement_inserted_info">%1$f kg (Datum: %2$s) Messung eingefügt</string>
@@ -64,6 +68,7 @@
     <string name="sync_service_measurement_updated_info">%1$f kg (Datum: %2$s) Messung aktualisiert</string>
     <string name="sync_service_unknown_error">Unbekannter Fehler</string>
     <string name="sync_service_api_error">Api Fehler</string>
+    <string name="sync_service_invalid_data_error">Messung enthält ungültige Werte</string>
     <string name="sync_service_permission_error">Berechtigung verweigert</string>
 
     <string name="open_scale_user_text">openScale Benutzer</string>

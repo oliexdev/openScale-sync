@@ -52,6 +52,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.cancellation.CancellationException
 
 // One lock per backend name, shared across all ServiceInterface instances in this process
 // (SyncService real-time, PeriodicSyncWorker, MainActivity manual sync) so every export-ledger
@@ -65,6 +66,7 @@ sealed class SyncResult<out T> {
     enum class ErrorType {
         PERMISSION_DENIED,
         API_ERROR,
+        INVALID_DATA,
         UNKNOWN_ERROR
     }
 }
@@ -106,7 +108,8 @@ data class InboundStats(
  */
 data class BulkResult(
     val succeeded: List<OpenScaleMeasurement>,
-    val failure: SyncResult.Failure? = null
+    val failure: SyncResult.Failure? = null,
+    val skipped: List<OpenScaleMeasurement> = emptyList()
 )
 
 /**
@@ -121,14 +124,15 @@ data class ReconcileStats(
     val updated: Int = 0,
     val moved: Int = 0,
     val deleted: Int = 0,
-    val unchanged: Int = 0
+    val unchanged: Int = 0,
+    val skipped: Int = 0
 ) {
     /** Total ops that went over the wire and were acknowledged. */
     val sent: Int get() = inserted + updated + moved + deleted
 
     operator fun plus(o: ReconcileStats) = ReconcileStats(
         inserted + o.inserted, updated + o.updated, moved + o.moved,
-        deleted + o.deleted, unchanged + o.unchanged
+        deleted + o.deleted, unchanged + o.unchanged, skipped + o.skipped
     )
 }
 
@@ -192,8 +196,16 @@ abstract class ServiceInterface (
         val allUsers = openScaleDataService.getUsers()
         val users = if (isMultiUser) allUsers else allUsers.filter { it.id == viewModel().selectedUserId.value }
         val measurements = users.flatMap { openScaleDataService.getMeasurements(it) }
-        // Manual full sync → force, see [reconcile].
-        return when (val result = reconcile(measurements, force = true)) {
+        // Manual full sync → force, see [reconcile]. Nothing a backend does may reach the click
+        // handler as a throw — that is a crash screen, not a sync error (issues #34/#35).
+        val result = try {
+            reconcile(measurements, force = true)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
+        }
+        return when (result) {
             is SyncResult.Success -> {
                 viewModel().setLastSync(Instant.now())
                 result.data
@@ -268,6 +280,10 @@ abstract class ServiceInterface (
      * persistence) is undetectable from here, so the ledger diff can never heal it on its own.
      * Note this forces re-pushes into the *update* branch rather than blind inserts — Wger rejects a
      * duplicate POST for an existing date, so the insert/update classification has to survive.
+     *
+     * A measurement the backend reports as unsendable ([SyncResult.ErrorType.INVALID_DATA]) is
+     * counted in [ReconcileStats.skipped] and otherwise left alone — no ledger entry, no retry
+     * queue entry, and not a failure for the run as a whole.
      */
     suspend fun reconcile(current: List<OpenScaleMeasurement>, force: Boolean = false): SyncResult<ReconcileStats> {
         val ledger = ledgerSnapshot()                       // read-only classification base
@@ -303,6 +319,7 @@ abstract class ServiceInterface (
         var insertedOk = 0
         var updatedOk = 0
         var deletedOk = 0
+        var skipped = 0
 
         // Moved measurements: remove the stale record at the OLD timestamp (best-effort, via the raw
         // delete so a since-gone record doesn't pollute the retry queue), then insert at the new one.
@@ -311,7 +328,8 @@ abstract class ServiceInterface (
             runCatching { delete(prev.userId, Date(prev.dateMs)) }
             when (val r = submit(pendingOp("insert", m))) {
                 is SyncResult.Success -> movedOk++
-                is SyncResult.Failure -> failure = r
+                is SyncResult.Failure ->
+                    if (r.errorType == SyncResult.ErrorType.INVALID_DATA) skipped++ else failure = r
             }
         }
 
@@ -320,14 +338,26 @@ abstract class ServiceInterface (
         // rest is queued so the retry path re-pushes it per item.
         for ((batch, isInsert) in listOf(inserts to true, updates to false)) {
             if (batch.isEmpty()) continue
-            val res = if (isInsert) insertAll(batch) else updateAll(batch)
+            val res = try {
+                if (isInsert) insertAll(batch) else updateAll(batch)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Same contract as dispatch(): a throwing backend becomes a failure, never a crash.
+                Timber.e(e, "%s.%sAll() threw", viewModel().getName(), if (isInsert) "insert" else "update")
+                BulkResult(emptyList(), SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
+            }
             val appliedIds = res.succeeded.mapTo(HashSet()) { it.id }
-            val outstanding = batch.filterNot { it.id in appliedIds }
+            // Skipped items are neither applied nor outstanding: no ledger entry (so a later fix in
+            // openScale heals them on the next run) and no retry queue entry (they'd never succeed).
+            val skippedIds = res.skipped.mapTo(HashSet()) { it.id }
+            val outstanding = batch.filterNot { it.id in appliedIds || it.id in skippedIds }
             batch.filter { it.id in appliedIds }.forEach { ledgerRecord(it.id, it) }
             outstanding.groupBy { it.userId }.forEach { (userId, ms) ->
                 dirtyMark(ms.mapTo(HashSet()) { it.id }, userId)
             }
             if (isInsert) insertedOk += appliedIds.size else updatedOk += appliedIds.size
+            skipped += skippedIds.size
             res.failure?.let { failure = it }
         }
 
@@ -338,7 +368,8 @@ abstract class ServiceInterface (
                 changedUsers += e.userId
                 when (val r = submit(PendingOp("delete", id = id, userId = e.userId, dateMs = e.dateMs))) {
                     is SyncResult.Success -> deletedOk++
-                    is SyncResult.Failure -> failure = r
+                    is SyncResult.Failure ->
+                        if (r.errorType == SyncResult.ErrorType.INVALID_DATA) skipped++ else failure = r
                 }
             }
         }
@@ -355,7 +386,7 @@ abstract class ServiceInterface (
         return failure ?: SyncResult.Success(
             ReconcileStats(
                 inserted = insertedOk, updated = updatedOk, moved = movedOk,
-                deleted = deletedOk, unchanged = unchanged
+                deleted = deletedOk, unchanged = unchanged, skipped = skipped
             )
         )
     }
@@ -459,12 +490,14 @@ abstract class ServiceInterface (
         op: suspend (OpenScaleMeasurement) -> SyncResult<Unit>
     ): BulkResult {
         val succeeded = ArrayList<OpenScaleMeasurement>(measurements.size)
+        val skipped = ArrayList<OpenScaleMeasurement>()
         var failure: SyncResult.Failure? = null
         for (m in measurements) when (val r = op(m)) {
             is SyncResult.Success -> succeeded += m
-            is SyncResult.Failure -> failure = r
+            is SyncResult.Failure ->
+                if (r.errorType == SyncResult.ErrorType.INVALID_DATA) skipped += m else failure = r
         }
-        return BulkResult(succeeded, failure)
+        return BulkResult(succeeded, failure, skipped)
     }
 
     // Lifecycle: connect to the backend, then replay any backlog queued by a previous run.
@@ -480,8 +513,29 @@ abstract class ServiceInterface (
      */
     suspend fun submit(op: PendingOp): SyncResult<Unit> {
         val result = dispatch(op)
-        if (result is SyncResult.Failure) dirtyMark(op)
+        // INVALID_DATA is the one failure a replay cannot fix — queueing it would retry it on every
+        // init() forever. It stays out of the ledger too, so correcting the data in openScale is
+        // enough to get it synced on the next run.
+        if (result is SyncResult.Failure && result.errorType != SyncResult.ErrorType.INVALID_DATA) {
+            dirtyMark(op)
+        }
         return result
+    }
+
+    /**
+     * The backstop every single-item op passes through: a backend must answer with a [SyncResult],
+     * never with a throw. It used to be able to — Health Connect validates in its record
+     * constructors — and the exception then tore down whatever was driving the op: the foreground
+     * service, the queue drain, or a Compose click handler, which is a crash screen for the user
+     * (issues #34 and #35).
+     */
+    private suspend fun dispatch(op: PendingOp): SyncResult<Unit> = try {
+        dispatchOp(op)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.e(e, "%s.%s() threw", viewModel().getName(), op.type)
+        SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
     }
 
     /**
@@ -490,7 +544,7 @@ abstract class ServiceInterface (
      * the ledger is a MOVE — backends key records by (user, time), so we drop the stale record at the
      * old time and recreate at the new one. No retry-enqueue here; submit()/drainQueue() own that.
      */
-    private suspend fun dispatch(op: PendingOp): SyncResult<Unit> = when (op.type) {
+    private suspend fun dispatchOp(op: PendingOp): SyncResult<Unit> = when (op.type) {
         "insert" -> op.toMeasurement().let { m ->
             insert(m).also { if (it is SyncResult.Success) ledgerRecord(op.id, m) }
         }
@@ -692,6 +746,9 @@ abstract class ServiceInterface (
             }
             SyncResult.ErrorType.API_ERROR -> {
                 fullMessage = context.getString(R.string.sync_service_api_error)
+            }
+            SyncResult.ErrorType.INVALID_DATA -> {
+                fullMessage = context.getString(R.string.sync_service_invalid_data_error)
             }
             SyncResult.ErrorType.UNKNOWN_ERROR -> {
                 fullMessage = context.getString(R.string.sync_service_unknown_error)

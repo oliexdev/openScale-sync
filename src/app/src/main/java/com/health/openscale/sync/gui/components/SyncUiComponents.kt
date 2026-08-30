@@ -1,5 +1,6 @@
 package com.health.openscale.sync.gui.components
 
+import android.content.res.Resources
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,11 +39,28 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
+import com.health.openscale.sync.core.service.ReconcileStats
 import com.health.openscale.sync.core.service.ServiceInterface
 import kotlinx.coroutines.launch
 
 /** Transient success/info messages are shown via a Snackbar provided by MainActivity. */
 val LocalSnackbar = staticCompositionLocalOf<(String) -> Unit> { {} }
+
+/**
+ * The message a finished full sync reports, for the per-service button and the global one alike.
+ * It states what the backends acknowledged — never how much openScale holds — and appends how many
+ * measurements were left out because the backend cannot store them as they are (issues #34/#35).
+ * Skipped measurements are not an error: the rest of the run went through.
+ */
+fun fullSyncMessage(res: Resources, stats: ReconcileStats): String {
+    val sent = when {
+        stats.sent == 0 -> res.getString(R.string.sync_service_full_nothing_sent_info)
+        else -> res.getQuantityString(R.plurals.sync_service_full_sent_info, stats.sent, stats.sent)
+    }
+    if (stats.skipped == 0) return sent
+    return sent + " · " + res.getQuantityString(
+        R.plurals.sync_service_full_skipped_info, stats.skipped, stats.skipped)
+}
 
 /**
  * OutlinedTextField for secrets (API tokens / passwords) with an eye toggle, so the user
@@ -151,12 +169,10 @@ fun SyncActionButtons(
                     // null → failed; the error banner carries the reason. Otherwise report what was
                     // actually acknowledged by the backend, not how much openScale holds.
                     val stats = service.runFullSync()
-                    showMessage(when {
-                        stats == null -> activity.getString(R.string.sync_service_full_failed_info)
-                        stats.sent == 0 -> activity.getString(R.string.sync_service_full_nothing_sent_info)
-                        else -> activity.resources.getQuantityString(
-                            R.plurals.sync_service_full_sent_info, stats.sent, stats.sent)
-                    })
+                    showMessage(
+                        if (stats == null) activity.getString(R.string.sync_service_full_failed_info)
+                        else fullSyncMessage(activity.resources, stats)
+                    )
                     fullSyncing = false
                 }
             }

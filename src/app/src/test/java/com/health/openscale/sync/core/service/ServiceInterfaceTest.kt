@@ -26,6 +26,7 @@ import com.health.openscale.sync.core.model.SyncDirection
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -599,5 +600,101 @@ class ServiceInterfaceTest {
         backend.failAll = true
         repeat(505) { backend.submit(backend.pendingOp("insert", m(it, it.toLong()))) }
         assertEquals(500, backend.pendingRetryCount())
+    }
+
+    // --- Unsendable measurements (issues #34, #35) -----------------------------------------
+    // A backend can hold data it will never accept — Health Connect refuses a body fat above
+    // 100 % or a record timed in the future. Such a measurement must not fail the run, must not
+    // enter the retry queue (a replay cannot fix it) and must not enter the ledger (so correcting
+    // it in openScale, or simply the clock catching up, heals it on the next run).
+
+    @Test
+    fun reconcile_countsAnUnsendableMeasurementAsSkipped_notAsFailure() = runTest {
+        backend.batch = true
+        backend.invalidIds += 2
+
+        val r = backend.reconcile(listOf(m(1, 1000), m(2, 2000), m(3, 3000)))
+
+        assertTrue(r is SyncResult.Success)
+        val stats = (r as SyncResult.Success).data
+        assertEquals(2, stats.inserted)
+        assertEquals(1, stats.skipped)
+        assertEquals(2, stats.sent)              // skipped is NOT part of sent
+    }
+
+    @Test
+    fun reconcile_doesNotQueueOrLedgerAnUnsendableMeasurement() = runTest {
+        backend.batch = true
+        backend.invalidIds += 2
+        backend.reconcile(listOf(m(1, 1000), m(2, 2000)))
+
+        // Never retried: a replay would fail exactly the same way, every init() forever.
+        assertEquals(0, backend.pendingRetryCount())
+
+        // Never ledgered: once openScale holds a value the backend accepts, it goes out by itself.
+        backend.invalidIds.clear()
+        backend.wire.clear()
+        val r = backend.reconcile(listOf(m(1, 1000), m(2, 2000)))
+        assertEquals(1, (r as SyncResult.Success).data.inserted)
+        assertTrue(backend.wire.any { it.contains("insertAll") })
+    }
+
+    @Test
+    fun submit_doesNotQueueAnUnsendableMeasurement() = runTest {
+        backend.invalidIds += 7
+        val r = backend.submit(backend.pendingOp("insert", m(7, 1000)))
+
+        assertTrue(r is SyncResult.Failure)
+        assertEquals(SyncResult.ErrorType.INVALID_DATA, (r as SyncResult.Failure).errorType)
+        assertEquals(0, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun loopBulk_reportsUnsendableMeasurementsAsSkipped() = runTest {
+        // Same behaviour without a batching backend: the default per-item bulk loop.
+        backend.invalidIds += 2
+        val r = backend.reconcile(listOf(m(1, 1000), m(2, 2000)))
+
+        val stats = (r as SyncResult.Success).data
+        assertEquals(1, stats.inserted)
+        assertEquals(1, stats.skipped)
+        assertEquals(0, backend.pendingRetryCount())
+    }
+
+    // --- Nothing a backend does may escape as a throw --------------------------------------
+
+    @Test
+    fun submit_turnsAThrowingBackendIntoAFailure() = runTest {
+        backend.throwsOnWrite = true
+
+        val r = backend.submit(backend.pendingOp("insert", m(7, 1000)))
+
+        assertTrue(r is SyncResult.Failure)
+        assertEquals(SyncResult.ErrorType.UNKNOWN_ERROR, (r as SyncResult.Failure).errorType)
+        // A throw is a transport-level unknown, not bad data → it stays queued for a retry.
+        assertEquals(1, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun reconcile_turnsAThrowingBulkBackendIntoAFailure() = runTest {
+        backend.batch = true
+        backend.throwsOnWrite = true
+
+        val r = backend.reconcile(listOf(m(1, 1000), m(2, 2000)))
+
+        assertTrue("a throwing backend must not escape reconcile()", r is SyncResult.Failure)
+        assertEquals(SyncResult.ErrorType.UNKNOWN_ERROR, (r as SyncResult.Failure).errorType)
+        assertEquals(2, backend.pendingRetryCount())
+    }
+
+    @Test
+    fun runFullSync_turnsAThrowingBackendIntoAnErrorMessage() = runTest {
+        openScale.readFails = false
+        openScale.put(m(1, 1000))
+        backend.viewModel().setSelectedUserId(1)
+        backend.batch = true
+        backend.throwsOnWrite = true
+
+        assertNull("a crash must become a reported failure", backend.runFullSync())
     }
 }

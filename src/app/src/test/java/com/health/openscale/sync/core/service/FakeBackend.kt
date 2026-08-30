@@ -123,6 +123,16 @@ class FakeBackend(
     /** When true, every single-item op fails (overrides [scripted]) — handy for retry/cap tests. */
     var failAll = false
 
+    /**
+     * Measurement ids the backend refuses as unsendable, the way Health Connect rejects an
+     * out-of-range value or a record timed in the future. Reported as INVALID_DATA on the
+     * single-item path and as [BulkResult.skipped] in batch mode.
+     */
+    val invalidIds = mutableSetOf<Int>()
+
+    /** When true, the write ops throw instead of returning — the crash path of issues #34/#35. */
+    var throwsOnWrite = false
+
     /** When true, insertAll/updateAll become one batch call instead of the default per-item loop. */
     var batch = false
     /** In batch mode: which measurements "succeeded" (default: all). Lets tests model partial bulk. */
@@ -152,11 +162,18 @@ class FakeBackend(
     override suspend fun connect() { wire += "connect" }
 
     override suspend fun insert(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        wire += "insert#${measurement.id}@${measurement.date.time}"; return next()
+        wire += "insert#${measurement.id}@${measurement.date.time}"; return write(measurement)
     }
 
     override suspend fun update(measurement: OpenScaleMeasurement): SyncResult<Unit> {
-        wire += "update#${measurement.id}@${measurement.date.time}"; return next()
+        wire += "update#${measurement.id}@${measurement.date.time}"; return write(measurement)
+    }
+
+    private fun write(measurement: OpenScaleMeasurement): SyncResult<Unit> = when {
+        throwsOnWrite -> throw IllegalArgumentException("percentage must not be more than 100.0%")
+        measurement.id in invalidIds ->
+            SyncResult.Failure(SyncResult.ErrorType.INVALID_DATA, "scripted invalid measurement")
+        else -> next()
     }
 
     override suspend fun delete(userId: Int, date: Date): SyncResult<Unit> {
@@ -178,9 +195,12 @@ class FakeBackend(
 
     private fun bulk(label: String, ms: List<OpenScaleMeasurement>): BulkResult {
         wire += "$label(${ms.size})"
-        val ok = batchSucceed(ms)
-        val failure = if (ok.size == ms.size) null
+        if (throwsOnWrite) throw IllegalArgumentException("percentage must not be more than 100.0%")
+        // Like HealthConnectService.insertAll: the unsendable ones never reach the batch.
+        val (skipped, sendable) = ms.partition { it.id in invalidIds }
+        val ok = batchSucceed(sendable)
+        val failure = if (ok.size == sendable.size) null
             else SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "scripted bulk failure")
-        return BulkResult(ok, failure)
+        return BulkResult(ok, failure, skipped)
     }
 }

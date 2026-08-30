@@ -34,6 +34,7 @@ import androidx.health.connect.client.units.Percentage
 import androidx.health.connect.client.units.Power
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.service.SyncResult
+import timber.log.Timber
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Date
@@ -42,9 +43,52 @@ import kotlin.reflect.KClass
 
 class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : SyncInterface(){
     /**
+     * Why Health Connect would reject [measurement], or null when it is writable.
+     *
+     * This has to run BEFORE [buildRecords]: the androidx record constructors validate in their init
+     * block and THROW, and the platform rejects a record timed in the future the same way — so an
+     * out-of-range value never reached [writeRecords]' try/catch but tore down the whole caller
+     * instead (issues #34 and #35). Filtering here also keeps one bad measurement from failing the
+     * entire batch, since insertRecords() is all-or-nothing.
+     *
+     * These limits are Health Connect's, not openScale's: no other backend validates values
+     * client-side, so none of them get a check like this.
+     *
+     * The returned text is for the log, not the UI — the user only ever sees the skipped count.
+     */
+    @VisibleForTesting
+    internal fun rejectionReason(measurement: OpenScaleMeasurement, now: Instant = Instant.now()): String? {
+        // Platform-side check in InstantRecord: a record must not be timed in the future. Scales with
+        // their own (mis-set) clock produce these, so it is worth skipping rather than failing —
+        // once the wall clock catches up, the next reconcile sends it without any user action.
+        val instant = measurement.date.toInstant()
+        if (instant.isAfter(now)) return "date $instant is in the future"
+
+        // Mass records: >= 0 and <= 1000 kg. A percentage <= 100 with a weight <= 1000 kg can never
+        // exceed that for the derived water/lean/bone masses, so the percent limits below cover them.
+        outOfRange("weight", measurement.weight, MAX_WEIGHT_KG)?.let { return it }
+        outOfRange("body fat", measurement.body_fat, MAX_PERCENT)?.let { return it }
+        outOfRange("water", measurement.water, MAX_PERCENT)?.let { return it }
+        // Only built when > 0 (see buildRecords), so only those need checking.
+        if (measurement.lbm > 0f) outOfRange("lean body mass", measurement.lbm, MAX_PERCENT)?.let { return it }
+        if (measurement.bone > 0f) outOfRange("bone", measurement.bone, MAX_PERCENT)?.let { return it }
+
+        val bmr = measurement.values.firstOrNull { it.key == "BMR" }?.value ?: 0f
+        if (bmr > 0f) outOfRange("BMR", bmr, MAX_BMR_KCAL_PER_DAY)?.let { return it }
+
+        return null
+    }
+
+    /** Health Connect's requireNonNegative is `value >= 0`, which NaN fails too — mirror that here. */
+    private fun outOfRange(name: String, value: Float, max: Float): String? =
+        if (!value.isFinite() || value < 0f || value > max) "$name is $value" else null
+
+    /**
      * The record set one measurement maps to. Weight/water/fat are always written; lean body mass,
      * bone mass and BMR only when openScale actually has that value. Every record carries a stable
      * [buildMetadata] clientRecordId, which is what makes a re-insert an upsert (see [insert]).
+     *
+     * Only call this for a measurement [rejectionReason] cleared — the constructors throw otherwise.
      */
     private fun buildRecords(measurement: OpenScaleMeasurement): List<Record> {
         val records = mutableListOf<Record>()
@@ -88,8 +132,13 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
      * [buildMetadata] guarantees by stamping the current time). That is why [fullSync] can re-push
      * the whole history without duplicating it — and why [update] is the same operation.
      */
-    suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> =
-        writeRecords(buildRecords(measurement))
+    suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
+        rejectionReason(measurement)?.let { reason ->
+            Timber.w("Health Connect: skipping measurement id=%d (%s)", measurement.id, reason)
+            return SyncResult.Failure(SyncResult.ErrorType.INVALID_DATA, reason)
+        }
+        return writeRecords(buildRecords(measurement))
+    }
 
     /**
      * Delete the one measurement taken at [date] — meaning the records we wrote at exactly that
@@ -346,5 +395,13 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
          * whole seconds, far too narrow to reach a neighbouring weigh-in.
          */
         private const val INBOUND_GROUPING_TOLERANCE_MS = 2_000L
+
+        // The limits the androidx record constructors enforce (connect-client 1.1.0): WeightRecord
+        // and the mass records take 0..1000 kg, BodyFatRecord 0..100 %, BasalMetabolicRateRecord
+        // 0..10000 kcal/day. Exceeding any of them throws out of the constructor, hence
+        // [rejectionReason].
+        private const val MAX_WEIGHT_KG = 1_000f
+        private const val MAX_PERCENT = 100f
+        private const val MAX_BMR_KCAL_PER_DAY = 10_000f
     }
 }

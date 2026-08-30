@@ -40,9 +40,12 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
 import com.health.openscale.sync.core.service.SyncResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 import java.util.Date
 import kotlin.reflect.KClass
 
@@ -255,5 +258,84 @@ class HealthConnectSyncTest {
         // Weight is the anchor and openScale's mandatory value — a lone body-fat record is unusable.
         assertEquals(emptyList<HealthConnectSync.InboundReading>(),
             sync.groupInboundReadings(weights = emptyList(), fatsPct = listOf(10_000L to 21f)))
+    }
+
+    // --- Value validation (issues #34, #35) ---------------------------------------------
+    // The androidx record constructors validate in their init block and THROW, outside the
+    // try/catch in writeRecords() — which is exactly how a 409.5 % body fat and a measurement
+    // timed in the future crashed the app instead of failing the sync.
+
+    /** A measurement built from raw values, so a test can put anything in any field. */
+    private fun measurementOf(
+        date: Date = Date(1_000_000L),
+        weight: Float = 80f,
+        fat: Float = 20f,
+        water: Float = 55f,
+        extra: List<OpenScaleMeasurementValue> = emptyList()
+    ) = OpenScaleMeasurement.fromValues(
+        7, 1, date, "alice",
+        listOf(mv("WEIGHT", "kg", weight), mv("BODY_FAT", "%", fat), mv("WATER", "%", water)) + extra
+    )
+
+    @Test
+    fun rejectionReason_acceptsAnOrdinaryMeasurement() {
+        assertNull(sync.rejectionReason(measurement()))
+    }
+
+    @Test
+    fun rejectionReason_flagsABodyFatAbove100Percent() {
+        // Issue #34: 409.5 % = 4095/10, a 12-bit "no value" sentinel from the scale.
+        assertNotNull(sync.rejectionReason(measurementOf(fat = 409.5f)))
+    }
+
+    @Test
+    fun rejectionReason_flagsAMeasurementTimedInTheFuture() {
+        // Issue #35: Health Connect refuses a record timed after the wall clock.
+        val inFourHours = Date(System.currentTimeMillis() + 4 * 60 * 60 * 1000L)
+        assertNotNull(sync.rejectionReason(measurementOf(date = inFourHours)))
+        // ... and accepts it again once its time has come, without anyone touching the data.
+        assertNull(sync.rejectionReason(measurementOf(date = inFourHours),
+            now = inFourHours.toInstant().plusSeconds(1)))
+    }
+
+    @Test
+    fun rejectionReason_flagsAnImpossibleWeight() {
+        assertNotNull(sync.rejectionReason(measurementOf(weight = 1_001f)))
+        assertNotNull(sync.rejectionReason(measurementOf(weight = -1f)))
+        // requireNonNegative is `value >= 0`, which NaN fails too.
+        assertNotNull(sync.rejectionReason(measurementOf(weight = Float.NaN)))
+    }
+
+    @Test
+    fun rejectionReason_flagsAnOutOfRangeBmr() {
+        assertNotNull(sync.rejectionReason(
+            measurementOf(extra = listOf(mv("BMR", "kcal", 20_000f)))))
+    }
+
+    @Test
+    fun rejectionReason_ignoresOptionalValuesThatAreNotWritten() {
+        // Lean/bone records are only built when > 0, so a zero must not count as out of range.
+        assertNull(sync.rejectionReason(
+            measurementOf(extra = listOf(mv("LBM", "%", 0f), mv("BONE", "%", 0f)))))
+    }
+
+    @Test
+    fun insert_reportsAnInvalidMeasurementInsteadOfThrowing() = runTest {
+        val result = sync.insert(measurementOf(fat = 409.5f))
+
+        assertTrue(result is SyncResult.Failure)
+        assertEquals(SyncResult.ErrorType.INVALID_DATA,
+            (result as SyncResult.Failure).errorType)
+        assertTrue("nothing may be written for a rejected measurement", client.written.isEmpty())
+    }
+
+    @Test
+    fun fullSync_stillWritesTheValidMeasurements_whenOneIsInvalid() = runTest {
+        // The filtering happens in HealthConnectService.insertAll; what matters here is that a
+        // batch of valid measurements is unaffected by a neighbour having been dropped.
+        val result = sync.fullSync(listOf(measurement(id = 1), measurement(id = 2)))
+
+        assertTrue(result is SyncResult.Success)
+        assertFalse(client.written.isEmpty())
     }
 }
