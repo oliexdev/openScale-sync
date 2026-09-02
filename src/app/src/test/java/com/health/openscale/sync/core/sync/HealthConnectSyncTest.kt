@@ -116,7 +116,7 @@ class HealthConnectSyncTest {
     private val sync = HealthConnectSync(client)
 
     private fun mv(key: String, unit: String, value: Float) =
-        OpenScaleMeasurementValue(0, key, key, unit, false, value)
+        OpenScaleMeasurementValue("builtin.${key.lowercase()}", key, unit, false, value)
 
     /** Weight + fat + water are always present; the optional values are opt-in per test. */
     private fun measurement(id: Int = 7, extra: List<OpenScaleMeasurementValue> = emptyList()) =

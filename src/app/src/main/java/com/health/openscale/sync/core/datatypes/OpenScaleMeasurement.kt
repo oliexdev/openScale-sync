@@ -22,37 +22,50 @@ import org.json.JSONArray
 import java.util.Date
 
 /**
- * One generic measurement value (Phase 2). Self-describing so openScale-sync needs none of
- * openScale's enums: [key] is the MeasurementTypeKey enum name ("WEIGHT"/"WAIST"/"CUSTOM"…),
- * [unit] is a UCUM code ("kg"/"%"/"cm"/"kcal"/"/min"/"Ohm"/""), and [value] is already in the
- * canonical base unit of its dimension. Custom types share key=="CUSTOM" and are distinguished by
- * [typeId] → stable backend key "custom_<typeId>".
+ * One generic measurement value. Self-describing so openScale-sync needs none of
+ * openScale's internals.
+ *
+ * The type identifier is [identity] — a namespaced string openScale keeps stable across
+ * installations and renames: `builtin.weight` (predefined), `ble.segmental.fat.left_arm`
+ * (contributed by a scale), `user.schritte` (user-created). It is the only identifier
+ * since API v3; entries without one are dropped by [parseList]. [unit] is a UCUM code
+ * ("kg"/"%"/"cm"/"kcal"/"/min"/"Ohm"/""), and [value] is already in the canonical base
+ * unit of its dimension.
  */
 @Keep
 data class OpenScaleMeasurementValue(
-    val typeId: Int,
-    val key: String,
+    val identity: String,
     val name: String,
     val unit: String,
     val isDerived: Boolean,
     val value: Float? = null,
     val text: String? = null
 ) {
-    /** Stable backend field/key: predefined types use the enum name (lower-case), custom use the id. */
-    fun backendKey(): String =
-        if (key == "CUSTOM") "custom_$typeId" else key.lowercase()
+    /**
+     * Stable backend field/key (InfluxDB fields, MQTT history columns, webhook keys):
+     * strip the namespace, dots to underscores, lower-case — `builtin.weight` → `weight`,
+     * `ble.ecw` → `ecw`, `user.schritte` → `schritte`. One rule for every type, stable
+     * across installations; openScale guarantees the derived names cannot collide.
+     */
+    fun backendKey(): String = identity.substringAfter('.').replace('.', '_').lowercase()
+
+    /** True when this value is the given predefined quantity, e.g. isBuiltin("BODY_FAT"). */
+    fun isBuiltin(builtinKey: String): Boolean = identity == "builtin." + builtinKey.lowercase()
 
     companion object {
-        /** Parses openScale's generic, self-describing value JSON (the "values"/"values_json" payload). */
+        /** Parses openScale's generic, self-describing value JSON (the "values"/"values_json"
+         *  payload). Entries without an `identity` (pre-v3 peers) are skipped — the
+         *  MIN_API_VERSION gate makes such payloads a misconfiguration, not a supported input. */
         fun parseList(json: String?): List<OpenScaleMeasurementValue> {
             if (json.isNullOrBlank()) return emptyList()
             return runCatching {
                 val arr = JSONArray(json)
-                (0 until arr.length()).map { i ->
+                (0 until arr.length()).mapNotNull { i ->
                     val o = arr.getJSONObject(i)
+                    val identity = o.optString("identity", "")
+                    if (identity.isBlank()) return@mapNotNull null
                     OpenScaleMeasurementValue(
-                        typeId = o.optInt("typeId", 0),
-                        key = o.optString("key", ""),
+                        identity = identity,
                         name = o.optString("name", ""),
                         unit = o.optString("unit", ""),
                         isDerived = o.optBoolean("isDerived", false),
@@ -94,9 +107,9 @@ data class OpenScaleMeasurement(
             id: Int, userId: Int, date: Date, username: String,
             values: List<OpenScaleMeasurementValue>
         ): OpenScaleMeasurement {
-            val weight = values.firstOrNull { it.key == "WEIGHT" }?.value ?: 0f
+            val weight = values.firstOrNull { it.isBuiltin("WEIGHT") }?.value ?: 0f
             fun pct(key: String): Float {
-                val v = values.firstOrNull { it.key == key } ?: return 0f
+                val v = values.firstOrNull { it.isBuiltin(key) } ?: return 0f
                 val value = v.value ?: return 0f
                 return if (v.unit == "%") value else if (weight > 0f) value / weight * 100f else 0f
             }

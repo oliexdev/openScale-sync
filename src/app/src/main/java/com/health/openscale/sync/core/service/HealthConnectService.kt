@@ -198,7 +198,8 @@ class HealthConnectService(
         val present = values.filter { it.second != null }
         if (present.isEmpty()) return null
         return present.joinToString(prefix = "[", postfix = "]") { (key, value) ->
-            """{"key":"$key","value":$value}"""
+            // The MIN_API_VERSION gate guarantees a v3 peer, which matches by identity.
+            """{"identity":"builtin.${key.lowercase()}","value":$value}"""
         }
     }
 

@@ -246,7 +246,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
          * Builds the slim, retained-friendly columnar history payload `{fields, units, rows}` from a
          * user's measurements. Names/units live once in the header (not per row) → ~10× smaller than
          * the per-measurement form. Canonical columns come from [OpenScaleMeasurement.CANONICAL_METRICS]
-         * (the single source of truth); every other generic value (incl. `custom_<id>`) becomes an
+         * (the single source of truth); every other generic value (e.g. `waist`, `schritte`) becomes an
          * extra column keyed by its stable `backendKey()`. `rows` are date-sorted; a cell is `null`
          * when that metric is absent.
          */
@@ -268,7 +268,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             val units = canonical.associate { it.backendKey to it.unit } + extraUnits
 
             val rows = measurements.sortedBy { it.date.time }.map { m ->
-                // Old openScale (no generic values) → fall back to the convenience fields as-is;
+                // Empty value set (defensive) → fall back to the convenience fields as-is;
                 // otherwise emit a canonical value only when that metric is actually present.
                 val hasValues = m.values.isNotEmpty()
                 val present = m.values.mapTo(HashSet()) { it.backendKey() }

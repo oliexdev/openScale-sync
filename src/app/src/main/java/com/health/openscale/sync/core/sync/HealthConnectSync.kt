@@ -73,7 +73,7 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         if (measurement.lbm > 0f) outOfRange("lean body mass", measurement.lbm, MAX_PERCENT)?.let { return it }
         if (measurement.bone > 0f) outOfRange("bone", measurement.bone, MAX_PERCENT)?.let { return it }
 
-        val bmr = measurement.values.firstOrNull { it.key == "BMR" }?.value ?: 0f
+        val bmr = measurement.values.firstOrNull { it.isBuiltin("BMR") }?.value ?: 0f
         if (bmr > 0f) outOfRange("BMR", bmr, MAX_BMR_KCAL_PER_DAY)?.let { return it }
 
         return null
@@ -105,7 +105,7 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
             records.add(buildBoneMassRecord(measurement))
         }
 
-        val bmrValue = measurement.values.firstOrNull { it.key == "BMR" }?.value ?: 0f
+        val bmrValue = measurement.values.firstOrNull { it.isBuiltin("BMR") }?.value ?: 0f
         if (bmrValue > 0f) {
             records.add(buildBMRRecord(measurement))
         }
@@ -377,7 +377,7 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     private fun buildBMRRecord(measurement: OpenScaleMeasurement): BasalMetabolicRateRecord {
         val measurementInstant = measurement.date.toInstant()
         val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
-        val bmrKcalPerDay = (measurement.values.firstOrNull { it.key == "BMR" }?.value ?: 0f).toDouble()
+        val bmrKcalPerDay = (measurement.values.firstOrNull { it.isBuiltin("BMR") }?.value ?: 0f).toDouble()
         val bmrWatts = bmrKcalPerDay * (4184.0 / 86400.0) // kcal/day → Watts
 
         return BasalMetabolicRateRecord(

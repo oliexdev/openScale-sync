@@ -35,13 +35,13 @@ class InfluxDbSync(
         // userId is the stable per-user tag; username is added as a readable tag when present.
         val userTags = ",user_id=${m.userId}" +
             (if (m.username.isNotBlank()) ",user=${escapeTag(m.username)}" else "")
-        // Phase 2: emit the full generic value set as fields (all types incl. custom, keyed by
-        // backendKey()); fall back to the legacy fixed fields for an older openScale (no values).
+        // Emit the full generic value set as fields (all types incl. custom, keyed by
+        // backendKey()); an empty value set falls back to the fixed convenience fields.
         val numeric = m.values.filter { it.value != null }
         val fields = if (numeric.isNotEmpty()) {
             numeric.joinToString(",") { "${it.backendKey()}=${it.value}" }
         } else {
-            // Fallback (values should always be present); keep the core fixed fields.
+            // Defensive: values should always be present on a v3 peer; keep the core fixed fields.
             OpenScaleMeasurement.CANONICAL_METRICS.joinToString(",") { "${it.backendKey}=${it.accessor(m)}" }
         }
         return "$measurementName,source=openscale$userTags $fields ${m.date.time * 1_000_000L}"

@@ -340,9 +340,10 @@ class EndurainSync(
          * network client.
          */
         fun buildWeightRequest(m: OpenScaleMeasurement, dateOnly: SimpleDateFormat): WeightRequest {
-            val byKey = m.values.associateBy { it.key }
+            // backendKey derives from the identity — one rule for every type.
+            val byKey = m.values.associateBy { it.backendKey() }
 
-            // Fallback for a very old openScale that emits no generic values: use the convenience
+            // Defensive fallback for an empty value set: use the convenience
             // fields (fat/water are %; muscle/bone are % → convert to kg via weight).
             if (byKey.isEmpty()) {
                 val w = m.weight.takeIf { it > 0f }
@@ -357,7 +358,7 @@ class EndurainSync(
                 )
             }
 
-            val weight = byKey["WEIGHT"]?.value?.takeIf { it > 0f }
+            val weight = byKey["weight"]?.value?.takeIf { it > 0f }
 
             // A composition value as a percentage of body weight.
             fun asPercent(key: String): Float? {
@@ -384,11 +385,11 @@ class EndurainSync(
             return WeightRequest(
                 date = dateOnly.format(m.date),
                 weight = weight,
-                bodyFat = asPercent("BODY_FAT"),
-                bodyWater = asPercent("WATER"),
-                muscleMass = asKg("MUSCLE"),
-                boneMass = asKg("BONE"),
-                visceralFat = byKey["VISCERAL_FAT"]?.value  // unitless rating, passed through
+                bodyFat = asPercent("body_fat"),
+                bodyWater = asPercent("water"),
+                muscleMass = asKg("muscle"),
+                boneMass = asKg("bone"),
+                visceralFat = byKey["visceral_fat"]?.value  // unitless rating, passed through
             )
         }
     }

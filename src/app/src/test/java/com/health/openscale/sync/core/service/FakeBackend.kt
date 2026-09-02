@@ -82,7 +82,7 @@ class FakeDataProvider(
         val id = (measurements.keys.maxOrNull() ?: 0) + 1
         measurements[id] = OpenScaleMeasurement.fromValues(
             id, userId, Date(dateMs), "",
-            listOf(OpenScaleMeasurementValue(0, "WEIGHT", "Weight", "kg", false, weightKg))
+            listOf(OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, weightKg))
         )
         return true
     }

@@ -69,7 +69,7 @@ class ServiceInterfaceTest {
     private fun m(id: Int, timeMs: Long, weight: Float = 80f, user: Int = 1) =
         OpenScaleMeasurement.fromValues(
             id, user, Date(timeMs), "",
-            listOf(OpenScaleMeasurementValue(0, "WEIGHT", "Weight", "kg", false, weight))
+            listOf(OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, weight))
         )
 
     // --- Real-time dispatch ---------------------------------------------------------------

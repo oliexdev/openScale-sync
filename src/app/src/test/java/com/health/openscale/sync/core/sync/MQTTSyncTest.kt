@@ -29,8 +29,8 @@ import java.util.Date
  */
 class MQTTSyncTest {
 
-    private fun mv(key: String, unit: String, value: Float, typeId: Int = 0) =
-        OpenScaleMeasurementValue(typeId, key, key, unit, false, value)
+    private fun mv(key: String, unit: String, value: Float) =
+        OpenScaleMeasurementValue("builtin.${key.lowercase()}", key, unit, false, value)
 
     private fun measurement(id: Int, dateMs: Long, values: List<OpenScaleMeasurementValue>) =
         OpenScaleMeasurement.fromValues(id, 1, Date(dateMs), "alice", values)
@@ -42,19 +42,19 @@ class MQTTSyncTest {
             mv("WEIGHT", "kg", 82.0f),
             mv("BODY_FAT", "%", 18.0f),
             mv("WAIST", "cm", 80.0f),
-            mv("CUSTOM", "cm", 88.0f, typeId = 5)
+            OpenScaleMeasurementValue("user.brustumfang", "Brustumfang", "cm", false, 88.0f)
         ))
 
         val p = MQTTSync.buildHistoryPayload(listOf(m))
 
-        // date + canonical four (unified backend keys) + sorted extras (custom_5 < waist).
-        assertEquals(listOf("date", "weight", "body_fat", "water", "muscle", "custom_5", "waist"), p["fields"])
+        // date + canonical four (unified backend keys) + sorted extras (brustumfang < waist).
+        assertEquals(listOf("date", "weight", "body_fat", "water", "muscle", "brustumfang", "waist"), p["fields"])
 
         val units = p["units"] as Map<String, String>
         assertEquals("kg", units["weight"])
         assertEquals("%", units["body_fat"])
         assertEquals("cm", units["waist"])
-        assertEquals("cm", units["custom_5"])
+        assertEquals("cm", units["brustumfang"])
 
         val rows = p["rows"] as List<List<Any?>>
         assertEquals(1, rows.size)
@@ -64,7 +64,7 @@ class MQTTSyncTest {
         assertEquals(18.0f, row[2])      // fat (already %, taken as-is)
         assertEquals(null, row[3])       // water absent → null, not 0
         assertEquals(null, row[4])       // muscle absent → null
-        assertEquals(88.0f, row[5])      // custom_5
+        assertEquals(88.0f, row[5])      // brustumfang
         assertEquals(80.0f, row[6])      // waist
     }
 

@@ -41,8 +41,8 @@ class EndurainSyncTest {
     private val dateOnly = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
     private val gson = Gson()
 
-    private fun mv(key: String, unit: String, value: Float, typeId: Int = 0) =
-        OpenScaleMeasurementValue(typeId, key, key, unit, false, value)
+    private fun mv(key: String, unit: String, value: Float) =
+        OpenScaleMeasurementValue("builtin.${key.lowercase()}", key, unit, false, value)
 
     private fun measurement(values: List<OpenScaleMeasurementValue>) =
         OpenScaleMeasurement.fromValues(1, 1, Date(0L), "alice", values)

@@ -48,8 +48,9 @@ open class OpenScaleDataProvider(
 
     companion object {
         /** Minimum openScale ContentProvider API version this sync app requires
-         *  (v2 = sync Intents carry userId on delete/clear). */
-        const val MIN_API_VERSION = 2
+         *  (v3 = generic values identify types by the namespaced, cross-installation
+         *  `identity`; the legacy key/typeId pair is no longer emitted by openScale). */
+        const val MIN_API_VERSION = 3
     }
 
     open fun getUsers(): List<OpenScaleUser> {

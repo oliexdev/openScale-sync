@@ -42,31 +42,23 @@ class DataParsingTest {
     @Test fun parseList_garbage_isEmpty() = assertTrue(OpenScaleMeasurementValue.parseList("not json at all").isEmpty())
     @Test fun parseList_emptyArray_isEmpty() = assertTrue(OpenScaleMeasurementValue.parseList("[]").isEmpty())
     @Test fun parseList_objectNotArray_isEmpty() = assertTrue(OpenScaleMeasurementValue.parseList("{\"a\":1}").isEmpty())
-    @Test fun parseList_truncatedJson_isEmpty() = assertTrue(OpenScaleMeasurementValue.parseList("[{\"key\":\"WEIGHT\"").isEmpty())
+    @Test fun parseList_truncatedJson_isEmpty() = assertTrue(OpenScaleMeasurementValue.parseList("[{\"identity\":\"builtin.weight\"").isEmpty())
 
     @Test
     fun parseList_validValue_mapsAllFields() {
         val v = OpenScaleMeasurementValue.parseList(
-            """[{"typeId":0,"key":"WEIGHT","name":"Weight","unit":"kg","isDerived":false,"value":80.5}]"""
+            """[{"identity":"builtin.weight","name":"Weight","unit":"kg","isDerived":false,"value":80.5}]"""
         ).single()
-        assertEquals("WEIGHT", v.key)
+        assertEquals("builtin.weight", v.identity)
         assertEquals("kg", v.unit)
         assertEquals(80.5f, v.value!!, 0.0001f)
         assertEquals("weight", v.backendKey())
     }
 
     @Test
-    fun parseList_customType_usesStableBackendKey() {
-        val v = OpenScaleMeasurementValue.parseList(
-            """[{"typeId":8,"key":"CUSTOM","name":"Visceral","unit":"","isDerived":false,"value":7.0}]"""
-        ).single()
-        assertEquals("custom_8", v.backendKey())
-    }
-
-    @Test
     fun parseList_textOnlyValue_hasNoNumber() {
         val v = OpenScaleMeasurementValue.parseList(
-            """[{"typeId":3,"key":"COMMENT","name":"Note","unit":"","isDerived":false,"text":"hi"}]"""
+            """[{"identity":"builtin.comment","name":"Note","unit":"","isDerived":false,"text":"hi"}]"""
         ).single()
         assertNull(v.value)
         assertEquals("hi", v.text)
@@ -74,9 +66,8 @@ class DataParsingTest {
 
     @Test
     fun parseList_missingFields_useDefaults() {
-        // only "key" present — everything else falls back, no crash
-        val v = OpenScaleMeasurementValue.parseList("""[{"key":"WAIST"}]""").single()
-        assertEquals("WAIST", v.key)
+        // only "identity" present — everything else falls back, no crash
+        val v = OpenScaleMeasurementValue.parseList("""[{"identity":"builtin.waist"}]""").single()
         assertEquals("", v.unit)
         assertNull(v.value)
         assertEquals("waist", v.backendKey())
@@ -96,8 +87,8 @@ class DataParsingTest {
         val m = OpenScaleMeasurement.fromValues(
             1, 1, Date(0), "",
             listOf(
-                OpenScaleMeasurementValue(0, "WEIGHT", "Weight", "kg", false, 80f),
-                OpenScaleMeasurementValue(0, "BODY_FAT", "Fat", "%", false, 25f),
+                OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, 80f),
+                OpenScaleMeasurementValue("builtin.body_fat", "Fat", "%", false, 25f),
             )
         )
         assertEquals(80f, m.weight, 0f)
@@ -110,8 +101,8 @@ class DataParsingTest {
         val m = OpenScaleMeasurement.fromValues(
             1, 1, Date(0), "",
             listOf(
-                OpenScaleMeasurementValue(0, "WEIGHT", "Weight", "kg", false, 80f),
-                OpenScaleMeasurementValue(0, "BODY_FAT", "Fat", "kg", false, 8f),
+                OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, 80f),
+                OpenScaleMeasurementValue("builtin.body_fat", "Fat", "kg", false, 8f),
             )
         )
         assertEquals(10f, m.body_fat, 0.0001f)
@@ -121,9 +112,51 @@ class DataParsingTest {
     fun fromValues_absoluteUnit_withoutWeight_doesNotDivideByZero() {
         val m = OpenScaleMeasurement.fromValues(
             1, 1, Date(0), "",
-            listOf(OpenScaleMeasurementValue(0, "BODY_FAT", "Fat", "kg", false, 8f))
+            listOf(OpenScaleMeasurementValue("builtin.body_fat", "Fat", "kg", false, 8f))
         )
         assertEquals(0f, m.weight, 0f)
         assertEquals(0f, m.body_fat, 0f)   // weight 0 → guarded, no NaN/Infinity
+    }
+
+    // --- identity (openScale API v3) -------------------------------------------
+
+    @Test
+    fun `identity is parsed and drives the backend key`() {
+        val json = """[
+            {"identity":"builtin.weight","unit":"kg","value":72.5},
+            {"identity":"ble.ecw","name":"Extracellular water","unit":"%","value":24.6},
+            {"identity":"user.schritte","name":"Schritte","unit":"","value":8000.0}
+        ]"""
+
+        val parsed = OpenScaleMeasurementValue.parseList(json)
+
+        // One rule for every type: strip the namespace, lower-case. builtin.weight keeps the
+        // field name it always had; ble.ecw gets back the "ecw" it had before leaving the
+        // predefined set; user.schritte is stable across installations, unlike custom_42.
+        assertEquals(listOf("weight", "ecw", "schritte"), parsed.map { it.backendKey() })
+    }
+
+    @Test
+    fun `entries without identity are dropped - pre-v3 payloads are not a supported input`() {
+        val json = """[
+            {"typeId":1,"key":"WEIGHT","unit":"kg","value":72.5},
+            {"identity":"builtin.waist","unit":"cm","value":80.0}
+        ]"""
+
+        val parsed = OpenScaleMeasurementValue.parseList(json)
+
+        assertEquals(listOf("waist"), parsed.map { it.backendKey() })
+    }
+
+    @Test
+    fun `unknown extra fields like inputType are ignored gracefully`() {
+        // A realistic payload from a current openScale, including fields this app never reads.
+        val json = """[{"identity":"builtin.body_fat",""" +
+            """"name":"BODY_FAT","unit":"%","inputType":"FLOAT","isDerived":false,"value":21.3}]"""
+
+        val parsed = OpenScaleMeasurementValue.parseList(json)
+
+        assertEquals("body_fat", parsed.single().backendKey())
+        assertEquals(21.3f, parsed.single().value!!, 1e-4f)
     }
 }
