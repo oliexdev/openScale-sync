@@ -138,8 +138,7 @@
     <string name="endurain_not_logged_in">Not logged in — please log in</string>
     <string name="endurain_session_expired">Session expired — please log in again</string>
 
-    <string name="open_scale_version_unsupported_banner">This openScale-sync version requires a newer openScale. Please update openScale to continue synchronizing.</string>
-    <string name="open_scale_version_unsupported_banner_versioned">openScale %1$s on this device is too old to synchronize. Please update openScale to the latest version.</string>
+    <string name="open_scale_version_unsupported_banner">This openScale-sync version requires openScale %1$s or newer. Please update openScale to continue synchronizing.</string>
     <string name="sync_users_title">Synced users</string>
     <string name="sync_users_all">All openScale users</string>
     <string name="sync_users_all_desc">Each user is kept separate.</string>
@@ -177,7 +176,7 @@
     <string name="rationale_write_title">Data written to Health Connect</string>
     <string name="rationale_write_text">Weight, body fat, body water mass, bone mass, lean body mass and basal metabolic rate from your openScale measurements are written to Health Connect, so that other health apps can use them. This is what the app is for.</string>
     <string name="rationale_read_title">Data read from Health Connect</string>
-    <string name="rationale_read_text">Only when you set the Health Connect sync direction to Import or Both: weight, body fat, body water mass, bone mass and lean body mass written by other apps are read and added to your openScale history, so a weigh-in taken elsewhere is not lost. The default setting is Export, which reads nothing at all.</string>
+    <string name="rationale_read_text">Weight, body fat, body water mass, bone mass and lean body mass written by other apps are read and added to your openScale history, so a weigh-in taken elsewhere is not lost. This happens while the Health Connect sync direction is Both or Import; setting it to Export reads nothing at all.</string>
     <string name="rationale_privacy_title">Your data</string>
     <string name="rationale_privacy_text">Your health data stays on your device and is only sent to the services you enable and configure yourself. The app has no ads, no analytics and no user accounts.</string>
     <string name="rationale_privacy_link">Read the full privacy policy</string>
@@ -187,7 +186,7 @@
          and to take an affirmative action before the system prompt appears. -->
     <string name="disclosure_title">Before you continue</string>
     <string name="disclosure_write">openScale sync will write the measurements recorded in openScale to Health Connect — weight, body fat, body water mass, bone mass, lean body mass and basal metabolic rate — so that other health apps on this device can use them.</string>
-    <string name="disclosure_read">Because you set the sync direction to import, openScale sync will also read weight, body fat, body water mass, bone mass and lean body mass that other apps have written to Health Connect, and add those weigh-ins to your openScale history so your body-composition log stays complete.</string>
+    <string name="disclosure_read">Because the sync direction includes import, openScale sync will also read weight, body fat, body water mass, bone mass and lean body mass that other apps have written to Health Connect, and add those weigh-ins to your openScale history so your body-composition log stays complete.</string>
     <string name="disclosure_how">This data is used only for that synchronization. It stays on your device except for the services you enable yourself, and is never used for advertising, sold or shared with third parties.</string>
     <string name="disclosure_accept">Accept</string>
     <string name="disclosure_decline">Not now</string>

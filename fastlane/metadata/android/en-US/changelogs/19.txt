@@ -1,0 +1,4 @@
+- Health Connect no longer crashes on measurements it cannot store: out-of-range values and future dates are skipped.
+- An unexpected error marks the sync as failed instead of closing the app.
+- Measurement types are matched by openScale's stable identity, so values keep their name on every service.
+- Requires openScale 3.1.3 or newer; older versions are blocked with a notice.

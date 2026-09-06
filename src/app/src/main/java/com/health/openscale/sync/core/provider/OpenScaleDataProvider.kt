@@ -51,6 +51,11 @@ open class OpenScaleDataProvider(
          *  (v3 = generic values identify types by the namespaced, cross-installation
          *  `identity`; the legacy key/typeId pair is no longer emitted by openScale). */
         const val MIN_API_VERSION = 3
+
+        /** The openScale release that first serves [MIN_API_VERSION]. Only ever shown to the user
+         *  ("update to 3.1.3 or newer") — the gate itself compares API versions, never this string.
+         *  Bump it together with [MIN_API_VERSION] so the banner keeps naming a real release. */
+        const val MIN_OPENSCALE_VERSION_NAME = "3.1.3"
     }
 
     open fun getUsers(): List<OpenScaleUser> {

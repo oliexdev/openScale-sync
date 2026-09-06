@@ -432,10 +432,8 @@ class MainActivity : AppCompatActivity() {
     @Composable
     fun VersionWarningBanner() {
         val unsupported = remember { mutableStateOf(false) }
-        val installedVersion = remember { mutableStateOf<String?>(null) }
         LaunchedEffect(Unit) {
             unsupported.value = runCatching { openScaleDataService.isVersionTooOld() }.getOrDefault(false)
-            installedVersion.value = runCatching { openScaleDataService.getInstalledVersionName() }.getOrNull()
         }
         if (unsupported.value) {
             Card(
@@ -455,9 +453,10 @@ class MainActivity : AppCompatActivity() {
                     )
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        installedVersion.value?.let {
-                            stringResource(R.string.open_scale_version_unsupported_banner_versioned, it)
-                        } ?: stringResource(R.string.open_scale_version_unsupported_banner),
+                        stringResource(
+                            R.string.open_scale_version_unsupported_banner,
+                            OpenScaleDataProvider.MIN_OPENSCALE_VERSION_NAME
+                        ),
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }

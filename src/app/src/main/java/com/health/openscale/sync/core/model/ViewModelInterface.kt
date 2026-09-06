@@ -100,10 +100,9 @@ abstract class ViewModelInterface(private val sharedPreferences: SharedPreferenc
     }
 
     /**
-     * What [syncDirection] is before the user has touched the selector. BOTH for most backends —
-     * a two-way backend should be two-way out of the box. Backends whose inbound half costs the
-     * user an extra permission grant override this to EXPORT, so that permission follows a
-     * deliberate choice rather than a default (see HealthConnectViewModel).
+     * What [syncDirection] is before the user has touched the selector: BOTH — a two-way backend
+     * should be two-way out of the box. A backend whose inbound half is costly or surprising can
+     * override this to EXPORT so its read side follows a deliberate choice; none does today.
      */
     protected open val defaultSyncDirection: SyncDirection get() = SyncDirection.BOTH
 

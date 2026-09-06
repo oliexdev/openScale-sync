@@ -139,8 +139,7 @@
     <string name="endurain_not_logged_in">Nicht angemeldet — bitte anmelden</string>
     <string name="endurain_session_expired">Sitzung abgelaufen — bitte erneut anmelden</string>
 
-    <string name="open_scale_version_unsupported_banner">Diese openScale-sync-Version benötigt ein neueres openScale. Bitte aktualisiere openScale, um weiter zu synchronisieren.</string>
-    <string name="open_scale_version_unsupported_banner_versioned">openScale %1$s auf diesem Gerät ist zu alt zum Synchronisieren. Bitte aktualisiere openScale auf die neueste Version.</string>
+    <string name="open_scale_version_unsupported_banner">Diese openScale-sync-Version benötigt openScale %1$s oder neuer. Bitte aktualisiere openScale, um weiter zu synchronisieren.</string>
     <string name="sync_users_title">Synchronisierte Benutzer</string>
     <string name="sync_users_all">Alle openScale-Benutzer</string>
     <string name="sync_users_all_desc">Jeder Benutzer wird getrennt gehalten.</string>
@@ -179,14 +178,14 @@
     <string name="rationale_write_title">Daten, die nach Health Connect geschrieben werden</string>
     <string name="rationale_write_text">Gewicht, Körperfett, Körperwasser, Knochenmasse, Magermasse und Grundumsatz aus deinen openScale-Messungen werden nach Health Connect geschrieben, damit andere Gesundheits-Apps sie nutzen können. Dafür ist die App da.</string>
     <string name="rationale_read_title">Daten, die aus Health Connect gelesen werden</string>
-    <string name="rationale_read_text">Nur wenn du die Health-Connect-Synchronisationsrichtung auf Import oder Beide stellst: Gewicht, Körperfett, Körperwasser, Knochenmasse und Magermasse, die andere Apps geschrieben haben, werden gelesen und deinem openScale-Verlauf hinzugefügt, damit eine anderswo erfasste Messung nicht verloren geht. Voreingestellt ist Export — dabei wird gar nichts gelesen.</string>
+    <string name="rationale_read_text">Gewicht, Körperfett, Körperwasser, Knochenmasse und Magermasse, die andere Apps geschrieben haben, werden gelesen und deinem openScale-Verlauf hinzugefügt, damit eine anderswo erfasste Messung nicht verloren geht. Das geschieht, solange die Health-Connect-Synchronisationsrichtung auf Beide oder Import steht; auf Export wird gar nichts gelesen.</string>
     <string name="rationale_privacy_title">Deine Daten</string>
     <string name="rationale_privacy_text">Deine Gesundheitsdaten bleiben auf deinem Gerät und werden nur an die Dienste gesendet, die du selbst aktivierst und einrichtest. Die App hat keine Werbung, keine Analyse und keine Benutzerkonten.</string>
     <string name="rationale_privacy_link">Vollständige Datenschutzerklärung lesen</string>
 
     <string name="disclosure_title">Bevor du fortfährst</string>
     <string name="disclosure_write">openScale sync schreibt die in openScale erfassten Messwerte nach Health Connect — Gewicht, Körperfett, Körperwasser, Knochenmasse, Magermasse und Grundumsatz —, damit andere Gesundheits-Apps auf diesem Gerät sie nutzen können.</string>
-    <string name="disclosure_read">Da du die Synchronisationsrichtung auf Import gestellt hast, liest openScale sync außerdem Gewicht, Körperfett, Körperwasser, Knochenmasse und Magermasse, die andere Apps nach Health Connect geschrieben haben, und fügt diese Messungen deinem openScale-Verlauf hinzu, damit dein Verlauf vollständig bleibt.</string>
+    <string name="disclosure_read">Da die Synchronisationsrichtung Import einschließt, liest openScale sync außerdem Gewicht, Körperfett, Körperwasser, Knochenmasse und Magermasse, die andere Apps nach Health Connect geschrieben haben, und fügt diese Messungen deinem openScale-Verlauf hinzu, damit dein Verlauf vollständig bleibt.</string>
     <string name="disclosure_how">Diese Daten werden ausschließlich für diese Synchronisation verwendet. Sie bleiben auf deinem Gerät, abgesehen von den Diensten, die du selbst aktivierst, und werden nie für Werbung genutzt, verkauft oder an Dritte weitergegeben.</string>
     <string name="disclosure_accept">Zustimmen</string>
     <string name="disclosure_decline">Jetzt nicht</string>
