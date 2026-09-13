@@ -627,8 +627,14 @@ class MainActivity : AppCompatActivity() {
                     running = true
                     lifecycleScope.launch {
                         // Multi-user backends sync all users; single-user backends only their selected user.
-                        val allUsers = openScaleDataService.getUsers()
-                        val allMeasurements = allUsers.flatMap { openScaleDataService.getMeasurements(it) }
+                        val allMeasurements = runCatching {
+                            openScaleDataService.getUsers().flatMap { openScaleDataService.getMeasurements(it) }
+                        }.getOrElse { e ->
+                            Timber.e(e, "global sync: cannot read openScale -> aborting")
+                            running = false
+                            showMessage(getString(R.string.sync_service_openscale_unavailable))
+                            return@launch
+                        }
                         var stats = ReconcileStats()
                         var anyFailure = false
                         for (service in syncServiceList.filter { it.viewModel().syncEnabled.value }) {

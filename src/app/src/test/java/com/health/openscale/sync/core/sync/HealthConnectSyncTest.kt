@@ -308,9 +308,6 @@ class HealthConnectSyncTest {
 
     @Test
     fun rejectionReason_flagsAZeroWeight() {
-        // 0 kg is never a real weigh-in: it's what OpenScaleMeasurement.fromValues() defaults to
-        // when a row's value set has no WEIGHT entry. Writing it as-is put a phantom 0 kg
-        // measurement into Health Connect instead of skipping the malformed row.
         assertNotNull(sync.rejectionReason(measurementOf(weight = 0f)))
     }
 

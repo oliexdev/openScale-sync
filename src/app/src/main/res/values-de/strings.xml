@@ -62,6 +62,7 @@
     </plurals>
     <string name="sync_service_full_nothing_sent_info">Nichts zu senden</string>
     <string name="sync_service_full_failed_info">Synchronisation fehlgeschlagen — siehe Fehlermeldung</string>
+    <string name="sync_service_openscale_unavailable">openScale konnte nicht gelesen werden — Synchronisation abgebrochen</string>
     <string name="sync_service_measurement_inserted_info">%1$f kg (Datum: %2$s) Messung eingefügt</string>
     <string name="sync_service_measurement_deleted_info">Messung für %1$s gelöscht</string>
     <string name="sync_service_measurement_cleared_info">Alle Messungen gelöscht</string>
