@@ -37,25 +37,35 @@
 # ##################################################################################
 # Netty (pulled in by the HiveMQ MQTT client) — genuinely reflection-bound fields.
 # ##################################################################################
-# Netty resolves its own members by NAME at class-init time and throws when the name
-# is gone. Fields: AtomicIntegerFieldUpdater.newUpdater(X.class, "refCnt") plus helpers
-# R8 cannot see through (ReferenceCountUpdater.getUnsafeOffset, and the shaded JCTools
-# UnsafeAccess.fieldOffset(clz, "producerIndex")). Methods: ResourceLeakDetector
-# .addExclusions(AbstractByteBufAllocator.class, "toLeakAwareBuffer") and the same in
-# ReferenceCountUtil / AdvancedLeakAwareByteBuf -- verified: obfuscating them crashes the
-# app on the first MQTT connect with
+# These two are HiveMQ's OFFICIAL Android rules, verbatim from
+# https://hivemq.github.io/hivemq-mqtt-client/docs/installation/android/ — keep them in
+# sync with that page rather than hand-tuning them. The MQTT client does not ship them as
+# consumer rules (its own hivemq-mqtt-client.pro carries only a -dontwarn), so they have to
+# live here. Why they are needed: Netty resolves its own members by NAME at class-init time
+# and throws when the name is gone — fields via AtomicIntegerFieldUpdater.newUpdater(
+# X.class, "refCnt") and helpers R8 cannot see through (ReferenceCountUpdater
+# .getUnsafeOffset, shaded JCTools UnsafeAccess.fieldOffset(clz, "producerIndex")), methods
+# via ResourceLeakDetector.addExclusions(AbstractByteBufAllocator.class,
+# "toLeakAwareBuffer"). Dropping the method half was verified to crash the app on the first
+# MQTT connect:
 #   ExceptionInInitializerError -> IllegalArgumentException: Can't find
 #   '[toLeakAwareBuffer]' in io.netty.buffer.AbstractByteBufAllocator
-# So member NAMES are pinned for io.netty. Netty's CLASS names are still obfuscated and
-# unused Netty code is still shrunk away; HiveMQ needs nothing (no name-based reflection
-# anywhere in the artifact) and is obfuscated in full.
+# Only member NAMES are pinned: Netty's CLASS names are still obfuscated (766/767) and
+# unused Netty code is still shrunk away. HiveMQ itself needs nothing — no name-based
+# reflection anywhere in the artifact — and is obfuscated in full.
 -keepclassmembernames class io.netty.** { *; }
--keepclassmembernames class org.jctools.** { *; }
+-keepclassmembers class org.jctools.** { *; }
 
-# HiveMQ itself needs no keeps: it is Dagger-generated (compile-time) and hands Netty
-# a `NioSocketChannel::new` method reference rather than a reflective channel class.
-# Retrofit / OkHttp / Okio / Gson ship their own consumer rules — do not duplicate them
-# here (Gson's rules already cover @SerializedName models and TypeToken subclasses).
+# Everything else on the classpath ships its own consumer rules, which AGP merges in
+# automatically — do NOT copy them in here (verified against
+# build/outputs/mapping/<buildType>/configuration.txt, 76 merged sections): Retrofit
+# (META-INF/proguard/retrofit2.pro), OkHttp (and Okio, covered by OkHttp's rules under R8),
+# Gson (bundled since 2.11 — covers @SerializedName models and TypeToken subclasses),
+# Health Connect connect-client (bundled since 1.1.0-alpha05 — proto GeneratedMessageLite
+# fields, ErrorCode, Permission), WorkManager (keeps ListenableWorker subclass names + ctor,
+# so PeriodicSyncWorker survives an app update), Timber, RxJava2, Compose/AndroidX.
+# CustomActivityOnCrash documents: "No need to add special rules, the library should work
+# even with obfuscation".
 
 # --- R8 missing-class suppression for Netty's optional deps (via HiveMQ MQTT client).
 # These backends (brotli, zstd, protobuf, log4j/slf4j, jboss-marshalling, native epoll/tcnative,
