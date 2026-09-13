@@ -97,6 +97,10 @@ data class OpenScaleMeasurement(
     val values: List<OpenScaleMeasurementValue> = emptyList()
 ) {
 
+    /** [fromValues] defaults a missing `builtin.weight` to `0f`, and every backend anchors its
+     *  payload on the weight — so a row without one is skipped, not exported as a phantom zero. */
+    fun hasValidWeight(): Boolean = weight.isFinite() && weight > 0f
+
     companion object {
         /**
          * Builds a measurement from the generic value set, deriving the convenience weight/fat/

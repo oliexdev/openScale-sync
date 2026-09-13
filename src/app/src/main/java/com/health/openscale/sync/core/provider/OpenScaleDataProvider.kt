@@ -30,6 +30,14 @@ import timber.log.Timber
 import java.util.Date
 
 /**
+ * The resolver returned no cursor: openScale is being updated, force-stopped, or the READ_WRITE_DATA
+ * grant is gone. Thrown rather than returning nothing, because a null cursor iterates zero times and
+ * [com.health.openscale.sync.core.service.ServiceInterface.reconcile] reads an empty list as
+ * "everything was deleted". Callers decide whether to carry on empty or abort.
+ */
+class OpenScaleUnavailableException(message: String) : IllegalStateException(message)
+
+/**
  * Reads openScale's ContentProvider. Normally it follows the openScale variant the user selected;
  * [packageOverride] points it at a specific one instead, which is what lets the variant picker look
  * into a candidate before switching to it.
@@ -72,12 +80,12 @@ open class OpenScaleDataProvider(
             null,
             null,
             null
-        )
+        ) ?: throw OpenScaleUnavailableException("openScale provider '$authority' returned no cursor for users")
 
         val users = arrayListOf<OpenScaleUser>()
 
         records.use { record ->
-            while (record?.moveToNext() == true) {
+            while (record.moveToNext()) {
                 var id: Int? = null
                 var username: String? = null
 
@@ -175,12 +183,14 @@ open class OpenScaleDataProvider(
             null,
             null,
             null
+        ) ?: throw OpenScaleUnavailableException(
+            "openScale provider '$authority' returned no cursor for user ${openScaleUser.id}"
         )
 
         val measurements = arrayListOf<OpenScaleMeasurement>()
 
         records.use { record ->
-            while (record?.moveToNext() == true) {
+            while (record.moveToNext()) {
                 var id: Int? = null
                 var dateTime: Date? = null
                 var valuesJson: String? = null

@@ -60,10 +60,11 @@ class PeriodicSyncWorker(
         }
 
         val services = BackendRegistry.create(applicationContext, prefs)
-        val allUsers = runCatching { dataProvider.getUsers() }.getOrElse { emptyList() }
-        val allMeasurements = allUsers.flatMap {
-            runCatching { dataProvider.getMeasurements(it) }.getOrElse { emptyList() }
-        }
+        // Never emptyList(): reconcile() deletes what is missing from the list it is given, so a
+        // failed read would wipe the destination's history instead of skipping one cycle.
+        val allUsers = runCatching { dataProvider.getUsers() }.getOrElse { return Result.retry() }
+        val allMeasurements = runCatching { allUsers.flatMap { dataProvider.getMeasurements(it) } }
+            .getOrElse { return Result.retry() }
 
         var anyFailure = false
         for (service in services) {

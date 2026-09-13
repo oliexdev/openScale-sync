@@ -61,6 +61,7 @@
     </plurals>
     <string name="sync_service_full_nothing_sent_info">Nothing to send</string>
     <string name="sync_service_full_failed_info">Sync failed — see the error message</string>
+    <string name="sync_service_openscale_unavailable">openScale could not be read — sync aborted</string>
     <string name="sync_service_measurement_inserted_info">%1$f kg (date: %2$s) measurement inserted</string>
     <string name="sync_service_measurement_deleted_info">%1$s measurement deleted</string>
     <string name="sync_service_measurement_cleared_info">all measurements cleared</string>

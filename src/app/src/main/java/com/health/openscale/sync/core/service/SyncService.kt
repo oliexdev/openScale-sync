@@ -289,7 +289,12 @@ class SyncService : Service() {
                             continue
                         }
                         launch {
-                            val allMeasurements = dataProvider.getUsers().flatMap { dataProvider.getMeasurements(it) }
+                            val allMeasurements = runCatching {
+                                dataProvider.getUsers().flatMap { dataProvider.getMeasurements(it) }
+                            }.getOrElse { e ->
+                                Timber.e(e, "%s: cannot read openScale -> skipping reconcile", name)
+                                return@launch
+                            }
                             val measurements = if (syncService.isMultiUser) allMeasurements
                                 else allMeasurements.filter { it.userId == vm.selectedUserId.value }
                             val res = runCatching { syncService.reconcile(measurements) }

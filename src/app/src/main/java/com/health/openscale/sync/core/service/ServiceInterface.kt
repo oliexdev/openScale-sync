@@ -193,9 +193,17 @@ abstract class ServiceInterface (
      */
     suspend fun runFullSync() : ReconcileStats? {
         // Multi-user backends sync all users; single-user backends only their selected user.
-        val allUsers = openScaleDataService.getUsers()
-        val users = if (isMultiUser) allUsers else allUsers.filter { it.id == viewModel().selectedUserId.value }
-        val measurements = users.flatMap { openScaleDataService.getMeasurements(it) }
+        val measurements = try {
+            val allUsers = openScaleDataService.getUsers()
+            val users = if (isMultiUser) allUsers else allUsers.filter { it.id == viewModel().selectedUserId.value }
+            users.flatMap { openScaleDataService.getMeasurements(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.e(e, "%s: cannot read openScale -> aborting full sync", viewModel().getName())
+            setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.API_ERROR, null, e))
+            return null
+        }
         // Manual full sync → force, see [reconcile]. Nothing a backend does may reach the click
         // handler as a throw — that is a crash screen, not a sync error (issues #34/#35).
         val result = try {
@@ -300,7 +308,16 @@ abstract class ServiceInterface (
         val updates = ArrayList<OpenScaleMeasurement>()
         val moves = ArrayList<Pair<OpenScaleMeasurement, LedgerEntry>>()
         var unchanged = 0
+        var skippedNoWeight = 0
         for (m in current) {
+            // Its id stays in currentIds above, so the skip is NOT read as a deletion — openScale
+            // still holds the row, we just cannot put it on the wire.
+            if (!m.hasValidWeight()) {
+                Timber.w("%s: skipping measurement id=%d (no usable weight: %s)",
+                    viewModel().getName(), m.id, m.weight)
+                skippedNoWeight++
+                continue
+            }
             val prev = ledger[m.id]
             when {
                 prev == null -> inserts += m
@@ -319,7 +336,7 @@ abstract class ServiceInterface (
         var insertedOk = 0
         var updatedOk = 0
         var deletedOk = 0
-        var skipped = 0
+        var skipped = skippedNoWeight
 
         // Moved measurements: remove the stale record at the OLD timestamp (best-effort, via the raw
         // delete so a since-gone record doesn't pollute the retry queue), then insert at the new one.
@@ -426,7 +443,14 @@ abstract class ServiceInterface (
         }
         return try {
             val since = Instant.now().minus(Duration.ofDays(730)).toEpochMilli()
-            val items = readInbound(userId, since)
+            // updateMeasurement() always writes weight, unlike the null-guarded fat/water/muscle —
+            // so a 0 here would overwrite openScale's own good value instead of just a mirror's.
+            val (items, rejected) = readInbound(userId, since)
+                .partition { it.weightKg.isFinite() && it.weightKg > 0f }
+            if (rejected.isNotEmpty()) {
+                Timber.w("%s: dropping %d inbound reading(s) without a usable weight (first: %s)",
+                    viewModel().getName(), rejected.size, rejected.first().weightKg)
+            }
             if (items.isEmpty()) return SyncResult.Success(InboundStats())
 
             // One read per affected user, reused for every reading of that user.
@@ -512,6 +536,16 @@ abstract class ServiceInterface (
      * reconcile() routes its deletes through here too.
      */
     suspend fun submit(op: PendingOp): SyncResult<Unit> {
+        // reconcile()'s gate, for the real-time path. INVALID_DATA keeps it out of the ledger and
+        // the queue, so correcting the measurement in openScale is enough to get it synced.
+        if (op.type == "insert" || op.type == "update") {
+            val m = op.toMeasurement()
+            if (!m.hasValidWeight()) {
+                Timber.w("%s: refusing %s of measurement id=%d (no usable weight: %s)",
+                    viewModel().getName(), op.type, op.id, m.weight)
+                return SyncResult.Failure(SyncResult.ErrorType.INVALID_DATA, "measurement has no usable weight")
+            }
+        }
         val result = dispatch(op)
         // INVALID_DATA is the one failure a replay cannot fix — queueing it would retry it on every
         // init() forever. It stays out of the ledger too, so correcting the data in openScale is

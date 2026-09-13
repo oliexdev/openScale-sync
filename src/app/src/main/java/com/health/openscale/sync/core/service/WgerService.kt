@@ -165,7 +165,9 @@ class WgerService(
             }
         ) {
             // Single-user backend: pick which openScale user this destination receives.
-            val osUsers = remember { openScaleDataService.getUsers() }
+            val osUsers = remember {
+                runCatching { openScaleDataService.getUsers() }.getOrDefault(emptyList())
+            }
             UserScopeSection(
                 isMultiUser = isMultiUser,
                 users = osUsers,

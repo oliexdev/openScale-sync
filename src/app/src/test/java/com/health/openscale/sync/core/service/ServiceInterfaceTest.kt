@@ -72,6 +72,14 @@ class ServiceInterfaceTest {
             listOf(OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, weight))
         )
 
+    /** A row openScale can hold but no backend can send: a value set with no `builtin.weight`, so
+     *  [OpenScaleMeasurement.fromValues] derives weight 0f. */
+    private fun mNoWeight(id: Int, timeMs: Long, user: Int = 1) =
+        OpenScaleMeasurement.fromValues(
+            id, user, Date(timeMs), "",
+            listOf(OpenScaleMeasurementValue("builtin.waist", "Waist", "cm", false, 85f))
+        )
+
     // --- Real-time dispatch ---------------------------------------------------------------
 
     @Test
@@ -428,6 +436,17 @@ class ServiceInterfaceTest {
     }
 
     @Test
+    fun inbound_dropsAZeroWeightReading_insteadOfCorruptingTheExistingMeasurement() = runTest {
+        val b = inboundBackend(m(1, 1000))
+        b.inboundReadings += InboundMeasurement(timeMs = 1000, weightKg = 0f, fatPct = 0f)
+
+        val r = b.runInbound(1)
+
+        assertEquals(emptyList<String>(), openScale.inboundWrites)
+        assertEquals(InboundStats(), (r as SyncResult.Success).data)
+    }
+
+    @Test
     fun inbound_isSkipped_whenTheBackendIsExportOnly() = runTest {
         val b = inboundBackend()
         b.viewModel().setSyncDirection(SyncDirection.EXPORT)
@@ -647,6 +666,44 @@ class ServiceInterfaceTest {
         assertTrue(r is SyncResult.Failure)
         assertEquals(SyncResult.ErrorType.INVALID_DATA, (r as SyncResult.Failure).errorType)
         assertEquals(0, backend.pendingRetryCount())
+    }
+
+    // A weightless measurement is the same class of unsendable, but caught centrally rather than
+    // per backend — see [OpenScaleMeasurement.hasValidWeight].
+
+    @Test
+    fun reconcile_skipsAWeightlessMeasurement_insteadOfPushingAPhantomZero() = runTest {
+        val r = backend.reconcile(listOf(m(1, 1000), mNoWeight(2, 2000)))
+
+        val stats = (r as SyncResult.Success).data
+        assertEquals(1, stats.inserted)
+        assertEquals(1, stats.skipped)
+        assertFalse(backend.wire.any { it.contains("#2") })
+        assertEquals(0, backend.pendingRetryCount())
+    }
+
+    /** The row is still in openScale, so the skip must not reach the backend as a delete. */
+    @Test
+    fun reconcile_doesNotDeleteAMeasurementThatLostItsWeight() = runTest {
+        backend.reconcile(listOf(m(1, 1000), m(2, 2000)))     // seed ledger with both
+        backend.wire.clear()
+
+        backend.reconcile(listOf(m(1, 1000), mNoWeight(2, 2000)))
+
+        assertEquals(emptyList<String>(), backend.wire)
+    }
+
+    @Test
+    fun submit_refusesAWeightlessMeasurement_withoutQueueingIt() = runTest {
+        val r = backend.submit(backend.pendingOp("insert", mNoWeight(7, 1000)))
+
+        assertTrue(r is SyncResult.Failure)
+        assertEquals(SyncResult.ErrorType.INVALID_DATA, (r as SyncResult.Failure).errorType)
+        assertEquals(emptyList<String>(), backend.wire)
+        assertEquals(0, backend.pendingRetryCount())
+
+        // Not ledgered either: once the weight is back in openScale it goes out by itself.
+        assertEquals(1, (backend.reconcile(listOf(m(7, 1000))) as SyncResult.Success).data.inserted)
     }
 
     @Test

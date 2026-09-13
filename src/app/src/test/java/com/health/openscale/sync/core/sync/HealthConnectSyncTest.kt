@@ -307,6 +307,11 @@ class HealthConnectSyncTest {
     }
 
     @Test
+    fun rejectionReason_flagsAZeroWeight() {
+        assertNotNull(sync.rejectionReason(measurementOf(weight = 0f)))
+    }
+
+    @Test
     fun rejectionReason_flagsAnOutOfRangeBmr() {
         assertNotNull(sync.rejectionReason(
             measurementOf(extra = listOf(mv("BMR", "kcal", 20_000f)))))
