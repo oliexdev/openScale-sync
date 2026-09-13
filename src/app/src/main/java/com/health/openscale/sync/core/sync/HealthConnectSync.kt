@@ -64,7 +64,13 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         val instant = measurement.date.toInstant()
         if (instant.isAfter(now)) return "date $instant is in the future"
 
-        // Mass records: >= 0 and <= 1000 kg. A percentage <= 100 with a weight <= 1000 kg can never
+        // Weight is the anchor of the whole weigh-in: 0 kg is never a real reading, only what
+        // OpenScaleMeasurement.fromValues() defaults to when a row's value set has no WEIGHT entry
+        // (a malformed/partial row). Rejecting it here stops that placeholder from being written to
+        // Health Connect as a genuine 0 kg measurement.
+        if (measurement.weight <= 0f) return "weight is ${measurement.weight}"
+
+        // Mass records: <= 1000 kg. A percentage <= 100 with a weight <= 1000 kg can never
         // exceed that for the derived water/lean/bone masses, so the percent limits below cover them.
         outOfRange("weight", measurement.weight, MAX_WEIGHT_KG)?.let { return it }
         outOfRange("body fat", measurement.body_fat, MAX_PERCENT)?.let { return it }

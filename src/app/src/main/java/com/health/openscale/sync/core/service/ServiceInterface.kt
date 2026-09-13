@@ -426,7 +426,11 @@ abstract class ServiceInterface (
         }
         return try {
             val since = Instant.now().minus(Duration.ofDays(730)).toEpochMilli()
-            val items = readInbound(userId, since)
+            // weightKg is mandatory (see InboundMeasurement) and, unlike fatPct/waterPct/musclePct,
+            // is never null-guarded before reaching the provider: updateMeasurement() always writes
+            // it, so a 0/invalid reading here would silently overwrite openScale's own good weight
+            // for an existing measurement, corrupting the source of truth rather than just a mirror.
+            val items = readInbound(userId, since).filter { it.weightKg.isFinite() && it.weightKg > 0f }
             if (items.isEmpty()) return SyncResult.Success(InboundStats())
 
             // One read per affected user, reused for every reading of that user.

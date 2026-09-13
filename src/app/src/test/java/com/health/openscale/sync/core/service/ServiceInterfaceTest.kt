@@ -428,6 +428,20 @@ class ServiceInterfaceTest {
     }
 
     @Test
+    fun inbound_dropsAZeroWeightReading_insteadOfCorruptingTheExistingMeasurement() = runTest {
+        // A phantom 0 kg reading from the source must never reach updateMeasurement(): unlike
+        // fatPct/waterPct/musclePct, weightKg is always written, so it would silently overwrite
+        // openScale's own good weight instead of just leaving a bad mirror in the source.
+        val b = inboundBackend(m(1, 1000))
+        b.inboundReadings += InboundMeasurement(timeMs = 1000, weightKg = 0f, fatPct = 0f)
+
+        val r = b.runInbound(1)
+
+        assertEquals(emptyList<String>(), openScale.inboundWrites)
+        assertEquals(InboundStats(), (r as SyncResult.Success).data)
+    }
+
+    @Test
     fun inbound_isSkipped_whenTheBackendIsExportOnly() = runTest {
         val b = inboundBackend()
         b.viewModel().setSyncDirection(SyncDirection.EXPORT)

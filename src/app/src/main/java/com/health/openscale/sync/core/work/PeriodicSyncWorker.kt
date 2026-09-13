@@ -60,10 +60,13 @@ class PeriodicSyncWorker(
         }
 
         val services = BackendRegistry.create(applicationContext, prefs)
-        val allUsers = runCatching { dataProvider.getUsers() }.getOrElse { emptyList() }
-        val allMeasurements = allUsers.flatMap {
-            runCatching { dataProvider.getMeasurements(it) }.getOrElse { emptyList() }
-        }
+        // A failed read must NOT be papered over with emptyList(): reconcile() deletes every
+        // backend-side measurement whose id is missing from the list it's given, so a transient
+        // provider failure misread as "openScale has zero measurements" would wipe the destination's
+        // whole synced history instead of just skipping this cycle. Bail out and retry later instead.
+        val allUsers = runCatching { dataProvider.getUsers() }.getOrElse { return Result.retry() }
+        val allMeasurements = runCatching { allUsers.flatMap { dataProvider.getMeasurements(it) } }
+            .getOrElse { return Result.retry() }
 
         var anyFailure = false
         for (service in services) {
