@@ -74,13 +74,13 @@ class SyncServiceInstrumentedTest {
 
     @Test
     fun insert_isDispatched() {
-        start("mode" to "insert", "id" to 7, "userId" to 1, "date" to 1000L)
+        start("mode" to "insert", "id" to 7, "userId" to 1, "date" to 1000L, "values" to WEIGHT_80)
         awaitWire { it.contains("insert#7@1000") }
     }
 
     @Test
     fun update_isDispatched() {
-        start("mode" to "update", "id" to 7, "userId" to 1, "date" to 1000L)
+        start("mode" to "update", "id" to 7, "userId" to 1, "date" to 1000L, "values" to WEIGHT_80)
         awaitWire { it.contains("update#7@1000") }
     }
 
@@ -132,13 +132,14 @@ class SyncServiceInstrumentedTest {
 
     @Test
     fun insert_withGarbageValues_doesNotCrash() {
+        // Unparseable values leave the measurement without a weight, which submit() refuses.
         start("mode" to "insert", "id" to 7, "userId" to 1, "date" to 1000L, "values" to "not-json")
-        awaitWire { it.contains("insert#7@1000") }   // values ignored, weight derived to 0
+        assertNoDispatch()
     }
 
     @Test
     fun insert_withMissingExtras_usesDefaults() {
-        start("mode" to "insert")                     // no id/userId/date → 0/0/0
+        start("mode" to "insert", "values" to WEIGHT_80)   // no id/userId/date → 0/0/0
         awaitWire { it.contains("insert#0@0") }
     }
 
@@ -167,7 +168,7 @@ class SyncServiceInstrumentedTest {
     private fun m(id: Int, timeMs: Long, weight: Float = 80f, user: Int = 1) =
         OpenScaleMeasurement.fromValues(
             id, user, Date(timeMs), "",
-            listOf(OpenScaleMeasurementValue(0, "WEIGHT", "Weight", "kg", false, weight))
+            listOf(OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, weight))
         )
 
     private fun start(vararg extras: Pair<String, Any>) {
@@ -201,6 +202,12 @@ class SyncServiceInstrumentedTest {
     }
 
     private fun snapshot(b: InstrFakeBackend): List<String> = synchronized(b.wire) { b.wire.toList() }
+
+    private companion object {
+        /** A value set with a usable weight; submit() refuses inserts and updates without one.
+         *  No spaces: executeShellCommand() splits the am command line on whitespace. */
+        const val WEIGHT_80 = """[{"identity":"builtin.weight","name":"Weight","unit":"kg","value":80.0}]"""
+    }
 
     private fun runShell(cmd: String): String {
         val pfd = instr.uiAutomation.executeShellCommand(cmd)
