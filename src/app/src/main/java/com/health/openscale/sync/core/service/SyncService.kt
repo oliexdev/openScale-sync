@@ -357,6 +357,17 @@ class SyncService : Service() {
         stopSelf()
     }
 
+    /**
+     * Android 15+ lets dataSync foreground services run for 6 hours per 24 hours in the
+     * background. When that budget runs out the system calls this, and a service that has not
+     * stopped a few seconds later crashes the app with a RemoteServiceException. A normal sync
+     * finishes long before that, so this only fires when a backend hangs.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Timber.w("Foreground service timed out (startId=%d, fgsType=%d) -> stopping", startId, fgsType)
+        stopServiceCleanly()
+    }
+
 
     /** Creates required foreground notification for service */
     private fun showNotification() {
