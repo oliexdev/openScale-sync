@@ -115,6 +115,9 @@
     <string name="mqtt_password_title">Passwort</string>
     <string name="mqtt_use_ssl_tls_title">SSL/TLS-Verschlüsselung verwenden</string>
     <string name="mqtt_ssl_disabled_warning">Warnung: Ohne SSL/TLS werden Daten unverschlüsselt gesendet. Nur für vertrauenswürdige lokale Netzwerke empfohlen.</string>
+    <string name="mqtt_topic_prefix_title">Topic-Präfix (optional)</string>
+    <string name="mqtt_topic_prefix_hint">z. B. alice</string>
+    <string name="mqtt_topic_prefix_desc">Auf jedem Handy, das an denselben Broker sendet, ein anderes Präfix setzen, sonst teilen sich ihre Benutzer (alle ab ID 1) Topics und Home-Assistant-Geräte. Topics werden zu openScaleSync/&lt;Präfix&gt;/&lt;Benutzer-ID&gt;/…. Eine Änderung gilt ab der nächsten Verbindung; danach einmal synchronisieren, um die neuen Topics zu füllen. Beim Wechsel von einem Präfix zu einem anderen werden die alten Topics und Home-Assistant-Geräte vom Broker entfernt; beim Wechsel weg vom leeren Standard bleiben sie, da andere Handys sie noch nutzen können.</string>
     <string name="mqtt_use_discovery_tite">Home Assistant Discovery verwenden</string>
 
     <string name="wger_successful_connected_text">Erfolgreich mit Wger verbunden.</string>

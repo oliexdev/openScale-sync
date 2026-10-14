@@ -34,6 +34,32 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
         const val USE_SSL = "mqtt_use_ssl"
         const val USE_DISCOVERY = "mqtt_use_discovery"
         const val LAST_PUBLISHED_DATES = "last_published_dates"
+        const val TOPIC_PREFIX = "mqtt_topic_prefix"
+        /** Generated once per installation, see MQTTService.clientIdentifier. */
+        const val CLIENT_ID = "mqtt_client_id"
+
+        /**
+         * Effective prefix the last connection used, so the next connection can clear the retained
+         * topics of a prefix that has since changed. Absent until the first connection.
+         */
+        const val PUBLISHED_TOPIC_PREFIX = "mqtt_published_topic_prefix"
+
+        /**
+         * Input filter for the prefix field: ASCII letters, digits, `_`, `-` and spaces. Nothing
+         * else is rewritten while typing; [topicLevel] makes the final level.
+         */
+        fun sanitizeTopicPrefix(raw: String): String =
+            raw.filter { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' || it == '-' || it == ' ' }
+
+        /**
+         * The prefix as one MQTT topic level: trimmed, spaces as underscores, no separators or
+         * wildcards. `inbound` and `measurements` are level names inside the unprefixed tree; as a
+         * prefix they would make this installation publish into another one's topics.
+         */
+        fun topicLevel(prefix: String): String {
+            val level = sanitizeTopicPrefix(prefix).trim().replace(' ', '_')
+            return if (level in setOf("inbound", "measurements")) "${level}_" else level
+        }
     }
 
     private val _mqttServer = MutableLiveData<String>(sharedPreferences.getString(SERVER, ""))
@@ -44,6 +70,7 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
 
     private val _mqttUseSsl = MutableLiveData<Boolean>(sharedPreferences.getBoolean(USE_SSL, true))
     private val _mqttUseDiscovery = MutableLiveData<Boolean>(sharedPreferences.getBoolean(USE_DISCOVERY, true))
+    private val _mqttTopicPrefix = MutableLiveData<String>(sharedPreferences.getString(TOPIC_PREFIX, "") ?: "")
 
     private val gson = Gson()
     private val lastPublishedDatesType = object : TypeToken<MutableMap<Int, Long>>() {}.type
@@ -104,11 +131,29 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
         sharedPreferences.edit { putBoolean(USE_DISCOVERY, useDiscovery) }
     }
 
+    /**
+     * Optional extra topic level that keeps several installations apart on one broker
+     * (`openScaleSync/<prefix>/<userId>/…`). Empty keeps the original topics.
+     */
+    val mqttTopicPrefix: LiveData<String> = _mqttTopicPrefix
+
+    fun setMqttTopicPrefix(value: String) {
+        val sanitized = sanitizeTopicPrefix(value)
+        _mqttTopicPrefix.value = sanitized
+        sharedPreferences.edit { putString(TOPIC_PREFIX, sanitized) }
+    }
+
     /** Epoch millis of the newest measurement published to [userId]'s retained "last" topic, or 0. */
     fun getLastPublishedDate(userId: Int): Long = lastPublishedDates[userId] ?: 0L
 
     fun setLastPublishedDate(userId: Int, date: Long) {
         lastPublishedDates[userId] = date
+        persistLastPublishedDates()
+    }
+
+    /** After a prefix change: the new "last" topics are empty, so the next sync must republish. */
+    fun clearAllLastPublishedDates() {
+        lastPublishedDates.clear()
         persistLastPublishedDates()
     }
 

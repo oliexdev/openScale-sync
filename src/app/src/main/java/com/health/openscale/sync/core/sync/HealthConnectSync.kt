@@ -88,8 +88,11 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         if (!value.isFinite() || value < 0f || value > max) "$name is $value" else null
 
     /**
-     * The record set one measurement maps to. Weight/water/fat are always written; lean body mass,
-     * bone mass and BMR only when openScale actually has that value. Every record carries a stable
+     * The record set one measurement maps to. Weight is always written; water, fat, lean body mass,
+     * bone mass and BMR only when openScale actually has that value. A missing value reaches us as
+     * 0 (see [OpenScaleMeasurement.fromValues]), and writing it would put a 0 % body fat / 0 kg water
+     * weigh-in into Health Connect for every weight-only measurement (no impedance, scale without
+     * body composition, value rejected by the scale's model). Every record carries a stable
      * [buildMetadata] clientRecordId, which is what makes a re-insert an upsert (see [insert]).
      *
      * Only call this for a measurement [rejectionReason] cleared — the constructors throw otherwise.
@@ -98,8 +101,14 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         val records = mutableListOf<Record>()
 
         records.add(buildWeightRecord(measurement))
-        records.add(buildWaterRecord(measurement))
-        records.add(buildFatRecord(measurement))
+
+        if (measurement.water > 0f) {
+            records.add(buildWaterRecord(measurement))
+        }
+
+        if (measurement.body_fat > 0f) {
+            records.add(buildFatRecord(measurement))
+        }
 
         if (measurement.lbm > 0f) {
             records.add(buildLeanBodyMassRecord(measurement))
@@ -173,19 +182,15 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     }
 
     /**
-     * Drop every record type we write in [timeRange]. Health Connect scopes deletes to the calling
-     * app, so this never reaches another app's data.
+     * Drop [types] (default: every record type we write) in [timeRange]. Health Connect scopes
+     * deletes to the calling app, so this never reaches another app's data.
      */
-    private suspend fun deleteRange(timeRange: TimeRangeFilter) : SyncResult<Unit> {
+    private suspend fun deleteRange(
+        timeRange: TimeRangeFilter,
+        types: List<KClass<out Record>> = RECORD_TYPES,
+    ) : SyncResult<Unit> {
         return try {
-            listOf(
-                WeightRecord::class,
-                BodyFatRecord::class,
-                BodyWaterMassRecord::class,
-                LeanBodyMassRecord::class,
-                BasalMetabolicRateRecord::class,
-                BoneMassRecord::class
-            ).forEach { healthConnectClient.deleteRecords(it, timeRange) }
+            types.forEach { healthConnectClient.deleteRecords(it, timeRange) }
 
             SyncResult.Success(Unit)
         } catch (e: Exception) {
@@ -194,21 +199,29 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     }
 
     /**
-     * Updating is writing: the clientRecordId upsert in [insert] already replaces the existing
-     * records of this measurement in place.
+     * Updating is writing, then removing what the measurement no longer has. The clientRecordId
+     * upsert in [insert] replaces the records it still has but cannot remove one it lost (a fat value
+     * removed in openScale), so the record types missing from the new set are then deleted at the
+     * measurement's instant, exactly as [delete] does. Writing first means a failed write leaves the
+     * old records in place instead of none.
      *
-     * This deliberately does NOT read the current records back first. Doing so needed a dataOrigin
-     * filter on our own package name, which is only correct for the Play build — the OSS and debug
-     * flavors carry an applicationIdSuffix, so the filter named a foreign app there: with write-only
-     * permissions Health Connect rejected the read outright (SecurityException, the op then stuck in
-     * the retry queue forever), and with read permissions granted it silently matched nothing, so
-     * every value except BMR was dropped from the update. Writing unconditionally is both correct on
-     * every flavor and independent of the read permissions, which only the inbound path needs.
-     *
-     * It also fixes a second asymmetry: a value added in openScale after the first sync (say a fat
-     * percentage) could never reach Health Connect, because the read found no record to update.
+     * Nothing is read back first: the dataOrigin filter that needed only matched the Play build, and
+     * write-only permissions reject reads (see git history).
      */
-    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> = insert(measurement)
+    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
+        rejectionReason(measurement)?.let { reason ->
+            Timber.w("Health Connect: skipping update of measurement id=%d (%s)", measurement.id, reason)
+            return SyncResult.Failure(SyncResult.ErrorType.INVALID_DATA, reason)
+        }
+        val records = buildRecords(measurement)
+        val written = writeRecords(records)
+        if (written is SyncResult.Failure) return written
+
+        val gone = RECORD_TYPES.filter { type -> records.none { type.isInstance(it) } }
+        if (gone.isEmpty()) return written
+        val instant = measurement.date.toInstant()
+        return deleteRange(TimeRangeFilter.between(instant.minusSeconds(1), instant.plusSeconds(1)), gone)
+    }
 
     /**
      * One inbound reading from Health Connect (foreign app): a weight plus whatever other metrics
@@ -393,6 +406,16 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     }
 
     companion object {
+        /** Every record type [buildRecords] can write. */
+        private val RECORD_TYPES: List<KClass<out Record>> = listOf(
+            WeightRecord::class,
+            BodyFatRecord::class,
+            BodyWaterMassRecord::class,
+            LeanBodyMassRecord::class,
+            BasalMetabolicRateRecord::class,
+            BoneMassRecord::class
+        )
+
         /**
          * How far from the weight record a body-composition record may sit and still count as the
          * same weigh-in. Wide enough for apps that write their records sequentially or round to

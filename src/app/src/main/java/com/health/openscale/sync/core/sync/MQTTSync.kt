@@ -30,7 +30,18 @@ import timber.log.Timber
 import java.util.Date
 import java.util.concurrent.TimeUnit
 
-class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
+/**
+ * [topicPrefix] is the effective prefix ([com.health.openscale.sync.core.model.MQTTViewModel.topicLevel])
+ * of this connection. It is fixed for the connection, so discovery and every publish agree; a changed
+ * setting applies on the next connection, like the broker settings.
+ */
+class MQTTSync(
+    private val mqttClient: Mqtt5BlockingClient,
+    private val topicPrefix: String = "",
+) : SyncInterface() {
+    /** `openScaleSync` or `openScaleSync/<prefix>`. */
+    val topicBase: String = topicBase(topicPrefix)
+
     private val gson = GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mmZ").create()
 
     /**
@@ -80,7 +91,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     }
 
     // Per-user topic: the stable userId is the path segment; the username travels in the JSON payload.
-    private fun userTopic(userId: Int, event: String) = "openScaleSync/$userId/measurements/$event"
+    private fun userTopic(userId: Int, event: String) = userTopic(topicBase, userId, event)
 
     /**
      * Publishes a user's complete, date-sorted measurement series as ONE retained, slim columnar
@@ -103,7 +114,17 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
         return publishMessage(true, userTopic(userId, "clear"))
     }
 
+    /**
+     * Clears what this installation left retained under [oldPrefix] for [userId] (see
+     * [retainedTopics]). An empty retained payload deletes a retained message.
+     */
+    fun clearRetainedTopics(oldPrefix: String, userId: Int) : SyncResult<Unit> =
+        retainedTopics(oldPrefix, userId)
+            .map { publishPayload(ByteArray(0), it, true, "clear") }
+            .firstOrNull { it is SyncResult.Failure } ?: SyncResult.Success(Unit)
+
     /** Clears the retained per-user "last" measurement (after a delete/clear of that user). */
+
     fun clearLastMeasurement(userId: Int) : SyncResult<Unit> {
         return publishMessage(mapOf<String, Any>(), userTopic(userId, "last"), true)
     }
@@ -117,7 +138,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             publishMeasurement(measurement, userTopic(measurement.userId, "last"), true)
         } else {
             // No measurement (e.g. last entry cleared) → can't target a per-user topic; use the shared one.
-            publishMessage(mapOf<String, Any>(), "openScaleSync/measurements/last", true)
+            publishMessage(mapOf<String, Any>(), "$topicBase/measurements/last", true)
         }
     }
 
@@ -160,24 +181,25 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             }
 
             // --- Per-user device: stable userId-based identity, username as the HA display name ---
+            val deviceKey = deviceKey(topicPrefix, userId)
             payloadJson.getAsJsonObject("device")?.apply {
-                addProperty("identifiers", "openscale_$userId")
+                addProperty("identifiers", "openscale_$deviceKey")
                 addProperty("name", if (username.isNotBlank()) "openScale ($username)" else "openScale ($userId)")
             }
             // Point the entities at this user's retained "last" measurement topic.
-            payloadJson.addProperty("state_topic", "openScaleSync/$userId/measurements/last")
+            payloadJson.addProperty("state_topic", userTopic(userId, "last"))
             // Make each component's unique_id user-specific so HA keeps them as separate entities.
             payloadJson.getAsJsonObject("components")?.entrySet()?.forEach { entry ->
                 val obj = entry.value.asJsonObject
                 val baseUid = obj.get("unique_id")?.asString ?: "openscale"
-                obj.addProperty("unique_id", "${baseUid}_$userId")
+                obj.addProperty("unique_id", "${baseUid}_$deviceKey")
             }
 
             val bytes = gson.toJson(payloadJson).toByteArray()
 
             val publishResult = mqttClient.publish(
                 Mqtt5Publish.builder()
-                    .topic("homeassistant/device/openscale_$userId/config")
+                    .topic("homeassistant/device/openscale_$deviceKey/config")
                     .payload(bytes)
                     .qos(publishQos())
                     .retain(true)
@@ -233,7 +255,7 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
     }
 
     private fun publishMeasurement(measurement: OpenScaleMeasurement, topic: String, retain : Boolean = false) : SyncResult<Unit> =
-        publishPayload(gson.toJson(measurement).toByteArray(), topic, retain, "${measurement.date}")
+        publishPayload(gson.toJson(buildMeasurementPayload(gson, measurement)).toByteArray(), topic, retain, "${measurement.date}")
 
     private fun publishMessage(message: Map<String, Any>, topic: String, retain : Boolean = false) : SyncResult<Unit> =
         publishPayload(gson.toJson(message).toByteArray(), topic, retain, "${message.values}")
@@ -242,6 +264,73 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
         publishPayload(value.toString().toByteArray(), topic, retain, "$value")
 
     companion object {
+        private fun userTopic(base: String, userId: Int, event: String) = "$base/$userId/measurements/$event"
+
+        /**
+         * Root of every topic this installation uses: `openScaleSync`, or `openScaleSync/<prefix>`
+         * when a topic prefix is set (several phones on one broker, each with its own user id 1).
+         */
+        fun topicBase(prefix: String): String = if (prefix.isEmpty()) "openScaleSync" else "openScaleSync/$prefix"
+
+        /**
+         * The retained topics a user has under [prefix]: the Home Assistant discovery config (left
+         * behind, HA recreates a deleted device on its next start) and the "last" and "history"
+         * snapshots.
+         */
+        fun retainedTopics(prefix: String, userId: Int): List<String> = listOf(
+            "homeassistant/device/openscale_${deviceKey(prefix, userId)}/config",
+            userTopic(topicBase(prefix), userId, "last"),
+            userTopic(topicBase(prefix), userId, "history"),
+        )
+
+        /**
+         * Handles a prefix change at connect: clears the retained topics of [previous] for each of
+         * [userIds] through [clear]. Returns whether [current] may now be recorded as the published
+         * prefix; false (a clear failed) keeps the old one, so the next connection tries again.
+         *
+         * Nothing is cleared when [previous] is unknown (first connection) or the default empty
+         * prefix: that tree is shared by every phone still on the default, and clearing it would
+         * remove their Home Assistant devices. Their topics cannot be told apart from ours.
+         */
+        fun clearPreviousPrefix(
+            previous: String?,
+            current: String,
+            userIds: List<Int>,
+            clear: (prefix: String, userId: Int) -> SyncResult<Unit>,
+        ): Boolean {
+            if (previous == null || previous == current || previous.isEmpty()) return true
+            return userIds.all { clear(previous, it) is SyncResult.Success }
+        }
+
+        /** User id from an inbound topic `<base>/inbound/<userId>/…` (base: one or two levels). */
+        fun inboundUserId(topic: String): Int? {
+            val levels = topic.split("/")
+            val inbound = levels.lastIndexOf("inbound")
+            return if (inbound < 0) null else levels.getOrNull(inbound + 1)?.toIntOrNull()
+        }
+
+        /** Home Assistant device / unique-id suffix: the user id, qualified by the prefix if set. */
+        fun deviceKey(prefix: String, userId: Int): String = if (prefix.isEmpty()) "$userId" else "${prefix}_$userId"
+
+        /** Convenience fields of [OpenScaleMeasurement] that stand for an optional metric. */
+        private val OPTIONAL_CONVENIENCE_FIELDS = listOf("body_fat", "water", "muscle", "lbm", "bone")
+
+        /**
+         * The per-measurement JSON (insert/update/last). An optional metric the measurement does not
+         * have is left out instead of being sent as the 0 the convenience field holds, the same rule
+         * [buildHistoryPayload] applies to its cells. Home Assistant's templates
+         * (`value_json.body_fat | default(none)`) then show "unknown" for a weight-only weigh-in
+         * instead of dropping the fat/water graphs to 0.
+         */
+        fun buildMeasurementPayload(gson: com.google.gson.Gson, measurement: OpenScaleMeasurement): com.google.gson.JsonObject {
+            val json = gson.toJsonTree(measurement).asJsonObject
+            // Empty value set (defensive): keep the convenience fields as they are, like the history.
+            if (measurement.values.isEmpty()) return json
+            val present = measurement.values.filter { it.value != null }.mapTo(HashSet()) { it.backendKey() }
+            OPTIONAL_CONVENIENCE_FIELDS.filter { it !in present }.forEach { json.remove(it) }
+            return json
+        }
+
         /**
          * Builds the slim, retained-friendly columnar history payload `{fields, units, rows}` from a
          * user's measurements. Names/units live once in the header (not per row) → ~10× smaller than

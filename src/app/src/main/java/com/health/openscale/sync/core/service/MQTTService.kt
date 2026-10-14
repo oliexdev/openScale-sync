@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
@@ -95,14 +96,14 @@ class MQTTService(
         if (!::mqttSync.isInitialized || !mqttClient.state.isConnected) {
             throw IllegalStateException("MQTT broker not connected")
         }
-        return mqttSync.drainInboundMessages("openScaleSync/inbound/#", 1500)
+        return mqttSync.drainInboundMessages("${mqttSync.topicBase}/inbound/#", 1500)
             .mapNotNull { (topic, payload) -> parseInboundMessage(topic, payload) }
     }
 
     private fun parseInboundMessage(topic: String, payload: String): InboundMeasurement? {
         if (payload.isBlank()) return null
         return runCatching {
-            val topicUser = topic.split("/").getOrNull(2)?.toIntOrNull()
+            val topicUser = MQTTSync.inboundUserId(topic)
             val o = JSONObject(payload)
             val date = o.optLong("date", 0L)
             if (date == 0L || !o.has("weight")) return@runCatching null
@@ -130,6 +131,19 @@ class MQTTService(
             Timber.w(e, "MQTTService: Could not determine openScale version for HA discovery.")
             null
         }
+    }
+
+    /**
+     * MQTT client identifier, unique per installation. Brokers allow one session per identifier and
+     * drop the older connection when a second client presents the same one, so a shared fixed id made
+     * two phones (or a phone and a tablet) on one broker keep disconnecting each other.
+     */
+    private fun clientIdentifier(): String {
+        sharedPreferences.getString(MQTTViewModel.CLIENT_ID, null)?.let { return it }
+        // 22 characters: within the 23 that MQTT 3.1.1 brokers are required to accept.
+        val id = "openScaleSync-" + java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+        sharedPreferences.edit { putString(MQTTViewModel.CLIENT_ID, id) }
+        return id
     }
 
     // Centralized function to ensure client is connected before performing an operation
@@ -283,7 +297,7 @@ class MQTTService(
                     .useMqttVersion5()
                     .serverHost(viewModel.mqttServer.value.toString())
                     .serverPort(viewModel.mqttPort.value.toString().toIntOrNull() ?: 1883)
-                    .identifier("openScaleSync")
+                    .identifier(clientIdentifier())
 
                 if (viewModel.mqttUseSsl.value == true) {
                     clientBuilder = clientBuilder.sslWithDefaultConfig()
@@ -309,7 +323,26 @@ class MQTTService(
 
                 // If we reach here, mqttClient is successfully built and connected.
                 // Now, initialize or re-initialize mqttSync with the connected client.
-                mqttSync = MQTTSync(mqttClient) // Initialize/Re-initialize the main mqttSync instance
+                val topicPrefix = MQTTViewModel.topicLevel(viewModel.mqttTopicPrefix.value.orEmpty())
+                mqttSync = MQTTSync(mqttClient, topicPrefix) // Initialize/Re-initialize the main mqttSync instance
+                val users = runCatching { OpenScaleDataProvider(context, sharedPreferences).getUsers() }
+                    .onFailure { Timber.w(it, "MQTTService: could not read the openScale users") }
+                    .getOrNull()
+
+                // Prefix changed since the last connection: clear what the old one left retained
+                // (see MQTTSync.clearPreviousPrefix) and let the next sync fill the new topics.
+                val previousPrefix = sharedPreferences.getString(MQTTViewModel.PUBLISHED_TOPIC_PREFIX, null)
+                if (users != null && previousPrefix != topicPrefix) {
+                    val cleared = MQTTSync.clearPreviousPrefix(previousPrefix, topicPrefix, users.map { it.id }) { prefix, userId ->
+                        mqttSync.clearRetainedTopics(prefix, userId)
+                    }
+                    if (cleared) {
+                        if (previousPrefix != null) viewModel.clearAllLastPublishedDates()
+                        sharedPreferences.edit { putString(MQTTViewModel.PUBLISHED_TOPIC_PREFIX, topicPrefix) }
+                    } else {
+                        Timber.w("MQTTService: could not clear the retained topics of prefix '$previousPrefix'")
+                    }
+                }
 
                 // Step 3: Home Assistant Discovery (if enabled)
                 // This now uses the initialized this.mqttSync and its this.mqttClient
@@ -322,8 +355,7 @@ class MQTTService(
                         // One Home Assistant device per openScale user (stable userId identity,
                         // username as the display name) so multiple users don't collide into one entity.
                         val sw = openScaleVersionInfo()
-                        val users = OpenScaleDataProvider(context, sharedPreferences).getUsers()
-                        for (user in users) {
+                        for (user in users.orEmpty()) {
                             val discoveryResult = mqttSync.publishHomeAssistantDiscovery(
                                 jsonPayloadString = jsonPayloadString,
                                 deviceSwVersion = sw,
@@ -479,6 +511,29 @@ class MQTTService(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
+                )
+            }
+
+            Column (
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val topicPrefixState by viewModel.mqttTopicPrefix.observeAsState("")
+
+                OutlinedTextField(
+                    enabled = viewModel.syncEnabled.value,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    value = topicPrefixState,
+                    onValueChange = { viewModel.setMqttTopicPrefix(it) },
+                    label = { Text(stringResource(id = R.string.mqtt_topic_prefix_title)) },
+                    placeholder = { Text(stringResource(id = R.string.mqtt_topic_prefix_hint)) },
+                    supportingText = { Text(stringResource(id = R.string.mqtt_topic_prefix_desc)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text
+                    )
                 )
             }
 

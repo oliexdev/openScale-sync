@@ -19,7 +19,12 @@ package com.health.openscale.sync.core.sync
 
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
+import com.health.openscale.sync.core.model.MQTTViewModel
+import com.health.openscale.sync.core.service.SyncResult
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Date
 
@@ -34,6 +39,111 @@ class MQTTSyncTest {
 
     private fun measurement(id: Int, dateMs: Long, values: List<OpenScaleMeasurementValue>) =
         OpenScaleMeasurement.fromValues(id, 1, Date(dateMs), "alice", values)
+
+    private val gson = com.google.gson.GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mmZ").create()
+
+    @Test
+    fun topics_withoutPrefix_areUnchanged() {
+        assertEquals("openScaleSync", MQTTSync.topicBase(""))
+        assertEquals("1", MQTTSync.deviceKey("", 1))
+    }
+
+    @Test
+    fun topics_withPrefix_keepTwoPhonesWithUserOneApart() {
+        assertEquals("openScaleSync/alice", MQTTSync.topicBase("alice"))
+        assertEquals("alice_1", MQTTSync.deviceKey("alice", 1))
+        assertNotEquals(MQTTSync.deviceKey("alice", 1), MQTTSync.deviceKey("bob", 1))
+    }
+
+    @Test
+    fun inboundUserId_readsTheLevelAfterInbound_withOrWithoutPrefix() {
+        assertEquals(3, MQTTSync.inboundUserId("openScaleSync/inbound/3/scale"))
+        assertEquals(3, MQTTSync.inboundUserId("openScaleSync/alice/inbound/3/scale"))
+        assertEquals(null, MQTTSync.inboundUserId("openScaleSync/inbound/x"))
+        assertEquals(null, MQTTSync.inboundUserId("openScaleSync/alice/3/measurements/last"))
+    }
+
+    @Test
+    fun retainedTopics_areTheDiscoveryConfigAndTheLastAndHistorySnapshots() {
+        assertEquals(
+            listOf(
+                "homeassistant/device/openscale_alice_1/config",
+                "openScaleSync/alice/1/measurements/last",
+                "openScaleSync/alice/1/measurements/history",
+            ),
+            MQTTSync.retainedTopics("alice", 1),
+        )
+    }
+
+    @Test
+    fun prefixChange_clearsTheOldPrefixForEveryUser() {
+        val cleared = mutableListOf<Pair<String, Int>>()
+        val record = MQTTSync.clearPreviousPrefix("alice", "bob", listOf(1, 2)) { p, u ->
+            cleared += p to u
+            SyncResult.Success(Unit)
+        }
+        assertTrue(record)
+        assertEquals(listOf("alice" to 1, "alice" to 2), cleared)
+    }
+
+    @Test
+    fun prefixChange_whoseClearFails_keepsTheOldPrefixRecorded() {
+        val record = MQTTSync.clearPreviousPrefix("alice", "bob", listOf(1)) { _, _ ->
+            SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "broker gone")
+        }
+        assertFalse(record)
+    }
+
+    @Test
+    fun prefixChange_neverClearsTheSharedDefaultOrAnUnknownPrefix() {
+        val clear: (String, Int) -> SyncResult<Unit> = { _, _ -> error("must not clear") }
+        // Moving off the empty default: other phones on the default still use those topics.
+        assertTrue(MQTTSync.clearPreviousPrefix("", "bob", listOf(1), clear))
+        // First connection: nothing is known to be ours.
+        assertTrue(MQTTSync.clearPreviousPrefix(null, "bob", listOf(1), clear))
+        assertTrue(MQTTSync.clearPreviousPrefix("bob", "bob", listOf(1), clear))
+    }
+
+    @Test
+    fun topicPrefix_inputFilter_dropsOnlyCharactersThatCanNeverBeUsed() {
+        assertEquals("inbound", MQTTViewModel.sanitizeTopicPrefix("inbound"))
+        assertEquals("alice b ", MQTTViewModel.sanitizeTopicPrefix("alice b "))
+        assertEquals("ab", MQTTViewModel.sanitizeTopicPrefix("a/#+b"))
+        assertEquals("ab", MQTTViewModel.sanitizeTopicPrefix("aäb"))
+    }
+
+    @Test
+    fun topicLevel_isOneSafeLevel() {
+        assertEquals("alice_b", MQTTViewModel.topicLevel(" alice b "))
+        assertEquals("inbound_", MQTTViewModel.topicLevel("inbound"))
+        assertEquals("measurements_", MQTTViewModel.topicLevel("measurements"))
+        assertEquals("inbounds", MQTTViewModel.topicLevel("inbounds"))
+        assertEquals("", MQTTViewModel.topicLevel("   "))
+    }
+
+    @Test
+    fun measurementPayload_leavesOutMetricsTheMeasurementDoesNotHave() {
+        val weightOnly = MQTTSync.buildMeasurementPayload(gson, measurement(1, 2000L, listOf(mv("WEIGHT", "kg", 82.0f))))
+
+        assertEquals(82.0, weightOnly.get("weight").asDouble, 1e-6)
+        listOf("body_fat", "water", "muscle", "lbm", "bone").forEach {
+            assertEquals("$it must be absent, not 0", false, weightOnly.has(it))
+        }
+    }
+
+    @Test
+    fun measurementPayload_keepsMetricsThatArePresent() {
+        val full = MQTTSync.buildMeasurementPayload(gson, measurement(1, 2000L, listOf(
+            mv("WEIGHT", "kg", 80.0f),
+            mv("BODY_FAT", "%", 20.0f),
+            mv("WATER", "%", 55.0f),
+        )))
+
+        assertEquals(20.0, full.get("body_fat").asDouble, 1e-6)
+        assertEquals(55.0, full.get("water").asDouble, 1e-6)
+        assertEquals(false, full.has("muscle"))
+        assertEquals(true, full.has("values"))
+    }
 
     @Suppress("UNCHECKED_CAST")
     @Test

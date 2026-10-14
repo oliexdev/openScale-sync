@@ -114,6 +114,9 @@
     <string name="mqtt_password_title">Password</string>
     <string name="mqtt_use_ssl_tls_title">Use SSL/TLS Encryption</string>
     <string name="mqtt_ssl_disabled_warning">Warning: Disabling SSL/TLS sends data unencrypted. Recommended for trusted local networks only.</string>
+    <string name="mqtt_topic_prefix_title">Topic prefix (optional)</string>
+    <string name="mqtt_topic_prefix_hint">e.g. alice</string>
+    <string name="mqtt_topic_prefix_desc">Set a different prefix on each phone that sends to the same broker, otherwise their users (all starting at ID 1) share topics and Home Assistant devices. Topics become openScaleSync/&lt;prefix&gt;/&lt;user ID&gt;/…. A change applies on the next connection, then run a sync to fill the new topics. Changing from one prefix to another removes the old topics and Home Assistant devices from the broker; moving off the empty default leaves them, as other phones may still use them.</string>
     <string name="mqtt_use_discovery_tite">Use Home Assistant discovery</string>
 
     <string name="wger_successful_connected_text">Successfully connected to Wger</string>

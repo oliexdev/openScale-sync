@@ -23,6 +23,7 @@ import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByDuration
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByPeriod
 import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.BodyWaterMassRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.AggregateGroupByDurationRequest
@@ -76,12 +77,21 @@ class HealthConnectSyncTest {
          */
         var readsRejected = true
 
+        /** Makes the next writes throw, like a revoked permission or an exceeded quota. */
+        var insertsFail = false
+
+        /** "insert" / "delete" in call order. */
+        val calls = mutableListOf<String>()
+
         override suspend fun insertRecords(records: List<Record>): InsertRecordsResponse {
+            calls += "insert"
+            if (insertsFail) throw IllegalStateException("quota exceeded")
             written += records
             return InsertRecordsResponse(records.map { it.metadata.clientRecordId.orEmpty() })
         }
 
         override suspend fun deleteRecords(recordType: KClass<out Record>, timeRangeFilter: TimeRangeFilter) {
+            calls += "delete"
             deleted += recordType to timeRangeFilter
         }
 
@@ -173,6 +183,58 @@ class HealthConnectSyncTest {
         sync.insert(measurement())
 
         assertEquals(listOf("7_weight", "7_water", "7_fat"), lastWrittenIds())
+    }
+
+    @Test
+    fun update_writesFirst_thenDeletesOnlyTheTypesTheMeasurementLost() = runTest {
+        sync.insert(measurement())
+        client.deleted.clear()
+        client.calls.clear()
+
+        // Fat removed in openScale: the update must not leave the old 20 % record behind.
+        sync.update(OpenScaleMeasurement.fromValues(7, 1, Date(1_000_000L), "alice", listOf(mv("WEIGHT", "kg", 80f), mv("WATER", "%", 55f))))
+
+        assertEquals("insert", client.calls.first())
+        assertEquals(listOf("7_weight", "7_water"), lastWrittenIds())
+        val deletedTypes = client.deleted.map { it.first }.toSet()
+        assertTrue(BodyFatRecord::class in deletedTypes)
+        assertFalse(WeightRecord::class in deletedTypes)
+        assertFalse(BodyWaterMassRecord::class in deletedTypes)
+        val window = client.deleted.first().second
+        assertEquals(Instant.ofEpochMilli(1_000_000L).minusSeconds(1), window.startTime)
+        assertEquals(Instant.ofEpochMilli(1_000_000L).plusSeconds(1), window.endTime)
+    }
+
+    @Test
+    fun update_whoseWriteFails_deletesNothing() = runTest {
+        sync.insert(measurement())
+        client.deleted.clear()
+        client.insertsFail = true
+
+        val result = sync.update(OpenScaleMeasurement.fromValues(7, 1, Date(1_000_000L), "alice", listOf(mv("WEIGHT", "kg", 81f))))
+
+        assertTrue(result is SyncResult.Failure)
+        assertTrue("a failed write must keep the existing records", client.deleted.isEmpty())
+    }
+
+    @Test
+    fun update_ofAnInvalidMeasurement_deletesNothing() = runTest {
+        sync.insert(measurement())
+        client.deleted.clear()
+
+        val result = sync.update(OpenScaleMeasurement.fromValues(7, 1, Date(1_000_000L), "alice", listOf(mv("WEIGHT", "kg", 0f))))
+
+        assertTrue(result is SyncResult.Failure)
+        assertTrue("a rejected update must keep the existing records", client.deleted.isEmpty())
+    }
+
+    @Test
+    fun write_omitsFatAndWater_forAWeightOnlyMeasurement() = runTest {
+        // A scale without body composition (or with impedance off) only reports the weight; the
+        // missing fat/water must not reach Health Connect as 0 % / 0 kg.
+        sync.insert(OpenScaleMeasurement.fromValues(7, 1, Date(1_000_000L), "alice", listOf(mv("WEIGHT", "kg", 80f))))
+
+        assertEquals(listOf("7_weight"), lastWrittenIds())
     }
 
     @Test
