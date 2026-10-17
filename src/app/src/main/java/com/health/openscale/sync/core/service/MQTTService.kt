@@ -81,28 +81,36 @@ class MQTTService(
     // MQTT encodes the stable userId in the topic path (username travels in the JSON payload) → multi-user.
     override val isMultiUser: Boolean get() = true
 
-    // Inbound: drain retained messages on openScaleSync/inbound/<userId>/… → bidirectional.
+    // Inbound: drain retained messages on <topicBase>/inbound/<userId>/… → bidirectional.
     override val supportsInbound: Boolean get() = true
 
     /**
      * Inbound source: subscribe to the inbound topic tree and drain currently available (retained)
      * measurement messages. Each message is a JSON `{date, weight[, body_fat, water, values, userId]}`;
-     * the target user comes from the topic segment `openScaleSync/inbound/<userId>/…` or the payload.
+     * the target user comes from the topic segment `<topicBase>/inbound/<userId>/…` or the payload.
      */
     override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
         if (!viewModel.syncEnabled.value) return emptyList()
-        if (!::mqttClient.isInitialized || !mqttClient.state.isConnected) connectMQTT()
-        if (!::mqttSync.isInitialized || !mqttClient.state.isConnected) {
+        if (!isReady()) connectMQTT()
+        if (!isReady()) {
             throw IllegalStateException("MQTT broker not connected")
         }
-        return mqttSync.drainInboundMessages("openScaleSync/inbound/#", 1500)
-            .mapNotNull { (topic, payload) -> parseInboundMessage(topic, payload) }
+        val sync = mqttSync
+        return sync.drainInboundMessages("${sync.topicBase}/inbound/#", 1500)
+            .mapNotNull { (topic, payload) -> parseInboundMessage(MQTTSync.inboundUserId(sync.topicBase, topic), payload) }
     }
 
-    private fun parseInboundMessage(topic: String, payload: String): InboundMeasurement? {
+    /**
+     * Connected with the current settings. A changed topic prefix needs a new connection, so the
+     * next operation reconnects and republishes the discovery under the new topics.
+     */
+    private fun isReady(): Boolean =
+        ::mqttClient.isInitialized && mqttClient.state.isConnected && ::mqttSync.isInitialized &&
+            mqttSync.topicPrefix == viewModel.effectiveTopicPrefix()
+
+    private fun parseInboundMessage(topicUser: Int?, payload: String): InboundMeasurement? {
         if (payload.isBlank()) return null
         return runCatching {
-            val topicUser = topic.split("/").getOrNull(2)?.toIntOrNull()
             val o = JSONObject(payload)
             val date = o.optLong("date", 0L)
             if (date == 0L || !o.has("weight")) return@runCatching null
@@ -144,13 +152,13 @@ class MQTTService(
             )
         }
 
-        // Check if client is initialized and connected
-        if (!::mqttClient.isInitialized || !mqttClient.state.isConnected) {
+        // Check if client is initialized and connected (with the current topic prefix)
+        if (!isReady()) {
             Timber.w("MQTTService: Client for '$operationName' not initialized or not connected. Attempting to reconnect...")
             connectMQTT() // Attempt to establish or re-establish the connection
 
             // After attempting to connect, check the status again
-            if (!::mqttClient.isInitialized || !mqttClient.state.isConnected) {
+            if (!isReady()) {
                 Timber.e("MQTTService: Failed to connect to MQTT broker for '$operationName'.")
                 viewModel.setConnectAvailable(false) // Update ViewModel
                 return SyncResult.Failure(
@@ -284,6 +292,7 @@ class MQTTService(
         viewModel.setMQTTConnecting(true)
         viewModel.setConnectAvailable(false) // Assume not connected until success
         clearErrorMessage()
+        close() // a reconnect (test button, changed prefix) replaces the previous connection
 
         try {
             withContext(Dispatchers.IO) {
@@ -319,7 +328,7 @@ class MQTTService(
 
                 // If we reach here, mqttClient is successfully built and connected.
                 // Now, initialize or re-initialize mqttSync with the connected client.
-                mqttSync = MQTTSync(mqttClient) // Initialize/Re-initialize the main mqttSync instance
+                mqttSync = MQTTSync(mqttClient, viewModel.effectiveTopicPrefix())
 
                 // Step 3: Home Assistant Discovery (if enabled)
                 // This now uses the initialized this.mqttSync and its this.mqttClient
@@ -558,6 +567,58 @@ class MQTTService(
                         viewModel.setMqttUseDiscovery(newCheckedState)
                     },
                     enabled = viewModel.syncEnabled.value
+                )
+            }
+
+            val useTopicPrefixState by viewModel.mqttUseTopicPrefix.observeAsState(false)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        enabled = viewModel.syncEnabled.value,
+                        onClick = {
+                            if (viewModel.syncEnabled.value) {
+                                viewModel.setMqttUseTopicPrefix(!useTopicPrefixState)
+                            }
+                        }
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(id = R.string.mqtt_use_topic_prefix_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (viewModel.syncEnabled.value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Switch(
+                    checked = useTopicPrefixState,
+                    onCheckedChange = { newCheckedState ->
+                        viewModel.setMqttUseTopicPrefix(newCheckedState)
+                    },
+                    enabled = viewModel.syncEnabled.value
+                )
+            }
+
+            if (useTopicPrefixState) {
+                val topicPrefixState by viewModel.mqttTopicPrefix.observeAsState("")
+
+                OutlinedTextField(
+                    enabled = viewModel.syncEnabled.value,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    value = topicPrefixState,
+                    onValueChange = { viewModel.setMqttTopicPrefix(it) },
+                    // No label: the switch above names the field, and without one the empty field
+                    // already shows "openScaleSync/" and the example instead of just a label.
+                    placeholder = { Text(stringResource(id = R.string.mqtt_topic_prefix_hint)) },
+                    // The fixed part of the topic in front shows where the prefix lands.
+                    prefix = { Text("${MQTTSync.topicBase("")}/") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text
+                    )
                 )
             }
 

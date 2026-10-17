@@ -49,6 +49,33 @@ class MQTTViewModelTest {
     }
 
     @Test
+    fun topicPrefix_isSanitizedToOneTopicLevel_andPersisted() {
+        MQTTViewModel(prefs).setMqttTopicPrefix("ali/ce +#ö-1_")
+
+        // No separators, wildcards, spaces or non-ASCII — and it survives a new instance.
+        assertEquals("alice-1_", MQTTViewModel(prefs).mqttTopicPrefix.value)
+    }
+
+    @Test
+    fun topicPrefix_onlyTakesEffectWhileSwitchedOn_andSurvivesSwitchingOff() {
+        val vm = MQTTViewModel(prefs)
+        vm.setMqttTopicPrefix("alice")
+        assertEquals("off by default", "", vm.effectiveTopicPrefix())
+
+        vm.setMqttUseTopicPrefix(true)
+        assertEquals("alice", vm.effectiveTopicPrefix())
+
+        vm.setMqttUseTopicPrefix(false)
+        assertEquals("", vm.effectiveTopicPrefix())
+        assertEquals("the text is kept for switching back on", "alice", MQTTViewModel(prefs).mqttTopicPrefix.value)
+    }
+
+    @Test
+    fun topicPrefix_defaultsToEmpty() {
+        assertEquals("", MQTTViewModel(prefs).mqttTopicPrefix.value)
+    }
+
+    @Test
     fun unknownUserDefaultsToZero() {
         val vm = MQTTViewModel(prefs)
         assertEquals(0L, vm.getLastPublishedDate(1))

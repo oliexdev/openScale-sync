@@ -101,6 +101,37 @@ class MQTTSyncTest {
         assertEquals(null, rows[0][2])
     }
 
+    // --- Optional topic prefix -------------------------------------------------------------
+
+    @Test
+    fun noPrefix_keepsTheOriginalTopicsAndDevices() {
+        assertEquals("openScaleSync", MQTTSync.topicBase(""))
+        assertEquals("1", MQTTSync.deviceKey("", 1))
+    }
+
+    @Test
+    fun prefix_addsOneTopicLevel_andQualifiesTheDevice() {
+        assertEquals("openScaleSync/alice", MQTTSync.topicBase("alice"))
+        assertEquals("alice_1", MQTTSync.deviceKey("alice", 1))
+    }
+
+    @Test
+    fun inboundPrefix_cannotReachIntoTheUnprefixedInboundTree() {
+        // openScaleSync/inbound/1/... is the unprefixed inbound tree: another phone would import
+        // this one's measurements as its own.
+        assertEquals("openScaleSync/inbound_", MQTTSync.topicBase("inbound"))
+        assertEquals("inbound__1", MQTTSync.deviceKey("inbound", 1))
+    }
+
+    @Test
+    fun inboundUserId_isReadBelowTheTopicBase() {
+        assertEquals(3, MQTTSync.inboundUserId("openScaleSync", "openScaleSync/inbound/3/weight"))
+        assertEquals(3, MQTTSync.inboundUserId("openScaleSync/alice", "openScaleSync/alice/inbound/3"))
+        // Another installation's tree, or no numeric user level: not ours to attribute.
+        assertEquals(null, MQTTSync.inboundUserId("openScaleSync", "openScaleSync/alice/inbound/3"))
+        assertEquals(null, MQTTSync.inboundUserId("openScaleSync", "openScaleSync/inbound/x"))
+    }
+
     @Test
     fun emptyList_yieldsHeaderOnly_noRows() {
         val p = MQTTSync.buildHistoryPayload(emptyList())

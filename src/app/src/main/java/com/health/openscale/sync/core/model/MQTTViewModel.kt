@@ -34,6 +34,12 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
         const val USE_SSL = "mqtt_use_ssl"
         const val USE_DISCOVERY = "mqtt_use_discovery"
         const val LAST_PUBLISHED_DATES = "last_published_dates"
+        const val TOPIC_PREFIX = "mqtt_topic_prefix"
+        const val USE_TOPIC_PREFIX = "mqtt_use_topic_prefix"
+
+        /** A topic prefix keeps only what is safe in one topic level: no `/`, no wildcards. */
+        fun sanitizeTopicPrefix(raw: String): String =
+            raw.filter { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' || it == '-' }
     }
 
     private val _mqttServer = MutableLiveData<String>(sharedPreferences.getString(SERVER, ""))
@@ -44,6 +50,8 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
 
     private val _mqttUseSsl = MutableLiveData<Boolean>(sharedPreferences.getBoolean(USE_SSL, true))
     private val _mqttUseDiscovery = MutableLiveData<Boolean>(sharedPreferences.getBoolean(USE_DISCOVERY, true))
+    private val _mqttTopicPrefix = MutableLiveData<String>(sharedPreferences.getString(TOPIC_PREFIX, "") ?: "")
+    private val _mqttUseTopicPrefix = MutableLiveData<Boolean>(sharedPreferences.getBoolean(USE_TOPIC_PREFIX, false))
 
     private val gson = Gson()
     private val lastPublishedDatesType = object : TypeToken<MutableMap<Int, Long>>() {}.type
@@ -103,6 +111,31 @@ class MQTTViewModel(private val sharedPreferences: SharedPreferences) : ViewMode
         _mqttUseDiscovery.value = useDiscovery
         sharedPreferences.edit { putBoolean(USE_DISCOVERY, useDiscovery) }
     }
+
+    /**
+     * Optional extra topic level (`openScaleSync/<prefix>/<userId>/…`). openScale numbers its users
+     * from 1 on every phone, so several phones on one broker need one each to keep their topics and
+     * Home Assistant devices apart. Empty keeps the original topics.
+     */
+    val mqttTopicPrefix: LiveData<String> = _mqttTopicPrefix
+
+    fun setMqttTopicPrefix(value: String) {
+        val sanitized = sanitizeTopicPrefix(value)
+        _mqttTopicPrefix.value = sanitized
+        sharedPreferences.edit { putString(TOPIC_PREFIX, sanitized) }
+    }
+
+    /** Switches the prefix on or off; the text is kept, so switching back on restores it. */
+    val mqttUseTopicPrefix: LiveData<Boolean> = _mqttUseTopicPrefix
+
+    fun setMqttUseTopicPrefix(use: Boolean) {
+        _mqttUseTopicPrefix.value = use
+        sharedPreferences.edit { putBoolean(USE_TOPIC_PREFIX, use) }
+    }
+
+    /** The prefix the topics actually use: the text while switched on, otherwise none. */
+    fun effectiveTopicPrefix(): String =
+        if (_mqttUseTopicPrefix.value == true) _mqttTopicPrefix.value.orEmpty() else ""
 
     /** Epoch millis of the newest measurement published to [userId]'s retained "last" topic, or 0. */
     fun getLastPublishedDate(userId: Int): Long = lastPublishedDates[userId] ?: 0L

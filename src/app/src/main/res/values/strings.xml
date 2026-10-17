@@ -114,6 +114,8 @@
     <string name="mqtt_password_title">Password</string>
     <string name="mqtt_use_ssl_tls_title">Use SSL/TLS Encryption</string>
     <string name="mqtt_ssl_disabled_warning">Warning: Disabling SSL/TLS sends data unencrypted. Recommended for trusted local networks only.</string>
+    <string name="mqtt_use_topic_prefix_title">Custom MQTT prefix</string>
+    <string name="mqtt_topic_prefix_hint">e.g. alice</string>
     <string name="mqtt_use_discovery_tite">Use Home Assistant discovery</string>
 
     <string name="wger_successful_connected_text">Successfully connected to Wger</string>
