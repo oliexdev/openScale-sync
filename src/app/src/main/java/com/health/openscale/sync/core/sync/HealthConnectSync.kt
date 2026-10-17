@@ -71,11 +71,12 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         // Mass records: <= 1000 kg. A percentage <= 100 with a weight <= 1000 kg can never
         // exceed that for the derived water/lean/bone masses, so the percent limits below cover them.
         outOfRange("weight", measurement.weight, MAX_WEIGHT_KG)?.let { return it }
-        outOfRange("body fat", measurement.body_fat, MAX_PERCENT)?.let { return it }
-        outOfRange("water", measurement.water, MAX_PERCENT)?.let { return it }
-        // Only built when > 0 (see buildRecords), so only those need checking.
-        if (measurement.lbm > 0f) outOfRange("lean body mass", measurement.lbm, MAX_PERCENT)?.let { return it }
-        if (measurement.bone > 0f) outOfRange("bone", measurement.bone, MAX_PERCENT)?.let { return it }
+        // Optional values are only built when present and > 0 (see buildRecords), so only those
+        // need checking.
+        fat(measurement)?.let { outOfRange("body fat", it, MAX_PERCENT) }?.let { return it }
+        water(measurement)?.let { outOfRange("water", it, MAX_PERCENT) }?.let { return it }
+        lbm(measurement)?.let { outOfRange("lean body mass", it, MAX_PERCENT) }?.let { return it }
+        bone(measurement)?.let { outOfRange("bone", it, MAX_PERCENT) }?.let { return it }
 
         val bmr = measurement.values.firstOrNull { it.isBuiltin("BMR") }?.value ?: 0f
         if (bmr > 0f) outOfRange("BMR", bmr, MAX_BMR_KCAL_PER_DAY)?.let { return it }
@@ -83,14 +84,22 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         return null
     }
 
+    // The optional values a record is written for: present, and not a 0 a scale reports for "none".
+    private fun fat(m: OpenScaleMeasurement) = m.body_fat?.takeIf { it > 0f }
+    private fun water(m: OpenScaleMeasurement) = m.water?.takeIf { it > 0f }
+    private fun lbm(m: OpenScaleMeasurement) = m.lbm?.takeIf { it > 0f }
+    private fun bone(m: OpenScaleMeasurement) = m.bone?.takeIf { it > 0f }
+
     /** Health Connect's requireNonNegative is `value >= 0`, which NaN fails too — mirror that here. */
     private fun outOfRange(name: String, value: Float, max: Float): String? =
         if (!value.isFinite() || value < 0f || value > max) "$name is $value" else null
 
     /**
-     * The record set one measurement maps to. Weight/water/fat are always written; lean body mass,
-     * bone mass and BMR only when openScale actually has that value. Every record carries a stable
-     * [buildMetadata] clientRecordId, which is what makes a re-insert an upsert (see [insert]).
+     * The record set one measurement maps to. Weight is always written; water, fat, lean body mass,
+     * bone mass and BMR only when openScale actually has that value — a scale without body
+     * composition must not put a 0 % body fat / 0 kg water weigh-in into Health Connect. Every
+     * record carries a stable [buildMetadata] clientRecordId, which is what makes a re-insert an
+     * upsert (see [insert]).
      *
      * Only call this for a measurement [rejectionReason] cleared — the constructors throw otherwise.
      */
@@ -98,16 +107,10 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         val records = mutableListOf<Record>()
 
         records.add(buildWeightRecord(measurement))
-        records.add(buildWaterRecord(measurement))
-        records.add(buildFatRecord(measurement))
-
-        if (measurement.lbm > 0f) {
-            records.add(buildLeanBodyMassRecord(measurement))
-        }
-
-        if (measurement.bone > 0f) {
-            records.add(buildBoneMassRecord(measurement))
-        }
+        water(measurement)?.let { records.add(buildWaterRecord(measurement, it)) }
+        fat(measurement)?.let { records.add(buildFatRecord(measurement, it)) }
+        lbm(measurement)?.let { records.add(buildLeanBodyMassRecord(measurement, it)) }
+        bone(measurement)?.let { records.add(buildBoneMassRecord(measurement, it)) }
 
         val bmrValue = measurement.values.firstOrNull { it.isBuiltin("BMR") }?.value ?: 0f
         if (bmrValue > 0f) {
@@ -330,50 +333,50 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         )
     }
 
-    private fun buildWaterRecord(measurement: OpenScaleMeasurement): BodyWaterMassRecord {
+    private fun buildWaterRecord(measurement: OpenScaleMeasurement, waterPct: Float): BodyWaterMassRecord {
         val measurementInstant = measurement.date.toInstant()
         val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
 
         return BodyWaterMassRecord(
             time = measurementInstant,
             zoneOffset = zoneOffset,
-            mass = Mass.kilograms(measurement.weight.toDouble() * measurement.water.toDouble() / 100),
+            mass = Mass.kilograms(measurement.weight.toDouble() * waterPct.toDouble() / 100),
             metadata = buildMetadata(measurement, "water")
         )
     }
 
-    private fun buildFatRecord(measurement: OpenScaleMeasurement): BodyFatRecord {
+    private fun buildFatRecord(measurement: OpenScaleMeasurement, fatPct: Float): BodyFatRecord {
         val measurementInstant = measurement.date.toInstant()
         val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
 
         return BodyFatRecord(
             time = measurementInstant,
             zoneOffset = zoneOffset,
-            percentage = Percentage(measurement.body_fat.toDouble()),
+            percentage = Percentage(fatPct.toDouble()),
             metadata = buildMetadata(measurement, "fat")   // HC clientRecordId suffix — internal dedup key, kept stable
         )
     }
 
-    private fun buildLeanBodyMassRecord(measurement: OpenScaleMeasurement): LeanBodyMassRecord {
+    private fun buildLeanBodyMassRecord(measurement: OpenScaleMeasurement, lbmPct: Float): LeanBodyMassRecord {
         val measurementInstant = measurement.date.toInstant()
         val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
 
         return LeanBodyMassRecord(
             time = measurementInstant,
             zoneOffset = zoneOffset,
-            mass = Mass.kilograms((measurement.weight * measurement.lbm / 100f).toDouble()),
+            mass = Mass.kilograms((measurement.weight * lbmPct / 100f).toDouble()),
             metadata = buildMetadata(measurement, "lbm")
         )
     }
 
-    private fun buildBoneMassRecord(measurement: OpenScaleMeasurement): BoneMassRecord {
+    private fun buildBoneMassRecord(measurement: OpenScaleMeasurement, bonePct: Float): BoneMassRecord {
         val measurementInstant = measurement.date.toInstant()
         val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
 
         return BoneMassRecord(
             time = measurementInstant,
             zoneOffset = zoneOffset,
-            mass = Mass.kilograms((measurement.weight * measurement.bone / 100f).toDouble()),
+            mass = Mass.kilograms((measurement.weight * bonePct / 100f).toDouble()),
             metadata = buildMetadata(measurement, "bone")
         )
     }

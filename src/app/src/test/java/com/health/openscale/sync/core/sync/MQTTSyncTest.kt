@@ -87,6 +87,20 @@ class MQTTSyncTest {
         assertEquals(90.0f, rows[1][5])  // m1 waist
     }
 
+    @Suppress("UNCHECKED_CAST")
+    @Test
+    fun historyCell_isNull_forAValueWithoutANumber() {
+        // A value entry without a number (text only) is not a measured 0.
+        val m = measurement(1, 1000L, listOf(
+            mv("WEIGHT", "kg", 80.0f),
+            OpenScaleMeasurementValue("builtin.body_fat", "BODY_FAT", "%", false, null)
+        ))
+
+        val rows = MQTTSync.buildHistoryPayload(listOf(m))["rows"] as List<List<Any?>>
+
+        assertEquals(null, rows[0][2])
+    }
+
     @Test
     fun emptyList_yieldsHeaderOnly_noRows() {
         val p = MQTTSync.buildHistoryPayload(emptyList())

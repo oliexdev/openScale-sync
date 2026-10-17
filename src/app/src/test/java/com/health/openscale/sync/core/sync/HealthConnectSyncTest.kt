@@ -176,6 +176,15 @@ class HealthConnectSyncTest {
     }
 
     @Test
+    fun write_omitsFatAndWater_forAWeightOnlyMeasurement() = runTest {
+        // A scale without body composition (or with impedance off) only reports the weight; the
+        // missing fat/water must not reach Health Connect as a 0 % / 0 kg weigh-in.
+        sync.insert(OpenScaleMeasurement.fromValues(7, 1, Date(1_000_000L), "alice", listOf(mv("WEIGHT", "kg", 80f))))
+
+        assertEquals(listOf("7_weight"), lastWrittenIds())
+    }
+
+    @Test
     fun delete_onlyCoversTheMeasurementItself_notTheWholeDay() = runTest {
         val time = Date(1_000_000L)
 

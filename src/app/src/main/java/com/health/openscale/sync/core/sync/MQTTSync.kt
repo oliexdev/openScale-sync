@@ -31,6 +31,8 @@ import java.util.Date
 import java.util.concurrent.TimeUnit
 
 class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
+    // No serializeNulls(): an optional metric openScale does not have is null and left out of the
+    // payload, so Home Assistant's `| default(none)` templates show "unknown" instead of 0.
     private val gson = GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mmZ").create()
 
     /**
@@ -268,15 +270,12 @@ class MQTTSync(private val mqttClient: Mqtt5BlockingClient) : SyncInterface() {
             val units = canonical.associate { it.backendKey to it.unit } + extraUnits
 
             val rows = measurements.sortedBy { it.date.time }.map { m ->
-                // Empty value set (defensive) → fall back to the convenience fields as-is;
-                // otherwise emit a canonical value only when that metric is actually present.
-                val hasValues = m.values.isNotEmpty()
-                val present = m.values.mapTo(HashSet()) { it.backendKey() }
+                // An absent canonical metric is null in the convenience field, so its cell is null too.
                 val byKey = m.values.associateBy { it.backendKey() }
                 val row = ArrayList<Any?>(fields.size)
                 row.add(m.date.time)
                 canonical.forEach { metric ->
-                    row.add(if (!hasValues || metric.backendKey in present) metric.accessor(m) else null)
+                    row.add(metric.accessor(m))
                 }
                 extraKeys.forEach { row.add(byKey[it]?.value) }
                 row

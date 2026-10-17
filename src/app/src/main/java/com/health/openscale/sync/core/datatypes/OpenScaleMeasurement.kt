@@ -84,11 +84,12 @@ data class OpenScaleMeasurement(
     val userId: Int,
     val date: Date,
     val weight: Float,
-    val body_fat: Float,
-    val water: Float,
-    val muscle: Float,
-    val lbm: Float,
-    val bone: Float,
+    // Optional metrics: null when openScale does not have the value (never a stand-in 0).
+    val body_fat: Float?,
+    val water: Float?,
+    val muscle: Float?,
+    val lbm: Float?,
+    val bone: Float?,
     // Human-readable openScale user name; carried for multi-user routing/labelling
     // (MQTT topic uses the stable userId, this is for the JSON payload / HA display name).
     val username: String = "",
@@ -106,16 +107,18 @@ data class OpenScaleMeasurement(
          * Builds a measurement from the generic value set, deriving the convenience weight/fat/
          * water/muscle fields: weight in kg (WEIGHT, canonical); fat/water/muscle as % (taken
          * directly when the value's unit is "%", otherwise converted from kg using the weight).
+         * A missing optional value stays null, so no backend can pass it on as a measured 0; a
+         * missing weight is 0, and such a measurement is skipped (see [hasValidWeight]).
          */
         fun fromValues(
             id: Int, userId: Int, date: Date, username: String,
             values: List<OpenScaleMeasurementValue>
         ): OpenScaleMeasurement {
             val weight = values.firstOrNull { it.isBuiltin("WEIGHT") }?.value ?: 0f
-            fun pct(key: String): Float {
-                val v = values.firstOrNull { it.isBuiltin(key) } ?: return 0f
-                val value = v.value ?: return 0f
-                return if (v.unit == "%") value else if (weight > 0f) value / weight * 100f else 0f
+            fun pct(key: String): Float? {
+                val v = values.firstOrNull { it.isBuiltin(key) } ?: return null
+                val value = v.value ?: return null
+                return if (v.unit == "%") value else if (weight > 0f) value / weight * 100f else null
             }
             return OpenScaleMeasurement(
                 id, userId, date, weight, pct("BODY_FAT"), pct("WATER"), pct("MUSCLE"), pct("LBM"), pct("BONE"),username, values
@@ -129,7 +132,7 @@ data class OpenScaleMeasurement(
         data class CanonicalMetric(
             val key: String,
             val unit: String,
-            val accessor: (OpenScaleMeasurement) -> Float
+            val accessor: (OpenScaleMeasurement) -> Float?
         ) {
             val backendKey: String get() = key.lowercase()
         }

@@ -350,10 +350,10 @@ class EndurainSync(
                 return WeightRequest(
                     date = dateOnly.format(m.date),
                     weight = w,
-                    bodyFat = m.body_fat.takeIf { it > 0f },
-                    bodyWater = m.water.takeIf { it > 0f },
-                    muscleMass = if (w != null) m.muscle.takeIf { it > 0f }?.let { w * it / 100f } else null,
-                    boneMass = if (w != null) m.bone.takeIf { it > 0f }?.let { w * it / 100f } else null,
+                    bodyFat = m.body_fat?.takeIf { it > 0f },
+                    bodyWater = m.water?.takeIf { it > 0f },
+                    muscleMass = if (w != null) m.muscle?.takeIf { it > 0f }?.let { w * it / 100f } else null,
+                    boneMass = if (w != null) m.bone?.takeIf { it > 0f }?.let { w * it / 100f } else null,
                     visceralFat = null
                 )
             }

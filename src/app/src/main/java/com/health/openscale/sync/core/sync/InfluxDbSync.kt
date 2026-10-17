@@ -42,7 +42,9 @@ class InfluxDbSync(
             numeric.joinToString(",") { "${it.backendKey()}=${it.value}" }
         } else {
             // Defensive: values should always be present on a v3 peer; keep the core fixed fields.
-            OpenScaleMeasurement.CANONICAL_METRICS.joinToString(",") { "${it.backendKey}=${it.accessor(m)}" }
+            OpenScaleMeasurement.CANONICAL_METRICS
+                .mapNotNull { metric -> metric.accessor(m)?.let { "${metric.backendKey}=$it" } }
+                .joinToString(",")
         }
         return "$measurementName,source=openscale$userTags $fields ${m.date.time * 1_000_000L}"
     }

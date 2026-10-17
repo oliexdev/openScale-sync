@@ -76,10 +76,10 @@ class DataParsingTest {
     // --- fromValues: weight is derived; guards against missing weight / divide-by-zero ----
 
     @Test
-    fun fromValues_emptyValues_yieldsZeroWeight() {
+    fun fromValues_emptyValues_yieldsZeroWeight_andNoOptionalValues() {
         val m = OpenScaleMeasurement.fromValues(1, 1, Date(0), "", emptyList())
         assertEquals(0f, m.weight, 0f)
-        assertEquals(0f, m.body_fat, 0f)
+        assertNull(m.body_fat)
     }
 
     @Test
@@ -92,7 +92,7 @@ class DataParsingTest {
             )
         )
         assertEquals(80f, m.weight, 0f)
-        assertEquals(25f, m.body_fat, 0.0001f)
+        assertEquals(25f, m.body_fat!!, 0.0001f)
     }
 
     @Test
@@ -105,7 +105,7 @@ class DataParsingTest {
                 OpenScaleMeasurementValue("builtin.body_fat", "Fat", "kg", false, 8f),
             )
         )
-        assertEquals(10f, m.body_fat, 0.0001f)
+        assertEquals(10f, m.body_fat!!, 0.0001f)
     }
 
     @Test
@@ -115,7 +115,7 @@ class DataParsingTest {
             listOf(OpenScaleMeasurementValue("builtin.body_fat", "Fat", "kg", false, 8f))
         )
         assertEquals(0f, m.weight, 0f)
-        assertEquals(0f, m.body_fat, 0f)   // weight 0 → guarded, no NaN/Infinity
+        assertNull(m.body_fat)   // weight 0 → guarded, no NaN/Infinity
     }
 
     // --- identity (openScale API v3) -------------------------------------------

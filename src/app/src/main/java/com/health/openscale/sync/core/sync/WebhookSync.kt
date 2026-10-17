@@ -31,11 +31,14 @@ class WebhookSync(
             "userId" to m.userId,
             "username" to m.username,
             "date" to dateFormat.format(m.date),
-            "weight" to m.weight,
-            "body_fat" to m.body_fat,
-            "water" to m.water,
-            "muscle" to m.muscle
+            "weight" to m.weight
         )
+            // Optional metrics only when openScale has them — never a stand-in 0.
+            .also { map ->
+                m.body_fat?.let { map["body_fat"] = it }
+                m.water?.let { map["water"] = it }
+                m.muscle?.let { map["muscle"] = it }
+            }
             // Full, self-describing generic value set (all types incl. custom + units).
             .also { map ->
                 if (m.values.isNotEmpty()) {
