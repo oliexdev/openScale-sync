@@ -122,6 +122,7 @@ import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.fullSyncMessage
 import com.health.openscale.sync.gui.theme.OpenScaleSyncTheme
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import timber.log.Timber.DebugTree
@@ -243,6 +244,16 @@ class MainActivity : AppCompatActivity() {
         resolveOpenScaleVariant(sharedPreferences)
         openScaleService.refreshVariants()
         openScaleService.checkPermissionGranted()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // A recreated activity builds its own backends, so these connections are not reused.
+        // lifecycleScope is already cancelled here, hence a scope of its own.
+        if (::syncServiceList.isInitialized) {
+            val services = syncServiceList
+            CoroutineScope(Dispatchers.IO).launch { services.forEach { runCatching { it.close() } } }
+        }
     }
 
     /**

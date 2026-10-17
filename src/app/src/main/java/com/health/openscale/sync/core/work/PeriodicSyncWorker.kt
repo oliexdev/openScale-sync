@@ -67,28 +67,32 @@ class PeriodicSyncWorker(
             .getOrElse { return Result.retry() }
 
         var anyFailure = false
-        for (service in services) {
-            val vm = service.viewModel()
-            if (!vm.syncEnabled.value) continue
-            service.openScaleDataService = dataProvider
-            runCatching { service.init() }.onFailure { Timber.e(it, "%s.init() failed in periodic sync", vm.getName()) }
+        try {
+            for (service in services) {
+                val vm = service.viewModel()
+                if (!vm.syncEnabled.value) continue
+                service.openScaleDataService = dataProvider
+                runCatching { service.init() }.onFailure { Timber.e(it, "%s.init() failed in periodic sync", vm.getName()) }
 
-            if (service.exportEnabled()) {
-                val measurements = if (service.isMultiUser) allMeasurements
-                    else allMeasurements.filter { it.userId == vm.selectedUserId.value }
-                val r = runCatching { service.reconcile(measurements) }.getOrNull()
-                if (r is SyncResult.Failure) anyFailure = true
-            }
-            if (service.importEnabled()) {
-                when (val r = runCatching { service.runInbound(vm.selectedUserId.value) }.getOrNull()) {
-                    is SyncResult.Failure -> anyFailure = true
-                    is SyncResult.Success -> if (r.data.total > 0) Timber.d(
-                        "%s: imported %d new and enriched %d existing measurement(s)",
-                        vm.getName(), r.data.imported, r.data.updated
-                    )
-                    null -> {}
+                if (service.exportEnabled()) {
+                    val measurements = if (service.isMultiUser) allMeasurements
+                        else allMeasurements.filter { it.userId == vm.selectedUserId.value }
+                    val r = runCatching { service.reconcile(measurements) }.getOrNull()
+                    if (r is SyncResult.Failure) anyFailure = true
+                }
+                if (service.importEnabled()) {
+                    when (val r = runCatching { service.runInbound(vm.selectedUserId.value) }.getOrNull()) {
+                        is SyncResult.Failure -> anyFailure = true
+                        is SyncResult.Success -> if (r.data.total > 0) Timber.d(
+                            "%s: imported %d new and enriched %d existing measurement(s)",
+                            vm.getName(), r.data.imported, r.data.updated
+                        )
+                        null -> {}
+                    }
                 }
             }
+        } finally {
+            services.forEach { runCatching { it.close() } }
         }
 
         return if (anyFailure) Result.retry() else Result.success()

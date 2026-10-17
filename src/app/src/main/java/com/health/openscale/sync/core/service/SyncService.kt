@@ -81,6 +81,7 @@ class SyncService : Service() {
 
         // Prepare all sync backends (single source of truth in BackendRegistry; a test may inject fakes)
         syncServiceList = (backendFactory ?: { c, p -> BackendRegistry.create(c, p) })(applicationContext, prefs)
+        val services = syncServiceList
 
         // The variant picker lives in the UI, but this service can run before the app has ever been
         // opened after an openScale install — resolve here too, or every provider read would go to
@@ -110,7 +111,14 @@ class SyncService : Service() {
             }
 
             delay(500.milliseconds) // small delay to give init a chance to complete
-            onHandleIntent(intent, dataProvider)
+            try {
+                onHandleIntent(intent, dataProvider)
+            } finally {
+                // Every op of this intent has completed (onHandleIntent awaits them), so the
+                // connections can go before the service does.
+                services.forEach { runCatching { it.close() } }
+                stopServiceCleanly()
+            }
 
             Timber.d("onStartCommand done in %d ms", (System.nanoTime() - t0) / 1_000_000)
         }
@@ -129,7 +137,6 @@ class SyncService : Service() {
             prefs.edit { putBoolean(OpenScaleViewModel.OPENSCALE_VERSION_UNSUPPORTED, true) }
             Timber.w("openScale apiVersion=%d < required %d -> blocking sync (user must update openScale)",
                 apiVersion, OpenScaleDataProvider.MIN_API_VERSION)
-            stopServiceCleanly()
             return
         }
         prefs.edit { putBoolean(OpenScaleViewModel.OPENSCALE_VERSION_UNSUPPORTED, false) }
@@ -147,14 +154,12 @@ class SyncService : Service() {
         val selected = prefs.getString(OpenScaleViewModel.PACKAGE_NAME, null)
         if (sender != null && selected != null && sender != selected) {
             Timber.w("Ignoring sync intent from %s -> synced with %s", sender, selected)
-            stopServiceCleanly()
             return
         }
 
         val mode = intent?.extras?.getString("mode") ?: "none"
         if (mode !in setOf("insert", "update", "delete", "clear", "changed")) {
             Timber.w("Unknown mode='%s' -> ignoring", mode)
-            stopServiceCleanly()
             return
         }
 
@@ -321,8 +326,6 @@ class SyncService : Service() {
         // Headless feedback: surface unsynced (queued) measurements as a notification,
         // auto-cleared once every backend's retry queue is empty again.
         updateRetryNotification(syncServiceList.sumOf { it.pendingRetryCount() })
-
-        stopServiceCleanly()
     }
 
     /** Posts (or clears) a notification reflecting how many ops are waiting in the retry queues. */

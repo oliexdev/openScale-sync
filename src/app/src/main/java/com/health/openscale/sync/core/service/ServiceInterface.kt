@@ -531,6 +531,13 @@ abstract class ServiceInterface (
     }
 
     /**
+     * Release what [connect] holds open. Called by the short-lived drivers ([SyncService],
+     * [com.health.openscale.sync.core.work.PeriodicSyncWorker]) once their work is done, and when
+     * the activity goes away — none of them reuses the instance afterwards. Default: nothing to do.
+     */
+    open suspend fun close() {}
+
+    /**
      * The one central place a real-time op flows through: run it via [dispatch], and on failure
      * remember the measurement as outstanding so the next init() re-derives and replays it.
      * reconcile() routes its deletes through here too.

@@ -47,6 +47,10 @@ class InstrFakeBackend(context: Context, prefs: SharedPreferences) : ServiceInte
     private fun record(op: String): SyncResult<Unit> { wire += op; return SyncResult.Success(Unit) }
 
     override suspend fun connect() {}
+
+    /** Set once the service released this backend (kept off [wire], which counts dispatched ops). */
+    @Volatile var closed = false
+    override suspend fun close() { closed = true }
     override suspend fun insert(measurement: OpenScaleMeasurement) = record("insert#${measurement.id}@${measurement.date.time}")
     override suspend fun update(measurement: OpenScaleMeasurement) = record("update#${measurement.id}@${measurement.date.time}")
     override suspend fun delete(userId: Int, date: Date) = record("delete@${date.time}/u$userId")

@@ -261,6 +261,16 @@ class MQTTService(
         }
     }
 
+    // Nothing else ever disconnects: a finished SyncService left its client connected (keep-alive
+    // pings every 60 s) until the process died or the next connection took the session over.
+    override suspend fun close() {
+        if (!::mqttClient.isInitialized || !mqttClient.state.isConnected) return
+        withContext(Dispatchers.IO) {
+            runCatching { mqttClient.disconnect() }
+                .onFailure { Timber.w(it, "MQTTService: disconnect failed") }
+        }
+    }
+
     private suspend fun connectMQTT() {
         if (!viewModel.syncEnabled.value) {
             viewModel.setConnectAvailable(false)

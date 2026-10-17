@@ -91,6 +91,15 @@ class SyncServiceInstrumentedTest {
     }
 
     @Test
+    fun backends_areClosed_afterTheOpCompleted() {
+        start("mode" to "insert", "id" to 7, "userId" to 1, "date" to 1000L, "values" to WEIGHT_VALUES)
+        val backend = awaitWire { it.contains("insert#7@1000") }
+        val end = System.currentTimeMillis() + 5_000
+        while (!backend.closed && System.currentTimeMillis() < end) Thread.sleep(50)
+        assertTrue("the service must release its backends once the op is done", backend.closed)
+    }
+
+    @Test
     fun clear_isDispatched() {
         start("mode" to "clear", "userId" to 1)
         awaitWire { it.contains("clear:1") }
