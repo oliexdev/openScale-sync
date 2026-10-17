@@ -92,7 +92,7 @@ class SyncServiceInstrumentedTest {
 
     @Test
     fun backends_areClosed_afterTheOpCompleted() {
-        start("mode" to "insert", "id" to 7, "userId" to 1, "date" to 1000L, "values" to WEIGHT_VALUES)
+        start("mode" to "insert", "id" to 7, "userId" to 1, "date" to 1000L, "values" to WEIGHT_80)
         val backend = awaitWire { it.contains("insert#7@1000") }
         val end = System.currentTimeMillis() + 5_000
         while (!backend.closed && System.currentTimeMillis() < end) Thread.sleep(50)
