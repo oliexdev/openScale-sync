@@ -23,9 +23,8 @@ import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.service.SyncResult
 import retrofit2.Response
 import retrofit2.Retrofit
+import retrofit2.http.Body
 import retrofit2.http.DELETE
-import retrofit2.http.Field
-import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -43,7 +42,7 @@ class WgerSync(wgerRetrofit: Retrofit) : SyncInterface() {
 
     suspend fun insert(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
             try {
-                val response: Response<Unit> = wgerApi.insert(wgerDateFormat.format(measurement.date), measurement.weight)
+                val response: Response<Unit> = wgerApi.insert(WgerWeightEntryRequest(wgerDateFormat.format(measurement.date), measurement.weight))
                 if (response.isSuccessful) {
                     return SyncResult.Success(Unit)
                 } else {
@@ -99,7 +98,7 @@ class WgerSync(wgerRetrofit: Retrofit) : SyncInterface() {
                 val wgerWeightEntryList = wgerApi.getWeightEntry(wgerDateFormat.format(measurement.date))
                 if (wgerWeightEntryList.results?.isNotEmpty() == true) {
                     val wgerId = wgerWeightEntryList.results[0].id
-                    val response: Response<Unit> = wgerApi.update(wgerId, wgerDateFormat.format(measurement.date), measurement.weight)
+                    val response: Response<Unit> = wgerApi.update(wgerId, WgerWeightEntryRequest(wgerDateFormat.format(measurement.date), measurement.weight))
                     if (response.isSuccessful) {
                         return SyncResult.Success(Unit)
                     } else {
@@ -139,19 +138,16 @@ class WgerSync(wgerRetrofit: Retrofit) : SyncInterface() {
         suspend fun getWeightEntry(@Query("date") wgerDate: String): WgerWeightEntryList
 
         @POST("weightentry/")
-        @FormUrlEncoded
-        suspend fun insert(@Field("date") date: String?, @Field("weight") weight: Float): Response<Unit>
+        suspend fun insert(@Body entry: WgerWeightEntryRequest): Response<Unit>
 
         @PATCH("weightentry/{wger_id}/")
-        @FormUrlEncoded
         suspend fun update(
-            @Path("wger_id") wgerId: Long,
-            @Field("date") date: String,
-            @Field("weight") weight: Float
+            @Path("wger_id") wgerId: String,
+            @Body entry: WgerWeightEntryRequest
         ): Response<Unit>
 
         @DELETE("weightentry/{wger_id}/")
-        suspend fun delete(@Path("wger_id") wgerId: Long) : Response<Unit>
+        suspend fun delete(@Path("wger_id") wgerId: String) : Response<Unit>
     }
 
     data class WgerWeightEntryList(
@@ -166,12 +162,23 @@ class WgerSync(wgerRetrofit: Retrofit) : SyncInterface() {
     )
 
     data class WgerWeightEntry(
+        // String, not a number: wger 2.7 moved weight entries into the measurements
+        // and the id exposed over the compat endpoint is a UUID. This makes sure
+        // the code works with both versions
         @SerializedName("id")
-        val id: Long = 0,
+        val id: String = "",
         @SerializedName("date")
         val date: String? = null,
         @SerializedName("weight")
         val weight: Float = 0f
+    )
+
+    // Sent as JSON: wger 2.7 accepts only JSON. Older servers accept JSON as well
+    data class WgerWeightEntryRequest(
+        @SerializedName("date")
+        val date: String,
+        @SerializedName("weight")
+        val weight: Float
     )
 }
 
