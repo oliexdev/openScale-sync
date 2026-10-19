@@ -17,6 +17,7 @@ object BackendRegistry {
         WgerService(context, prefs),
         EndurainService(context, prefs),
         InfluxDbService(context, prefs),
-        WebhookService(context, prefs)
+        WebhookService(context, prefs),
+        GarminService(context, prefs)
     )
 }
