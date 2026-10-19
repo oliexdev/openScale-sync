@@ -11,7 +11,7 @@ Features:
 * Automatic Retry: A sync that could not be delivered is retried on its own with the current data, and any measurement still waiting is shown to you.
 * Multi-User Aware: MQTT, InfluxDB and Webhook keep every openScale user separate; Health Connect, Wger, Endurain and Garmin Connect sync the user you select.
 * Configurable Service Activation: Easily enable or disable individual external services to tailor your synchronization preferences.
-* Intelligent: Utilizes a foreground service that activates only when required, minimizing battery consumption.
+* Intelligent Foreground Service: Utilizes a foreground service that activates only when required, minimizing battery consumption.
 * Intuitive User Interface: Enjoy a user-friendly graphical interface for effortless navigation and control.
 
 Your data is never sent anywhere except the services you enable and configure yourself. The app has no ads, no analytics and no accounts.
