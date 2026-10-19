@@ -15,13 +15,13 @@ Synchronize your openScale measurements with external services
 > Weight is synced in kilograms (kg). Body fat, muscle mass, and body water are all synced in percent (%). Conversions to other units must be handled by the receiving program.
 
 # Summary :clipboard:
-* ***Seamless External Service Integration:*** Effortlessly synchronize data with Health Connect, Wger, Endurain, InfluxDB, generic Webhooks and MQTT (versions 3.1 and 5.0, including Home Assistant discovery).
+* ***Seamless External Service Integration:*** Effortlessly synchronize data with Health Connect, Wger, Endurain, Garmin Connect, InfluxDB, generic Webhooks and MQTT (versions 3.1 and 5.0, including Home Assistant discovery).
 * ***Real-time Synchronization:*** Automatically synchronize data upon insertion, editing, deletion, or clearing of measurements within openScale.
 * ***Two-way Synchronization:*** Measurements that other apps wrote to Health Connect, Wger or MQTT can be imported back into openScale, filling the gaps your scale did not record. Each service has its own direction setting: export only, import only, or both.
 * ***Optional Background Synchronization:*** Let the app reconcile everything every few hours, as a safety net for when the instant sync could not run.
 * ***On-Demand Full Synchronization:*** Initiate a complete data synchronization manually whenever needed.
 * ***Automatic Retry:*** A sync that could not be delivered is retried on its own with the current data, and any measurement still waiting is shown to you.
-* ***Multi-User Aware:*** MQTT, InfluxDB and Webhook keep every openScale user separate; Health Connect, Wger and Endurain sync the user you select.
+* ***Multi-User Aware:*** MQTT, InfluxDB and Webhook keep every openScale user separate; Health Connect, Wger, Endurain and Garmin Connect sync the user you select.
 * ***Configurable Service Activation:*** Easily enable or disable individual external services to tailor your synchronization preferences.
 * ***Intelligent Foreground Service:*** Utilizes a foreground service that activates only when required, minimizing battery consumption.
 * ***Intuitive User Interface:*** Enjoy a user-friendly graphical interface for effortless navigation and control.

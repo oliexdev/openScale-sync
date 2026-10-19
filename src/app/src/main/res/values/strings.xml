@@ -174,6 +174,16 @@
     <string name="webhook_connected_text">Webhook connection successful</string>
     <string name="webhook_url_empty_error">Webhook URL must not be empty</string>
 
+    <string name="garmin_email_title">Garmin Connect email</string>
+    <string name="garmin_email_hint">you@example.com</string>
+    <string name="garmin_password_title">Garmin Connect password</string>
+    <string name="garmin_connected_text">Garmin Connect login successful</string>
+    <string name="garmin_credentials_missing">Enter your Garmin Connect email and password</string>
+    <string name="garmin_mfa_title">Garmin verification code</string>
+    <string name="garmin_mfa_hint">Code sent via %1$s</string>
+    <string name="garmin_mfa_cancelled">Verification cancelled - measurement stays queued</string>
+    <string name="garmin_login_note">Your login is only used once to obtain OAuth tokens; afterwards sync runs without a password prompt. Tokens and credentials stay on this device.</string>
+
     <string name="rationale_title">How openScale sync uses your Health Connect data</string>
     <string name="rationale_intro">openScale sync connects the openScale app, where your body measurements are recorded, with Health Connect. It keeps no measurements of its own.</string>
     <string name="rationale_write_title">Data written to Health Connect</string>
