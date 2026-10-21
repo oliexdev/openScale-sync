@@ -21,6 +21,9 @@ import com.google.gson.JsonParser
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
 import com.health.openscale.sync.core.service.SyncResult
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -35,6 +38,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
 import java.util.Date
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Covers [SparkyFitnessSync]: the pure openScale → SparkyFitness mapping ([SparkyFitnessSync.buildPayload])
@@ -337,6 +341,84 @@ class SparkyFitnessSyncTest {
         assertTrue(res.toString(), res is SyncResult.Success)
         assertTrue(server.calls.none { it.second.startsWith("check-in") })
         assertEquals(listOf("custom-entries/e1"), server.calls.filter { it.first == "DELETE" }.map { it.second })
+    }
+
+    /**
+     * Mimics SparkyFitness before v1.9.0: a check-in that arrives while another one is still in
+     * flight hits the unique (user, date) index and gets 409. Answers [conflicts] times with 409
+     * up front, independent of overlap, to drive the retry path directly.
+     */
+    private class RacyServer(private val conflicts: Int = 0) : Interceptor {
+        private val inFlight = AtomicInteger()
+        val maxInFlight = AtomicInteger()
+        val checkIns = AtomicInteger()
+        private val forced = AtomicInteger(conflicts)
+
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val req = chain.request()
+            val path = req.url.encodedPath.removePrefix("/api/measurements/")
+            val (code, json) = when ("${req.method} $path") {
+                "POST check-in" -> {
+                    checkIns.incrementAndGet()
+                    val now = inFlight.incrementAndGet()
+                    maxInFlight.accumulateAndGet(now) { a, b -> maxOf(a, b) }
+                    try {
+                        Thread.sleep(50)
+                        if (now > 1 || forced.getAndDecrement() > 0)
+                            409 to """{"error":"duplicate key value violates unique constraint"}"""
+                        else 200 to "{}"
+                    } finally {
+                        inFlight.decrementAndGet()
+                    }
+                }
+                "GET custom-categories" -> 200 to """[{"id":"c-vf","name":"visceral_fat"}]"""
+                "POST custom-entries" -> 201 to "{}"
+                else -> 404 to """{"error":"not found"}"""
+            }
+            return Response.Builder()
+                .request(req)
+                .protocol(Protocol.HTTP_1_1)
+                .code(code)
+                .message("fake")
+                .body(json.toResponseBody("application/json".toMediaType()))
+                .build()
+        }
+    }
+
+    @Test
+    fun upsert_concurrentCallsOfOneDay_areSerialized() = runTest {
+        val server = RacyServer()
+        val s = SparkyFitnessSync("https://sparky.test/", "key", { false }, server)
+        val m = measurement(listOf(mv("WEIGHT", "kg", 80f), mv("VISCERAL_FAT", "", 9f)))
+
+        val results = coroutineScope { List(3) { async { s.upsert(m) } }.awaitAll() }
+
+        assertTrue(results.toString(), results.all { it is SyncResult.Success })
+        assertEquals(1, server.maxInFlight.get())
+        assertEquals(3, server.checkIns.get())
+    }
+
+    @Test
+    fun upsert_checkInConflict_isRetriedOnce() = runTest {
+        val server = RacyServer(conflicts = 1)
+        val s = SparkyFitnessSync("https://sparky.test/", "key", { false }, server)
+
+        val res = s.upsert(measurement(listOf(mv("WEIGHT", "kg", 80f), mv("VISCERAL_FAT", "", 9f))))
+
+        assertTrue(res.toString(), res is SyncResult.Success)
+        assertEquals(2, server.checkIns.get())
+    }
+
+    @Test
+    fun upsert_persistentConflict_failsRetryably() = runTest {
+        val server = RacyServer(conflicts = 2)
+        val s = SparkyFitnessSync("https://sparky.test/", "key", { false }, server)
+
+        val res = s.upsert(measurement(listOf(mv("WEIGHT", "kg", 80f))))
+
+        assertEquals(2, server.checkIns.get())   // one retry, no loop
+        // not INVALID_DATA: the retry queue must keep the measurement
+        assertEquals(SyncResult.ErrorType.API_ERROR, (res as SyncResult.Failure).errorType)
     }
 
     @Test

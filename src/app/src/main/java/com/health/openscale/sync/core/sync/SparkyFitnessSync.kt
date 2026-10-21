@@ -21,6 +21,8 @@ import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.service.SyncResult
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.ResponseBody
@@ -122,13 +124,33 @@ class SparkyFitnessSync(
 
     // --- Export -------------------------------------------------------------------------
 
-    /** Insert and update are the same operation: both endpoints are upserts by day. */
+    /**
+     * Insert and update are the same operation: both endpoints are upserts by day.
+     *
+     * The sync service dispatches every openScale event in its own coroutine, so several
+     * measurements of one day can arrive at the same time. Writes are therefore serialized
+     * ([writeLock]), and a 409 on the check-in is retried once: SparkyFitness before v1.9.0 can
+     * reject the second of two concurrent first writes of a day on its unique (user, date) index,
+     * although by then the row exists and the same upsert succeeds.
+     */
     suspend fun upsert(measurement: OpenScaleMeasurement): SyncResult<Unit> = try {
+        writeLock.withLock { upsertLocked(measurement) }
+    } catch (e: Exception) {
+        SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
+    }
+
+    private suspend fun upsertLocked(measurement: OpenScaleMeasurement): SyncResult<Unit> {
         val day = dateOnly.format(measurement.date)
         val payload = buildPayload(measurement, includeDerived())
+        val body = payload.checkIn + ("entry_date" to day)
 
-        val checkIn = api.upsertCheckIn(payload.checkIn + ("entry_date" to day))
-        if (!checkIn.isSuccessful) {
+        val checkIn = api.upsertCheckIn(body).let { first ->
+            if (first.code() == 409) {
+                first.errorBody()?.close()
+                api.upsertCheckIn(body)
+            } else first
+        }
+        return if (!checkIn.isSuccessful) {
             failure("check-in $day upsert", checkIn)
         } else {
             var result: SyncResult<Unit> = SyncResult.Success(Unit)
@@ -148,8 +170,6 @@ class SparkyFitnessSync(
             }
             result
         }
-    } catch (e: Exception) {
-        SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
     }
 
     /**
@@ -157,9 +177,15 @@ class SparkyFitnessSync(
      * stays, it may hold values entered by hand), and our custom entries of that day are deleted.
      */
     suspend fun delete(date: Date): SyncResult<Unit> = try {
+        writeLock.withLock { deleteLocked(date) }
+    } catch (e: Exception) {
+        SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
+    }
+
+    private suspend fun deleteLocked(date: Date): SyncResult<Unit> {
         val day = dateOnly.format(date)
         val existing = api.getCheckInRange(day, day)
-        when {
+        return when {
             !existing.isSuccessful -> failure("check-in $day lookup", existing)
             else -> {
                 // Only touch an existing row: an all-null upsert would otherwise create an empty one.
@@ -169,8 +195,6 @@ class SparkyFitnessSync(
                 else deleteCustomEntries(day)
             }
         }
-    } catch (e: Exception) {
-        SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
     }
 
     /**
@@ -179,9 +203,11 @@ class SparkyFitnessSync(
      * weights the user entered by hand or another integration delivered.
      */
     suspend fun clear(): SyncResult<Unit> = try {
-        val resp = api.getAllCustomEntries()
-        if (!resp.isSuccessful) failure("custom entries list", resp)
-        else deleteEntries(resp.body().orEmpty())
+        writeLock.withLock {
+            val resp = api.getAllCustomEntries()
+            if (!resp.isSuccessful) failure("custom entries list", resp)
+            else deleteEntries(resp.body().orEmpty())
+        }
     } catch (e: Exception) {
         SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
     }
@@ -300,6 +326,10 @@ class SparkyFitnessSync(
     companion object {
         /** `source` of every custom entry we write; deletes are scoped to it. */
         const val SOURCE = "openScale"
+
+        // Process-wide, not per instance: connect() builds a new instance, and an op still running
+        // on the old one must not overlap with the first op on the new one.
+        private val writeLock = Mutex()
 
         // SparkyFitness accepts a measured BMR only inside this range (numeric(6,1) column,
         // MIN/MAX_MEASURED_BMR_KCAL server-side); anything else fails the whole check-in with 400.
