@@ -175,9 +175,18 @@ class SparkyFitnessSync(
     /**
      * Remove what this app wrote for [date]: our check-in columns are set to null (the row itself
      * stays, it may hold values entered by hand), and our custom entries of that day are deleted.
+     *
+     * SparkyFitness keeps one value per day, so deleting one of several openScale measurements of
+     * a day would otherwise empty the whole day. When openScale still has a measurement on that day
+     * ([remaining], see [latestOnSameDay]), the day is rewritten from it right after clearing, under
+     * the same lock. Clearing first keeps columns the remaining measurement does not have from
+     * surviving with the deleted measurement's values.
      */
-    suspend fun delete(date: Date): SyncResult<Unit> = try {
-        writeLock.withLock { deleteLocked(date) }
+    suspend fun delete(date: Date, remaining: OpenScaleMeasurement? = null): SyncResult<Unit> = try {
+        writeLock.withLock {
+            val cleared = deleteLocked(date)
+            if (cleared is SyncResult.Success && remaining != null) upsertLocked(remaining) else cleared
+        }
     } catch (e: Exception) {
         SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
     }
@@ -326,6 +335,20 @@ class SparkyFitnessSync(
     companion object {
         /** `source` of every custom entry we write; deletes are scoped to it. */
         const val SOURCE = "openScale"
+
+        /**
+         * The measurement SparkyFitness should keep for [date]'s calendar day after the one at
+         * [date] was deleted in openScale: the latest other measurement of that day with a usable
+         * weight, or null if there is none. A measurement at exactly [date] is skipped in case
+         * openScale still lists the deleted one.
+         */
+        fun latestOnSameDay(measurements: List<OpenScaleMeasurement>, date: Date): OpenScaleMeasurement? {
+            val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getDefault() }
+            val target = day.format(date)
+            return measurements
+                .filter { it.date.time != date.time && it.hasValidWeight() && day.format(it.date) == target }
+                .maxByOrNull { it.date.time }
+        }
 
         // Process-wide, not per instance: connect() builds a new instance, and an op still running
         // on the old one must not overlap with the first op on the new one.

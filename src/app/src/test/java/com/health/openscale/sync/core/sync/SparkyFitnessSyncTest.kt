@@ -317,6 +317,48 @@ class SparkyFitnessSyncTest {
     }
 
     @Test
+    fun delete_withRemainingMeasurement_rewritesTheDayInsteadOfEmptyingIt() = runTest {
+        val server = FakeServer(mapOf(
+            "GET check-in-measurements-range/$DAY_STR/$DAY_STR" to (200 to """[{"entry_date":"$DAY_STR"}]"""),
+            "POST check-in" to (200 to "{}"),
+            "GET custom-entries/$DAY_STR" to (200 to """[{"id":"e1","source":"openScale"}]"""),
+            "DELETE custom-entries/e1" to (200 to "{}"),
+            "GET custom-categories" to (200 to """[{"id":"c-vf","name":"visceral_fat"}]"""),
+            "POST custom-entries" to (201 to "{}")
+        ))
+        val remaining = measurement(listOf(mv("WEIGHT", "kg", 79f), mv("VISCERAL_FAT", "", 8f)))
+
+        val res = sync(server).delete(DAY, remaining)
+
+        assertTrue(res.toString(), res is SyncResult.Success)
+        val checkIns = server.calls.filter { it.second == "check-in" }
+            .map { JsonParser.parseString(it.third).asJsonObject }
+        assertEquals(2, checkIns.size)
+        assertTrue(checkIns[0]["weight"].isJsonNull)                // cleared first …
+        assertEquals(79.0, checkIns[1]["weight"].asDouble, 1e-4)    // … then rewritten
+        val order = server.calls.map { "${it.first} ${it.second}" }
+        assertTrue(order.indexOf("DELETE custom-entries/e1") < order.lastIndexOf("POST custom-entries"))
+    }
+
+    @Test
+    fun latestOnSameDay_picksTheLatestOtherMeasurementOfThatDay() {
+        fun at(hour: Int, min: Int = 0, day: Int = 15, weight: Float = 80f) =
+            OpenScaleMeasurement.fromValues(hour * 100 + min, 1, Calendar.getInstance().apply {
+                clear(); set(2026, Calendar.OCTOBER, day, hour, min)
+            }.time, "alice", listOf(mv("WEIGHT", "kg", weight)))
+
+        val deleted = at(7)
+        val early = at(6, 50)
+        val late = at(7, 5)
+        val noWeight = at(9, weight = 0f)
+        val otherDay = at(8, day = 16)
+
+        assertEquals(late, SparkyFitnessSync.latestOnSameDay(listOf(early, deleted, late, noWeight, otherDay), deleted.date))
+        assertEquals(early, SparkyFitnessSync.latestOnSameDay(listOf(early, deleted), deleted.date))
+        assertNull(SparkyFitnessSync.latestOnSameDay(listOf(deleted, noWeight, otherDay), deleted.date))
+    }
+
+    @Test
     fun delete_withoutCheckInRow_doesNotCreateAnEmptyOne() = runTest {
         val server = FakeServer(mapOf(
             "GET check-in-measurements-range/$DAY_STR/$DAY_STR" to (200 to "[]"),

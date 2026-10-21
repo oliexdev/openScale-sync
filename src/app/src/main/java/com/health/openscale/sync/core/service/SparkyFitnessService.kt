@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleUser
 import com.health.openscale.sync.core.model.SparkyFitnessViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.SparkyFitnessSync
@@ -50,6 +51,7 @@ import com.health.openscale.sync.gui.components.SecretOutlinedTextField
 import com.health.openscale.sync.gui.components.UserScopeSection
 import kotlinx.coroutines.launch
 import java.util.Date
+import timber.log.Timber
 
 /**
  * Export-only sync backend for SparkyFitness (self-hosted fitness and nutrition tracker). Auth is
@@ -118,7 +120,18 @@ class SparkyFitnessService(
         withSync { it.upsert(measurement) }
 
     override suspend fun delete(userId: Int, date: Date): SyncResult<Unit> =
-        withSync { it.delete(date) }
+        withSync { it.delete(date, remainingOnDay(userId, date)) }
+
+    /**
+     * What openScale still holds for [date]'s day, so deleting one of several same-day measurements
+     * rewrites the day instead of emptying it. If openScale cannot be read, this falls back to a
+     * plain delete, as before.
+     */
+    private fun remainingOnDay(userId: Int, date: Date): OpenScaleMeasurement? =
+        runCatching {
+            SparkyFitnessSync.latestOnSameDay(openScaleDataService.getMeasurements(OpenScaleUser(userId, "")), date)
+        }.onFailure { Timber.w(it, "SparkyFitness: cannot read openScale for the day of %s -> plain delete", date) }
+            .getOrNull()
 
     override suspend fun clear(userId: Int): SyncResult<Unit> =
         withSync { it.clear() }
