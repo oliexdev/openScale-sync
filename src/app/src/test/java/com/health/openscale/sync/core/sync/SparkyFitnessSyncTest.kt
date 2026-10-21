@@ -147,11 +147,34 @@ class SparkyFitnessSyncTest {
 
         val custom = SparkyFitnessSync.buildPayload(m, false).custom.associateBy { it.name }
 
-        assertEquals(setOf("visceral_fat", "lbm", "segmental_fat_left_arm"), custom.keys)
+        assertEquals(setOf("visceral_fat", "lean_body_mass", "segmental_fat_left_arm"), custom.keys)
         assertEquals(9f, custom.getValue("visceral_fat").value, EPS)
         assertEquals("", custom.getValue("visceral_fat").unit)
-        assertEquals("kg", custom.getValue("lbm").unit)
         assertEquals("Fat left arm", custom.getValue("segmental_fat_left_arm").displayName)
+    }
+
+    @Test
+    fun typesSparkyKnows_useSparkyName_withoutDisplayName() {
+        val m = measurement(listOf(mv("WEIGHT", "kg", 80f), mv("LBM", "kg", 64f)))
+
+        val lbm = SparkyFitnessSync.buildPayload(m, false).custom.single()
+
+        // Same name, unit and (empty) display name SparkyFitness uses for Health Connect's
+        // LeanBodyMass, so both sources land in one category.
+        assertEquals("lean_body_mass", lbm.name)
+        assertEquals("kg", lbm.unit)
+        assertNull(lbm.displayName)
+        assertEquals(64f, lbm.value, EPS)
+    }
+
+    @Test
+    fun builtInEnumNames_getReadableDisplayNames() {
+        assertEquals("Visceral fat", SparkyFitnessSync.displayName("visceral_fat", "VISCERAL_FAT"))
+        assertEquals("Impedance (scale raw value)", SparkyFitnessSync.displayName("impedance", "IMPEDANCE"))
+        assertEquals("BMI", SparkyFitnessSync.displayName("bmi", "BMI"))
+        assertEquals("Chest", SparkyFitnessSync.displayName("chest", "CHEST"))
+        // a user-defined type keeps the name the user gave it
+        assertEquals("Schritte heute", SparkyFitnessSync.displayName("schritte", "Schritte heute"))
     }
 
     @Test
@@ -228,7 +251,7 @@ class SparkyFitnessSyncTest {
     fun upsert_writesCheckIn_thenCreatesMissingCategory_andEntry() = runTest {
         val server = FakeServer(mapOf(
             "POST check-in" to (200 to "{}"),
-            "GET custom-categories" to (200 to """[{"id":"c-lbm","name":"lbm"}]"""),
+            "GET custom-categories" to (200 to """[{"id":"c-lbm","name":"lean_body_mass"}]"""),
             "POST custom-categories" to (201 to """{"id":"c-vf"}"""),
             "POST custom-entries" to (201 to "{}")
         ))
@@ -244,11 +267,12 @@ class SparkyFitnessSyncTest {
         assertEquals(80.0, checkIn["weight"].asDouble, 1e-4)
 
         val created = server.calls.filter { it.first == "POST" && it.second == "custom-categories" }
-        assertEquals(1, created.size)   // lbm already existed, only visceral_fat is new
+        assertEquals(1, created.size)   // lean_body_mass already existed, only visceral_fat is new
         val category = JsonParser.parseString(created.single().third).asJsonObject
         assertEquals("visceral_fat", category["name"].asString)
         assertEquals("Daily", category["frequency"].asString)
         assertEquals("N/A", category["measurement_type"].asString)
+        assertEquals("Visceral fat", category["display_name"].asString)
 
         val entries = server.calls.filter { it.second == "custom-entries" }
             .map { JsonParser.parseString(it.third).asJsonObject }

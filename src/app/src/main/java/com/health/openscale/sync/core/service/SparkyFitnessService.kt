@@ -157,11 +157,12 @@ class SparkyFitnessService(
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 value = serverState,
-                onValueChange = { viewModel.setServer(it) },
+                // A URL never contains whitespace; keyboards with autocorrect insert some after dots.
+                onValueChange = { viewModel.setServer(it.filterNot(Char::isWhitespace)) },
                 label = { Text(stringResource(id = R.string.sparkyfitness_server_name_title)) },
                 placeholder = { Text(stringResource(id = R.string.sparkyfitness_server_name_hint)) },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false)
             )
 
             val apiKeyState by viewModel.apiKey.observeAsState("")

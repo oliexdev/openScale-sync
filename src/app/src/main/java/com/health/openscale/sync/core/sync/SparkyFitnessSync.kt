@@ -48,8 +48,10 @@ import java.util.TimeZone
  *  - Body measurements live in one **check-in row per day** (`/measurements/check-in`). POST is an
  *    upsert by `entry_date` that only touches the columns present in the body, so values the user
  *    entered by hand on the same day (steps, height, …) are left alone.
- *  - Everything without a check-in column goes into **custom categories** (one per openScale type,
- *    frequency `Daily`) with `source = "openScale"`. The source keeps our entries apart from manual
+ *  - Everything without a check-in column goes into **custom categories** (frequency `Daily`) with
+ *    `source = "openScale"`. A type SparkyFitness already knows (e.g. lean body mass) is written
+ *    under SparkyFitness' own name, so it lands next to the values other integrations deliver
+ *    instead of in a parallel category; only unknown types get a category named after openScale. The source keeps our entries apart from manual
  *    ones and from other integrations, so deletes only ever remove what this app wrote.
  *
  * Like Endurain, SparkyFitness keys body data by calendar day, so several openScale measurements on
@@ -269,7 +271,7 @@ class SparkyFitnessSync(
 
     data class CategoryRequest(
         @SerializedName("name") val name: String,
-        @SerializedName("display_name") val display_name: String,
+        @SerializedName("display_name") val display_name: String?,
         @SerializedName("frequency") val frequency: String,
         @SerializedName("measurement_type") val measurement_type: String,
         @SerializedName("data_type") val data_type: String
@@ -290,7 +292,7 @@ class SparkyFitnessSync(
     )
 
     /** One openScale value bound for a custom category. */
-    data class CustomValue(val name: String, val displayName: String, val unit: String, val value: Float)
+    data class CustomValue(val name: String, val displayName: String?, val unit: String, val value: Float)
 
     /** What one measurement turns into on the wire: check-in columns plus custom values. */
     data class Payload(val checkIn: Map<String, Float>, val custom: List<CustomValue>)
@@ -309,6 +311,33 @@ class SparkyFitnessSync(
             "weight", "body_fat_percentage", "body_water_percentage", "muscle_mass_kg",
             "bone_mass_kg", "bmr", "waist", "hips", "neck"
         )
+
+        /**
+         * openScale keys that SparkyFitness knows as a health type of its own, mapped to SparkyFitness'
+         * name (DEFAULT_UNITS_BY_HEALTH_TYPE in SparkyFitnessServer/services/healthDataHandlers.ts).
+         * Those categories are created by SparkyFitness without a display name, so we do the same.
+         * Units must match: lean body mass is kg on both sides.
+         */
+        val SPARKY_TYPES = mapOf("lbm" to "lean_body_mass")
+
+        // Readable names for openScale's built-in types, whose `name` is only the enum key
+        // (e.g. VISCERAL_FAT). Users can rename a category in SparkyFitness; we never overwrite it.
+        private val DISPLAY_NAMES = mapOf(
+            "bmi" to "BMI",
+            "whr" to "Waist-to-hip ratio",
+            "whtr" to "Waist-to-height ratio",
+            "impedance" to "Impedance (scale raw value)",
+            "visceral_fat" to "Visceral fat"
+        )
+
+        /** Category display name: our label for built-ins, the user's own name for custom types. */
+        fun displayName(key: String, name: String): String? {
+            if (key in SPARKY_TYPES) return null
+            DISPLAY_NAMES[key]?.let { return it }
+            val isEnumKey = name.isBlank() || name.equals(key, ignoreCase = true) ||
+                name.equals(key.replace('_', ' '), ignoreCase = true)
+            return if (isEnumKey) key.replace('_', ' ').replaceFirstChar { it.uppercase() } else name
+        }
 
         /**
          * openScale keys never exported as custom values even with [includeDerived]: BMR and TDEE
@@ -384,7 +413,7 @@ class SparkyFitnessSync(
                     key in NEVER_CUSTOM -> null
                     v.isDerived && !includeDerived -> null
                     value == null || !value.isFinite() -> null   // text values (comment) and gaps
-                    else -> CustomValue(key, v.name.ifBlank { key }, v.unit, value)
+                    else -> CustomValue(SPARKY_TYPES[key] ?: key, displayName(key, v.name), v.unit, value)
                 }
             }
             return Payload(checkIn, custom)

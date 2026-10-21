@@ -1,12 +1,19 @@
+<!-- Generic flame outline (own drawing, nods to SparkyFitness' flame without copying its logo). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
   <path
-      android:pathData="M12,3 L13.8,9.2 L20,11 L13.8,12.8 L12,19 L10.2,12.8 L4,11 L10.2,9.2 Z"
+      android:pathData="M12,2.5 C12.6,6 16,8.2 17.6,11 C19.6,14.5 18.2,21 12,21 C5.8,21 4.4,15.2 6.6,11.6 C7.4,13.2 8.6,14 9.6,14.2 C8.8,10 10.8,5.6 12,2.5 Z"
       android:strokeColor="#000000"
       android:strokeWidth="2"
+      android:strokeLineJoin="round"
+      android:fillColor="#00000000"/>
+  <path
+      android:pathData="M12,21 C10,21 9,19.4 9.6,17.6 C10.1,16.2 11.4,15.6 12,14 C12.9,15.6 14.6,16.6 14.4,18.4 C14.2,20 13.2,21 12,21 Z"
+      android:strokeColor="#000000"
+      android:strokeWidth="1.5"
       android:strokeLineJoin="round"
       android:fillColor="#00000000"/>
 </vector>
