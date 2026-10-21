@@ -16,6 +16,7 @@ object BackendRegistry {
         MQTTService(context, prefs),
         WgerService(context, prefs),
         EndurainService(context, prefs),
+        SparkyFitnessService(context, prefs),
         InfluxDbService(context, prefs),
         WebhookService(context, prefs)
     )

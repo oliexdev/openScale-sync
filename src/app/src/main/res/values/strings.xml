@@ -141,6 +141,14 @@
     <string name="endurain_not_logged_in">Not logged in — please log in</string>
     <string name="endurain_session_expired">Session expired — please log in again</string>
 
+    <string name="sparkyfitness_successful_connected_text">Successfully connected to SparkyFitness</string>
+    <string name="sparkyfitness_not_configured">Please enter the server URL and an API key</string>
+    <string name="sparkyfitness_server_name_title">Server URL</string>
+    <string name="sparkyfitness_server_name_hint">e.g. https://sparky.example.com</string>
+    <string name="sparkyfitness_api_key_title">API key (not read-only)</string>
+    <string name="sparkyfitness_include_derived_title">Also send calculated values</string>
+    <string name="sparkyfitness_include_derived_hint">BMI, waist-to-hip ratio and other values openScale calculates itself are stored as custom measurements. Estimated BMR and TDEE are never sent.</string>
+
     <string name="open_scale_version_unsupported_banner">This openScale-sync version requires openScale %1$s or newer. Please update openScale to continue synchronizing.</string>
     <string name="sync_users_title">Synced users</string>
     <string name="sync_users_all">All openScale users</string>
