@@ -142,6 +142,14 @@
     <string name="endurain_not_logged_in">Nicht angemeldet — bitte anmelden</string>
     <string name="endurain_session_expired">Sitzung abgelaufen — bitte erneut anmelden</string>
 
+    <string name="sparkyfitness_successful_connected_text">Erfolgreich mit SparkyFitness verbunden.</string>
+    <string name="sparkyfitness_not_configured">Bitte Server-URL und API-Schlüssel eingeben</string>
+    <string name="sparkyfitness_server_name_title">Server-URL</string>
+    <string name="sparkyfitness_server_name_hint">z.B. https://sparky.example.com</string>
+    <string name="sparkyfitness_api_key_title">API-Schlüssel (nicht schreibgeschützt)</string>
+    <string name="sparkyfitness_include_derived_title">Berechnete Werte mitsenden</string>
+    <string name="sparkyfitness_include_derived_hint">BMI, Taille-Hüft-Verhältnis und andere Werte, die openScale selbst berechnet, werden als eigene Messwerte gespeichert. Geschätzter Grund- und Gesamtumsatz werden nie gesendet.</string>
+
     <string name="open_scale_version_unsupported_banner">Diese openScale-sync-Version benötigt openScale %1$s oder neuer. Bitte aktualisiere openScale, um weiter zu synchronisieren.</string>
     <string name="sync_users_title">Synchronisierte Benutzer</string>
     <string name="sync_users_all">Alle openScale-Benutzer</string>
