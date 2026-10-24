@@ -104,6 +104,10 @@
     <string name="health_connect_request_permissions_button">Request Health Connect permissions</string>
     <string name="health_connect_permission_not_granted">Health Connect permission not granted</string>
     <string name="health_connect_connected_text">Health Connect connection successful</string>
+    <string name="health_connect_request_history_button">Allow full measurement history</string>
+    <string name="health_connect_history_granted">History access is enabled. Run Sync all services to import older measurements from Health Connect.</string>
+    <string name="health_connect_history_limited">Without history access, Health Connect only lets this app read measurements from 30 days before you first granted it Health Connect permissions, and newer measurements. Allow full measurement history to include earlier measurements too.</string>
+    <string name="health_connect_history_unavailable">This version of Health Connect does not support history access. Measurements from more than 30 days before you first granted permissions cannot be imported.</string>
 
     <string name="mqtt_broker_successful_connected_text">Successfully connected to MQTT broker</string>
     <string name="mqtt_server_name_title">Server name</string>
@@ -198,6 +202,7 @@
     <string name="disclosure_title">Before you continue</string>
     <string name="disclosure_write">openScale sync will write the measurements recorded in openScale to Health Connect — weight, body fat, body water mass, bone mass, lean body mass and basal metabolic rate — so that other health apps on this device can use them.</string>
     <string name="disclosure_read">Because the sync direction includes import, openScale sync will also read weight, body fat, body water mass, bone mass and lean body mass that other apps have written to Health Connect, and add those weigh-ins to your openScale history so your body-composition log stays complete.</string>
+    <string name="disclosure_read_history">Allow full measurement history to import earlier measurements too. Without it, Health Connect limits this app to measurements from 30 days before you first granted it Health Connect permissions, and newer measurements. You can decline history access and continue syncing the measurements available within that limit.</string>
     <string name="disclosure_how">This data is used only for that synchronization. It stays on your device except for the services you enable yourself, and is never used for advertising, sold or shared with third parties.</string>
     <string name="disclosure_accept">Accept</string>
     <string name="disclosure_decline">Not now</string>

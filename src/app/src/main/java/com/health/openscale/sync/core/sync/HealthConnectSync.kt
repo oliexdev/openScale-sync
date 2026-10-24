@@ -241,14 +241,24 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
      * value would be overwritten by its own calculation anyway.
      */
     suspend fun readInboundReadings(ownPackage: String, sinceMillis: Long): List<InboundReading> {
+        // Health Connect applies the user's history-access permission to the requested range.
         val range = TimeRangeFilter.after(Instant.ofEpochMilli(sinceMillis))
         fun foreign(record: Record) = record.metadata.dataOrigin.packageName != ownPackage
 
         // The record types carry their instant on their own class (the shared interface is internal
         // to androidx), so each caller maps its record to (time, value) itself.
-        suspend fun <T : Record> readForeign(type: KClass<T>, sample: (T) -> Pair<Long, Float>): List<Pair<Long, Float>> =
-            healthConnectClient.readRecords(ReadRecordsRequest(type, range))
-                .records.filter(::foreign).map(sample)
+        suspend fun <T : Record> readForeign(type: KClass<T>, sample: (T) -> Pair<Long, Float>): List<Pair<Long, Float>> {
+            val samples = mutableListOf<Pair<Long, Float>>()
+            var pageToken: String? = null
+            do {
+                val response = healthConnectClient.readRecords(
+                    ReadRecordsRequest(type, range, pageToken = pageToken)
+                )
+                samples += response.records.filter(::foreign).map(sample)
+                pageToken = response.pageToken
+            } while (!pageToken.isNullOrEmpty())
+            return samples
+        }
 
         return groupInboundReadings(
             weights = readForeign(WeightRecord::class) {

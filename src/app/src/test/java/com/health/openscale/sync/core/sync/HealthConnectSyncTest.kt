@@ -18,13 +18,19 @@
 package com.health.openscale.sync.core.sync
 
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByDuration
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByPeriod
 import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.BodyWaterMassRecord
+import androidx.health.connect.client.records.BoneMassRecord
+import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
+import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import androidx.health.connect.client.request.AggregateRequest
@@ -35,6 +41,8 @@ import androidx.health.connect.client.response.InsertRecordsResponse
 import androidx.health.connect.client.response.ReadRecordResponse
 import androidx.health.connect.client.response.ReadRecordsResponse
 import androidx.health.connect.client.time.TimeRangeFilter
+import androidx.health.connect.client.units.Mass
+import androidx.health.connect.client.units.Percentage
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
 import com.health.openscale.sync.core.service.SyncResult
@@ -44,6 +52,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.time.Instant
 import java.util.Date
@@ -62,13 +71,41 @@ import kotlin.reflect.KClass
  */
 class HealthConnectSyncTest {
 
-    private class FakeHealthConnectClient : HealthConnectClient {
+    internal class FakeHealthConnectClient : HealthConnectClient {
         val written = mutableListOf<List<Record>>()
         /** Every (recordType, timeRangeFilter) a delete was issued for. */
         val deleted = mutableListOf<Pair<KClass<out Record>, TimeRangeFilter>>()
 
         /** What a read returns, per record type. Only the inbound tests fill this. */
         val stored = mutableListOf<Record>()
+        val reads = mutableListOf<ReadRecordsRequest<*>>()
+        var pageSize = 1000
+        var finalPageToken: String? = null
+        var failingPageToken: String? = null
+        var historyAvailable = true
+        var grantedPermissions = emptySet<String>()
+
+        // The platform populates dataOrigin on reads; public Metadata factories cannot set it.
+        fun metadataFrom(pkg: String): Metadata = Metadata.manualEntry().also {
+            Metadata::class.java.getDeclaredField("dataOrigin").apply { isAccessible = true }
+                .set(it, DataOrigin(pkg))
+        }
+
+        private fun timeOf(record: Record): Instant = when (record) {
+            is WeightRecord -> record.time
+            is BodyFatRecord -> record.time
+            is BodyWaterMassRecord -> record.time
+            is BoneMassRecord -> record.time
+            is LeanBodyMassRecord -> record.time
+            else -> error("unexpected inbound record type")
+        }
+
+        override val features = object : HealthConnectFeatures {
+            override fun getFeatureStatus(feature: Int): Int =
+                if (historyAvailable && feature == HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY)
+                    HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+                else HealthConnectFeatures.FEATURE_STATUS_UNAVAILABLE
+        }
 
         /**
          * Health Connect's behaviour under write-only permissions. Left on for every write test, so
@@ -91,10 +128,31 @@ class HealthConnectSyncTest {
                 "Caller does not have permission to read data for the following " +
                     "(recordType: ${request.recordType}) from other applications."
             )
-            return ReadRecordsResponse(stored.filter { request.recordType.isInstance(it) } as List<T>, null)
+            reads += request
+            if (failingPageToken != null && request.pageToken == failingPageToken) {
+                throw IllegalStateException("scripted page failure")
+            }
+            val start = request.timeRangeFilter.startTime ?: Instant.EPOCH
+            val end = request.timeRangeFilter.endTime ?: Instant.MAX
+            val sorted = stored.filter {
+                request.recordType.isInstance(it) && !timeOf(it).isBefore(start) && timeOf(it).isBefore(end)
+            }.sortedBy(::timeOf)
+            val matching = if (request.ascendingOrder) sorted else sorted.reversed()
+            // Opaque tokens ensure callers must forward the returned token, not invent a page number.
+            val offset = request.pageToken?.let {
+                require(it.startsWith("cursor:")) { "Unexpected page token: $it" }
+                it.removePrefix("cursor:").toInt()
+            } ?: 0
+            val page = matching.drop(offset).take(minOf(pageSize, request.pageSize))
+            val nextToken = if (offset + page.size < matching.size)
+                "cursor:${offset + page.size}" else finalPageToken
+            return ReadRecordsResponse(page as List<T>, nextToken)
         }
 
-        override val permissionController: PermissionController get() = error("not used by these tests")
+        override val permissionController = object : PermissionController {
+            override suspend fun getGrantedPermissions(): Set<String> = grantedPermissions
+            override suspend fun revokeAllPermissions() { grantedPermissions = emptySet() }
+        }
         override suspend fun updateRecords(records: List<Record>) = error("not used by these tests")
         override suspend fun deleteRecords(
             recordType: KClass<out Record>, recordIdsList: List<String>, clientRecordIdsList: List<String>
@@ -114,6 +172,97 @@ class HealthConnectSyncTest {
 
     private val client = FakeHealthConnectClient()
     private val sync = HealthConnectSync(client)
+
+    private fun weight(time: Instant, pkg: String = "other.app") = WeightRecord(
+        time = time,
+        zoneOffset = null,
+        weight = Mass.kilograms(80.0),
+        metadata = client.metadataFrom(pkg)
+    )
+
+    @Test
+    fun inbound_readsOldAndRecentRecordsWithoutAnApplicationCutoff() = runTest {
+        val old = Instant.parse("2017-01-01T12:00:00Z")
+        val recent = Instant.parse("2026-10-01T09:00:00Z")
+        client.readsRejected = false
+        client.stored += listOf(weight(old), weight(recent))
+
+        val readings = sync.readInboundReadings("own.app", 0L)
+
+        assertEquals(listOf(old.toEpochMilli(), recent.toEpochMilli()), readings.map { it.timeMs })
+        assertTrue(client.reads.all { it.timeRangeFilter.startTime == Instant.EPOCH })
+    }
+
+    @Test
+    fun inbound_respectsAnExplicitRequestedStartTime() = runTest {
+        val since = Instant.parse("2024-10-01T00:00:00Z")
+        val recent = Instant.parse("2026-10-01T09:00:00Z")
+        client.readsRejected = false
+        client.stored += listOf(weight(Instant.parse("2017-01-01T12:00:00Z")), weight(recent))
+
+        val readings = sync.readInboundReadings("own.app", since.toEpochMilli())
+
+        assertEquals(listOf(recent.toEpochMilli()), readings.map { it.timeMs })
+        assertTrue(client.reads.all { it.timeRangeFilter.startTime == since })
+    }
+
+    @Test
+    fun inbound_readsEveryPageOfEveryType_andExcludesOwnWritesOnLaterPages() = runTest {
+        val time = Instant.parse("2026-10-01T09:00:00Z")
+        client.readsRejected = false
+        client.pageSize = 1
+        client.finalPageToken = ""
+        val foreign = client.metadataFrom("other.app")
+        val own = client.metadataFrom("own.app")
+        // Own records occur on the first AND last pages. The last page's composition values are
+        // closest to the foreign weight, so leaking that page corrupts the result.
+        for ((index, metadata) in listOf(own, foreign, own).withIndex()) {
+            val isForeign = index == 1
+            val compositionTime = time.minusMillis(when (index) { 0 -> 500L; 1 -> 400L; else -> 0L })
+            client.stored += WeightRecord(time, null, Mass.kilograms(if (isForeign) 80.0 else 95.0), metadata)
+            client.stored += BodyFatRecord(compositionTime, null, Percentage(if (isForeign) 20.0 else 30.0), metadata)
+            client.stored += BodyWaterMassRecord(compositionTime, null, Mass.kilograms(if (isForeign) 44.0 else 42.0), metadata)
+            client.stored += BoneMassRecord(compositionTime, null, Mass.kilograms(if (isForeign) 3.0 else 4.0), metadata)
+            client.stored += LeanBodyMassRecord(compositionTime, null, Mass.kilograms(if (isForeign) 60.0 else 55.0), metadata)
+        }
+
+        val reading = sync.readInboundReadings("own.app", time.minusSeconds(1).toEpochMilli()).single()
+
+        assertEquals(80f, reading.weightKg)
+        assertEquals(20f, reading.fatPct)
+        assertEquals(55f, reading.waterPct)
+        assertEquals(3f, reading.boneKg)
+        assertEquals(60f, reading.leanKg)
+        assertEquals(15, client.reads.size)
+        assertEquals(5, client.reads.count { it.pageToken == "cursor:2" })
+    }
+
+    @Test
+    fun inbound_importsMoreThanTheDefaultPageSize() = runTest {
+        client.readsRejected = false
+        repeat(1001) { client.stored += weight(Instant.ofEpochSecond(it.toLong() + 1)) }
+
+        val readings = sync.readInboundReadings("own.app", 0L)
+
+        assertEquals((1L..1001L).map { it * 1000L }, readings.map { it.timeMs })
+        assertEquals(2, client.reads.count { it.recordType == WeightRecord::class })
+    }
+
+    @Test
+    fun inbound_failingLaterPageDoesNotReturnAPartialHistory() = runTest {
+        client.readsRejected = false
+        client.pageSize = 1
+        client.failingPageToken = "cursor:1"
+        client.stored += listOf(weight(Instant.ofEpochSecond(1)), weight(Instant.ofEpochSecond(2)))
+
+        try {
+            sync.readInboundReadings("own.app", 0L)
+            fail("The second page must fail instead of returning partial results")
+        } catch (error: IllegalStateException) {
+            assertEquals("scripted page failure", error.message)
+        }
+        assertEquals(listOf(null, "cursor:1"), client.reads.map { it.pageToken })
+    }
 
     private fun mv(key: String, unit: String, value: Float) =
         OpenScaleMeasurementValue("builtin.${key.lowercase()}", key, unit, false, value)
@@ -214,8 +363,7 @@ class HealthConnectSyncTest {
 
     // --- Inbound grouping ------------------------------------------------------------------
     // Health Connect has no notion of "one weigh-in", so the reading is assembled from separate
-    // records. Exercised on the pure grouping step: dataOrigin cannot be set on a Metadata from
-    // outside androidx, so building foreign records is not possible here.
+    // records. Exercise the grouping rules directly as well as through the paged fake above.
 
     @Test
     fun inbound_groupsRecordsWrittenSlightlyApart_andCarriesBoneAndLeanMass() = runTest {
