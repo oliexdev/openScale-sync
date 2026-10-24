@@ -48,7 +48,6 @@ import com.health.openscale.sync.gui.components.PendingQueueCard
 import com.health.openscale.sync.gui.components.SyncActionButtons
 import com.health.openscale.sync.gui.components.SyncErrorBanner
 import timber.log.Timber
-import java.time.Duration
 import java.time.Instant
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
@@ -442,7 +441,8 @@ abstract class ServiceInterface (
             return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Import is not enabled for this backend")
         }
         return try {
-            val since = Instant.now().minus(Duration.ofDays(730)).toEpochMilli()
+            // Import all accessible history; each source enforces its own access restrictions.
+            val since = Instant.EPOCH.toEpochMilli()
             // updateMeasurement() always writes weight, unlike the null-guarded fat/water/muscle —
             // so a 0 here would overwrite openScale's own good value instead of just a mirror's.
             val (items, rejected) = readInbound(userId, since)

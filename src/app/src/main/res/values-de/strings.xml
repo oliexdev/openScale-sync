@@ -105,6 +105,10 @@
     <string name="health_connect_request_permissions_button">Health Connect-Berechtigungen anfordern</string>
     <string name="health_connect_permission_not_granted">Health Connect-Berechtigung nicht erteilt.</string>
     <string name="health_connect_connected_text">Health Connect-Verbindung erfolgreich</string>
+    <string name="health_connect_request_history_button">Vollständigen Messverlauf zulassen</string>
+    <string name="health_connect_history_granted">Der Zugriff auf den Verlauf ist aktiviert. Führe „Alle Dienste synchronisieren“ aus, um ältere Messwerte aus Health Connect zu importieren.</string>
+    <string name="health_connect_history_limited">Ohne Zugriff auf den Verlauf kann diese App nur Messwerte ab 30 Tagen vor der ersten Erteilung ihrer Health-Connect-Berechtigungen lesen. Erlaube den vollständigen Messverlauf, um auch frühere Messwerte zu importieren.</string>
+    <string name="health_connect_history_unavailable">Diese Version von Health Connect unterstützt keinen Zugriff auf den Verlauf. Messwerte, die mehr als 30 Tage vor der ersten Erteilung der Berechtigungen liegen, können nicht importiert werden.</string>
 
     <string name="mqtt_broker_successful_connected_text">Erfolgreich mit MQTT-Broker verbunden.</string>
     <string name="mqtt_server_name_title">Servername</string>
@@ -197,6 +201,7 @@
     <string name="disclosure_title">Bevor du fortfährst</string>
     <string name="disclosure_write">openScale sync schreibt die in openScale erfassten Messwerte nach Health Connect — Gewicht, Körperfett, Körperwasser, Knochenmasse, Magermasse und Grundumsatz —, damit andere Gesundheits-Apps auf diesem Gerät sie nutzen können.</string>
     <string name="disclosure_read">Da die Synchronisationsrichtung Import einschließt, liest openScale sync außerdem Gewicht, Körperfett, Körperwasser, Knochenmasse und Magermasse, die andere Apps nach Health Connect geschrieben haben, und fügt diese Messungen deinem openScale-Verlauf hinzu, damit dein Verlauf vollständig bleibt.</string>
+    <string name="disclosure_read_history">Erlaube den vollständigen Messverlauf, um auch frühere Messwerte zu importieren. Ohne diesen Zugriff beschränkt Health Connect diese App auf Messwerte ab 30 Tagen vor der ersten Erteilung ihrer Health-Connect-Berechtigungen. Du kannst den Zugriff auf den Verlauf ablehnen und die innerhalb dieser Grenze verfügbaren Messwerte weiterhin synchronisieren.</string>
     <string name="disclosure_how">Diese Daten werden ausschließlich für diese Synchronisation verwendet. Sie bleiben auf deinem Gerät, abgesehen von den Diensten, die du selbst aktivierst, und werden nie für Werbung genutzt, verkauft oder an Dritte weitergegeben.</string>
     <string name="disclosure_accept">Zustimmen</string>
     <string name="disclosure_decline">Jetzt nicht</string>
