@@ -1,0 +1,7 @@
+- New SparkyFitness sync backend.
+- Health Connect could import your full history.
+- wger: several weigh-ins per day, no duplicates, your profile's kg or lb, full history.
+- MQTT: optional topic prefix for several phones on one broker.
+- Sync buttons follow each service's direction and import before exporting.
+- Android 17: asks for local network access when a server runs at home.
+- Missing values are no longer sent as 0.
