@@ -67,6 +67,8 @@ class SparkyFitnessService(
 
     override fun viewModel(): ViewModelInterface = viewModel
 
+    override val serverAddress: String? get() = viewModel.server.value
+
     // Export only: SparkyFitness has a readable check-in API, but inbound import is out of scope here.
     override val supportsInbound: Boolean get() = false
 

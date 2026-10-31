@@ -42,6 +42,8 @@ class WebhookService(
 
     override fun viewModel(): ViewModelInterface = viewModel
 
+    override val serverAddress: String? get() = viewModel.url.value
+
     override suspend fun connect() {
         initWebhook()
     }

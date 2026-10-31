@@ -217,6 +217,7 @@ class HealthConnectService(
     }
 
     override fun registerActivityResultLauncher(activity: ComponentActivity) {
+        super.registerActivityResultLauncher(activity)
         healthConnectRequestPermissions = activity.registerForActivityResult(healthConnectPermissionContract) { granted ->
             activity.lifecycle.coroutineScope.launch {
                 checkAllPermissionsGranted()

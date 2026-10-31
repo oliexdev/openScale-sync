@@ -49,6 +49,8 @@ class InfluxDbService(
 
     override fun viewModel(): ViewModelInterface = viewModel
 
+    override val serverAddress: String? get() = viewModel.url.value
+
     override suspend fun connect() {
         connectInfluxDb()
     }

@@ -17,6 +17,18 @@
  */
 package com.health.openscale.sync.core.service
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.health.openscale.sync.core.model.OpenScaleViewModel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.InetAddress
+import java.net.URI
 import androidx.core.content.edit
 import android.content.Context
 import androidx.activity.ComponentActivity
@@ -190,6 +202,58 @@ abstract class ServiceInterface (
      * ours next to the original.
      */
     open val exportsImported: Boolean get() = true
+
+    // --- Android 17 local network permission ---------------------------------------------
+    // Targeting SDK 37, traffic to the local network needs ACCESS_LOCAL_NETWORK, and without it a
+    // TCP connect is not refused but times out — all a user would ever see. Most users run their
+    // MQTT broker, InfluxDB, webhook or wger/Endurain/SparkyFitness instance at home, so a backend
+    // aimed at such a host needs the grant before it connects; a background sync cannot ask. The
+    // check only decides whether to ask and how to word an error, it never blocks a connection:
+    // whether a Tailscale peer over the VPN needs it is undocumented, and refusing what the system
+    // would allow is worse than asking once too often.
+
+    /**
+     * The server this backend talks to, as its settings store it (URL, `host:port` or host), or
+     * null for one that is not on the network (Health Connect).
+     */
+    open val serverAddress: String? get() = null
+
+    /** Whether the last check found this backend's server in the local network without the grant. */
+    @Volatile private var localNetworkBlocked = false
+
+    private var localNetworkLauncher: ActivityResultLauncher<String>? = null
+    private var localNetworkAnswer: CompletableDeferred<Unit>? = null
+
+    /**
+     * Whether this backend is enabled, aimed at a host in the local network, and lacks the grant.
+     * Also remembered for [setErrorMessage], so a failure caused by it says so instead of timing out.
+     */
+    suspend fun needsLocalNetwork(): Boolean {
+        val address = serverAddress
+        // Before Android 17 INTERNET covers the local network.
+        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.CINNAMON_BUN ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+            PackageManager.PERMISSION_GRANTED
+        localNetworkBlocked = viewModel().syncEnabled.value && address != null && !granted && isLocalServer(address)
+        return localNetworkBlocked
+    }
+
+    /**
+     * Asks for the local network grant if this backend needs it, and returns once the user has
+     * answered — before the caller connects. Android's prompt says what it is about; once Android
+     * stopped prompting, the error banner points to the settings. [atStartup] is the one-off ask for
+     * users who had such a backend before the update: once per app, never again at a start.
+     */
+    suspend fun requestLocalNetwork(atStartup: Boolean = false) {
+        val launcher = localNetworkLauncher ?: return
+        val prefs = context.getSharedPreferences(OpenScaleViewModel.SETTINGS_FILE, Context.MODE_PRIVATE)
+        if (atStartup && prefs.getBoolean(LOCAL_NETWORK_ASKED_AT_START, false)) return
+        if (!needsLocalNetwork()) return
+        if (atStartup) prefs.edit { putBoolean(LOCAL_NETWORK_ASKED_AT_START, true) }
+        val answer = CompletableDeferred<Unit>().also { localNetworkAnswer = it }
+        launcher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        answer.await()
+    }
 
     /** Outbound active unless the user set this backend to import-only. */
     fun exportEnabled(): Boolean = viewModel().syncDirection.value != SyncDirection.IMPORT
@@ -597,6 +661,7 @@ abstract class ServiceInterface (
 
     // Lifecycle: connect to the backend, then replay any backlog queued by a previous run.
     suspend fun init() {
+        needsLocalNetwork()   // no prompt from here — only so a resulting failure is explained
         connect()
         drainQueue()
     }
@@ -878,7 +943,10 @@ abstract class ServiceInterface (
             }
         }
 
-        if (failure.message != null) {
+        // Without the grant a local connection just times out; name the actual cause.
+        if (localNetworkBlocked && failure.errorType != SyncResult.ErrorType.INVALID_DATA) {
+            fullMessage = context.getString(R.string.local_network_permission_error)
+        } else if (failure.message != null) {
             fullMessage += " (" + failure.message + ")"
         } else if (failure.cause != null) {
             fullMessage += " (" + failure.cause.message + ")"
@@ -902,8 +970,12 @@ abstract class ServiceInterface (
         viewModel().setErrorMessage("")
     }
 
+    /** Overrides that register launchers of their own call this too: it holds the local network one. */
     open fun registerActivityResultLauncher(activity: ComponentActivity) {
-
+        if (serverAddress == null) return
+        localNetworkLauncher = activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            localNetworkAnswer?.complete(Unit)
+        }
     }
 
     @Composable
@@ -957,5 +1029,29 @@ abstract class ServiceInterface (
         private const val DIRTY_KEY = "outstanding"
         /** Pre-0.6 per-op queue, folded into [DIRTY_KEY] on first read. */
         private const val LEGACY_QUEUE_KEY = "queue"
+
+        /** The one-off ask at start has happened (see [requestLocalNetwork]). */
+        private const val LOCAL_NETWORK_ASKED_AT_START = "localNetworkAskedAtStart"
+
+        /**
+         * Whether [address] (URL, `host:port` or host) is in the local network: a `.local` name —
+         * mDNS, which itself needs the grant, so it cannot be resolved to check — or a name that
+         * resolves (plain DNS, which the permission exempts) to a private or link-local address,
+         * CGNAT (where Tailscale puts its peers) or an IPv6 unique local address.
+         */
+        private suspend fun isLocalServer(address: String): Boolean {
+            val trimmed = address.trim()
+            val host = runCatching { URI(if ("://" in trimmed) trimmed else "tcp://$trimmed").host }.getOrNull()
+                ?.removeSurrounding("[", "]") ?: return false
+            if (host.endsWith(".local", ignoreCase = true)) return true
+            return withContext(Dispatchers.IO) {
+                runCatching { InetAddress.getAllByName(host) }.getOrDefault(emptyArray()).any { a ->
+                    val b = a.address
+                    a.isSiteLocalAddress || a.isLinkLocalAddress ||
+                        (b.size == 4 && b[0] == 100.toByte() && (b[1].toInt() and 0xC0) == 0x40) ||
+                        (b.size == 16 && (b[0].toInt() and 0xFE) == 0xFC)
+                }
+            }
+        }
     }
 }

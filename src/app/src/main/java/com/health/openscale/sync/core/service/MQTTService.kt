@@ -78,6 +78,8 @@ class MQTTService(
         return viewModel
     }
 
+    override val serverAddress: String? get() = viewModel.mqttServer.value
+
     // MQTT encodes the stable userId in the topic path (username travels in the JSON payload) → multi-user.
     override val isMultiUser: Boolean get() = true
 

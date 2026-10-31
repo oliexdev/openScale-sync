@@ -182,6 +182,8 @@ class MainActivity : AppCompatActivity() {
                 syncService.openScaleService = openScaleService
                 syncService.openScaleDataService = openScaleDataService
                 if (syncService.viewModel().syncEnabled.value) {
+                    // Before the first connect, or a backend at home just times out (Android 17).
+                    syncService.requestLocalNetwork(atStartup = true)
                     syncService.init()
                 }
             }
@@ -342,7 +344,10 @@ class MainActivity : AppCompatActivity() {
                                         checked = service.viewModel().syncEnabled.value,
                                         onCheckedChange = {
                                             service.viewModel().setSyncEnabled(it)
-                                            if (it) scope.launch { service.init() }
+                                            if (it) scope.launch {
+                                                service.requestLocalNetwork()
+                                                service.init()
+                                            }
                                         },
                                         modifier = Modifier.padding(end = 8.dp)
                                     )

@@ -64,6 +64,8 @@ class WgerService(
         return viewModel
     }
 
+    override val serverAddress: String? get() = viewModel.wgerServer.value
+
     // Wger weight entries are readable via REST → bidirectional.
     override val supportsInbound: Boolean get() = true
 

@@ -147,7 +147,13 @@ fun SyncActionButtons(
     val enabled = service.viewModel().syncEnabled.value
 
     OutlinedButton(
-        onClick = { if (!testConnecting) onTest() },
+        onClick = {
+            if (!testConnecting) activity.lifecycleScope.launch {
+                // Ask for the local network grant before connecting, or the test just times out.
+                service.requestLocalNetwork()
+                onTest()
+            }
+        },
         enabled = enabled && !testConnecting && !fullSyncing,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -169,6 +175,7 @@ fun SyncActionButtons(
             if (!fullSyncing) {
                 fullSyncing = true
                 activity.lifecycleScope.launch {
+                    service.requestLocalNetwork()
                     // null → failed; the error banner carries the reason. Otherwise report what was
                     // actually acknowledged by the backend, not how much openScale holds.
                     val stats = service.runFullSync()

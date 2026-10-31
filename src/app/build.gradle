@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    compileSdk 36
+    compileSdk 37
     defaultConfig {
         applicationId "com.health.openscale.sync"
         minSdkVersion 31
-        targetSdkVersion 36
+        targetSdkVersion 37
         versionCode 20
         versionName "0.6.3"
         multiDexEnabled = true

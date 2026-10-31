@@ -64,6 +64,8 @@ class EndurainService(
 
     override fun viewModel(): ViewModelInterface = viewModel
 
+    override val serverAddress: String? get() = viewModel.endurainServer.value
+
     // Export only: Endurain has a readable weight API but inbound import is out of scope here.
     override val supportsInbound: Boolean get() = false
 
