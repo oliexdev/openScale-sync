@@ -83,6 +83,7 @@ class HealthConnectSyncTest {
         var finalPageToken: String? = null
         var failingPageToken: String? = null
         var historyAvailable = true
+        var featureQueryThrows = false
         var grantedPermissions = emptySet<String>()
 
         // The platform populates dataOrigin on reads; public Metadata factories cannot set it.
@@ -102,7 +103,8 @@ class HealthConnectSyncTest {
 
         override val features = object : HealthConnectFeatures {
             override fun getFeatureStatus(feature: Int): Int =
-                if (historyAvailable && feature == HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY)
+                if (featureQueryThrows) throw IllegalStateException("scripted feature failure")
+                else if (historyAvailable && feature == HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY)
                     HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
                 else HealthConnectFeatures.FEATURE_STATUS_UNAVAILABLE
         }

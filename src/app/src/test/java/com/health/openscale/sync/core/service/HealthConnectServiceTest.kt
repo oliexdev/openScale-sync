@@ -136,17 +136,14 @@ class HealthConnectServiceTest {
     }
 
     @Test
-    fun historyPermissionCanBeRequestedAfterRegularPermissionsWereGranted() = runTest {
+    fun failingHistoryFeatureQueryDoesNotDisableNormalSync() = runTest {
         service.viewModel().setSyncDirection(SyncDirection.BOTH)
+        client.featureQueryThrows = true
         client.grantedPermissions = writePermissions + readPermissions
-        val activity = Robolectric.buildActivity(ComponentActivity::class.java).create().get()
-        service.registerActivityResultLauncher(activity)
 
-        service.requestPermissions()
-
-        val requested = shadowOf(activity).lastRequestedPermission
-        assertTrue(historyPermission in requested.requestedPermissions)
+        assertTrue(service.checkAllPermissionsGranted() is SyncResult.Success)
         assertTrue(service.viewModel().allPermissionsGranted.value)
+        assertFalse(historyPermission in service.permissionsToRequest())
     }
 
     @Test

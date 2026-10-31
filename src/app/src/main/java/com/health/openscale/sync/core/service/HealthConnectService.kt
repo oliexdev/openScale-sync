@@ -78,7 +78,6 @@ class HealthConnectService(
     private val viewModel: HealthConnectViewModel = HealthConnectViewModel(sharedPreferences)//ViewModelProvider(context)[HealthConnectViewModel::class.java]
     private lateinit var healthConnectSync : HealthConnectSync
     private var historyReadAvailable by mutableStateOf(false)
-    private var historyReadGranted by mutableStateOf(false)
     private lateinit var healthConnectRequestPermissions : ActivityResultLauncher<Set<String>>
 
     /**
@@ -246,10 +245,15 @@ class HealthConnectService(
         try {
             val granted = currentClient.permissionController.getGrantedPermissions()
             val needed = neededPermissions()
-            historyReadAvailable = currentClient.features.getFeatureStatus(
-                HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY
-            ) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
-            historyReadGranted = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted
+            // Own try: history is optional, so a failing feature query must not fail the check.
+            historyReadAvailable = try {
+                currentClient.features.getFeatureStatus(
+                    HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY
+                ) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+            } catch (e: Exception) {
+                Timber.w(e, "Health Connect history feature query failed")
+                false
+            }
 
             if (granted.containsAll(needed)) {
                 viewModel.setAllPermissionsGranted(true)
@@ -285,12 +289,13 @@ class HealthConnectService(
         }
 
         try {
-            checkAllPermissionsGranted()
+            if (checkAllPermissionsGranted() is SyncResult.Success) {
+                return
+            }
+
             // History is optional: ask only for an importing setup on a supported device, and
             // never include it in neededPermissions(), so declining it does not disable sync.
-            val requested = permissionsToRequest()
-            if (currentClient.permissionController.getGrantedPermissions().containsAll(requested)) return
-            healthConnectRequestPermissions.launch(requested)
+            healthConnectRequestPermissions.launch(permissionsToRequest())
         } catch (e: Exception) {
             setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
         }
@@ -381,29 +386,16 @@ class HealthConnectService(
                     onClick = { openAppStore(activity) }
                 )
             }
-            if (importEnabled() && viewModel.connectAvailable.value) {
-                Text(stringResource(id = when {
-                    historyReadGranted -> R.string.health_connect_history_granted
-                    historyReadAvailable -> R.string.health_connect_history_limited
-                    else -> R.string.health_connect_history_unavailable
-                }))
-            }
-            val canRequestHistory = importEnabled() && historyReadAvailable && !historyReadGranted
-            if (!viewModel.allPermissionsGranted.value || canRequestHistory) {
+            if (!viewModel.allPermissionsGranted.value) {
                 // Prominent disclosure: Health Connect policy wants the what/why/how stated in the
                 // app, with an affirmative action, BEFORE the system prompt appears — the rationale
                 // screen does not count, since it sits behind a link inside that very prompt.
                 var showDisclosure by remember { mutableStateOf(false) }
 
-                if (!viewModel.allPermissionsGranted.value) {
-                    Text(stringResource(id = R.string.health_connect_permission_not_granted))
-                }
-                val requestLabel = stringResource(id = if (viewModel.allPermissionsGranted.value)
-                    R.string.health_connect_request_history_button
-                else R.string.health_connect_request_permissions_button)
+                Text(stringResource(id = R.string.health_connect_permission_not_granted))
                 SyncConnectButton(
-                    text = requestLabel,
-                    connectingText = requestLabel,
+                    text = stringResource(id = R.string.health_connect_request_permissions_button),
+                    connectingText = stringResource(id = R.string.health_connect_request_permissions_button),
                     connecting = false,
                     enabled = viewModel.syncEnabled.value,
                     onClick = { showDisclosure = true }
@@ -421,10 +413,8 @@ class HealthConnectService(
                                 Text(stringResource(id = R.string.disclosure_write))
                                 // Only named when it is actually about to be requested.
                                 if (importEnabled()) {
-                                    Text(stringResource(id = R.string.disclosure_read))
-                                    if (historyReadAvailable) {
-                                        Text(stringResource(id = R.string.disclosure_read_history))
-                                    }
+                                    Text(stringResource(id = R.string.disclosure_read) +
+                                        if (historyReadAvailable) " " + stringResource(id = R.string.disclosure_read_history) else "")
                                 }
                                 Text(stringResource(id = R.string.disclosure_how))
                                 // Same link the rationale screen carries, so the full policy is one
