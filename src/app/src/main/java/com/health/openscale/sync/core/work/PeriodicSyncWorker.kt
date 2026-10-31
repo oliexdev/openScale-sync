@@ -29,6 +29,7 @@ import androidx.work.WorkerParameters
 import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.service.BackendRegistry
+import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
@@ -36,9 +37,11 @@ import java.util.concurrent.TimeUnit
 /**
  * Optional periodic background sync (Phase 4 / reliability). When the user enables it, this runs
  * every few hours WITHOUT the app being opened:
+ *  - **inbound** first, for all backends: pull from each import-enabled backend into openScale
+ *    (openScale stays master), so what came from a backend is known as the source's before
+ *    anything goes out, and every backend gets every import of the run,
  *  - **outbound**: reconcile each export-enabled backend against the export ledger (heals missed
- *    pushes incl. deletes),
- *  - **inbound**: pull from each import-enabled backend into openScale (openScale stays master).
+ *    pushes incl. deletes).
  *
  * This is the safety net for the OEM-killer case and the automatic counterpart to the manual
  * "Sync now" button. Off by default; the instant push remains the primary outbound path.
@@ -63,33 +66,49 @@ class PeriodicSyncWorker(
         // Never emptyList(): reconcile() deletes what is missing from the list it is given, so a
         // failed read would wipe the destination's history instead of skipping one cycle.
         val allUsers = runCatching { dataProvider.getUsers() }.getOrElse { return Result.retry() }
-        val allMeasurements = runCatching { allUsers.flatMap { dataProvider.getMeasurements(it) } }
+        var allMeasurements = runCatching { allUsers.flatMap { dataProvider.getMeasurements(it) } }
             .getOrElse { return Result.retry() }
 
         var anyFailure = false
         try {
-            for (service in services) {
-                val vm = service.viewModel()
-                if (!vm.syncEnabled.value) continue
+            val enabled = services.filter { it.viewModel().syncEnabled.value }
+            for (service in enabled) {
                 service.openScaleDataService = dataProvider
-                runCatching { service.init() }.onFailure { Timber.e(it, "%s.init() failed in periodic sync", vm.getName()) }
+                runCatching { service.init() }.onFailure { Timber.e(it, "%s.init() failed in periodic sync", service.viewModel().getName()) }
+            }
 
-                if (service.exportEnabled()) {
-                    val measurements = if (service.isMultiUser) allMeasurements
-                        else allMeasurements.filter { it.userId == vm.selectedUserId.value }
-                    val r = runCatching { service.reconcile(measurements) }.getOrNull()
-                    if (r is SyncResult.Failure) anyFailure = true
-                }
-                if (service.importEnabled()) {
-                    when (val r = runCatching { service.runInbound(vm.selectedUserId.value) }.getOrNull()) {
-                        is SyncResult.Failure -> anyFailure = true
-                        is SyncResult.Success -> if (r.data.total > 0) Timber.d(
+            // Phase 1, inbound for every backend before any export: each backend then gets what any
+            // other one imported in this same run, whatever their order, and whatever came from a
+            // backend is known as the source's before anything is exported to it.
+            val importFailed = HashSet<ServiceInterface>()
+            var imported = 0
+            for (service in enabled.filter { it.importEnabled() }) {
+                val vm = service.viewModel()
+                when (val r = runCatching { service.runInbound(vm.selectedUserId.value) }.getOrNull()) {
+                    is SyncResult.Failure, null -> { anyFailure = true; importFailed += service }
+                    is SyncResult.Success -> if (r.data.total > 0) {
+                        imported += r.data.total
+                        Timber.d(
                             "%s: imported %d new and enriched %d existing measurement(s)",
                             vm.getName(), r.data.imported, r.data.updated
                         )
-                        null -> {}
                     }
                 }
+            }
+            // A failed re-read keeps the older list: it only lacks the new measurements, none of
+            // which a ledger knows yet, so reconcile cannot take them as deleted.
+            if (imported > 0) {
+                allMeasurements = runCatching { allUsers.flatMap { dataProvider.getMeasurements(it) } }
+                    .getOrDefault(allMeasurements)
+            }
+
+            // Phase 2, outbound. A backend whose import failed waits for the next run.
+            for (service in enabled.filter { it.exportEnabled() && it !in importFailed }) {
+                val vm = service.viewModel()
+                val measurements = if (service.isMultiUser) allMeasurements
+                    else allMeasurements.filter { it.userId == vm.selectedUserId.value }
+                val r = runCatching { service.reconcile(measurements) }.getOrNull()
+                if (r is SyncResult.Failure) anyFailure = true
             }
         } finally {
             services.forEach { runCatching { it.close() } }

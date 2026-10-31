@@ -39,7 +39,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
-import com.health.openscale.sync.core.service.ReconcileStats
+import com.health.openscale.sync.core.service.FullSyncStats
 import com.health.openscale.sync.core.service.ServiceInterface
 import kotlinx.coroutines.launch
 
@@ -52,14 +52,17 @@ val LocalSnackbar = staticCompositionLocalOf<(String) -> Unit> { {} }
  * measurements were left out because the backend cannot store them as they are (issues #34/#35).
  * Skipped measurements are not an error: the rest of the run went through.
  */
-fun fullSyncMessage(res: Resources, stats: ReconcileStats): String {
-    val sent = when {
-        stats.sent == 0 -> res.getString(R.string.sync_service_full_nothing_sent_info)
-        else -> res.getQuantityString(R.plurals.sync_service_full_sent_info, stats.sent, stats.sent)
+fun fullSyncMessage(res: Resources, stats: FullSyncStats): String {
+    val exported = stats.exported
+    val imported = stats.imported.total
+    val parts = buildList {
+        if (exported.sent > 0) add(res.getQuantityString(R.plurals.sync_service_full_sent_info, exported.sent, exported.sent))
+        if (imported > 0) add(res.getQuantityString(R.plurals.sync_service_full_imported_info, imported, imported))
+        if (isEmpty()) add(res.getString(R.string.sync_service_full_nothing_sent_info))
+        if (exported.skipped > 0) add(res.getQuantityString(
+            R.plurals.sync_service_full_skipped_info, exported.skipped, exported.skipped))
     }
-    if (stats.skipped == 0) return sent
-    return sent + " · " + res.getQuantityString(
-        R.plurals.sync_service_full_skipped_info, stats.skipped, stats.skipped)
+    return parts.joinToString(" · ")
 }
 
 /**

@@ -98,6 +98,16 @@ data class InboundStats(
     val updated: Int = 0
 ) {
     val total: Int get() = imported + updated
+
+    operator fun plus(o: InboundStats) = InboundStats(imported + o.imported, updated + o.updated)
+}
+
+/** What a manual sync did in both directions: [exported] to the backend, [imported] from it. */
+data class FullSyncStats(
+    val exported: ReconcileStats = ReconcileStats(),
+    val imported: InboundStats = InboundStats()
+) {
+    operator fun plus(o: FullSyncStats) = FullSyncStats(exported + o.exported, imported + o.imported)
 }
 
 /**
@@ -171,6 +181,16 @@ abstract class ServiceInterface (
     /** Whether this backend can pull data INTO openScale (bidirectional). HealthConnect/Wger = true. */
     open val supportsInbound: Boolean get() = false
 
+    /**
+     * Whether measurements imported from this backend are still exported back to it. True wherever
+     * writing back is harmless: Wger patches the entry the measurement came from, and MQTT reads
+     * `<base>/inbound/…` but publishes openScale's complete state, which consumers expect to include
+     * imported values — so an edit made in openScale reaches the source too. False where it is not:
+     * Health Connect lets no app change another app's record, so writing back only adds a copy of
+     * ours next to the original.
+     */
+    open val exportsImported: Boolean get() = true
+
     /** Outbound active unless the user set this backend to import-only. */
     fun exportEnabled(): Boolean = viewModel().syncDirection.value != SyncDirection.IMPORT
 
@@ -185,13 +205,29 @@ abstract class ServiceInterface (
         exportEnabled() && (isMultiUser || userId == viewModel().selectedUserId.value)
 
     /**
-     * Full manual sync of all measurements of the selected user to this backend.
-     * Returns what was actually pushed on success, or null on failure (the error is surfaced via the
-     * error banner). Only call from the UI context where openScaleService/openScaleDataService are
-     * wired.
+     * Full manual sync with this backend, in the direction the user set for it: import first, then
+     * export — the order every sync uses, so whatever comes from this backend is known as the
+     * source's before anything is exported to it (see [isImported]). Returns what was actually
+     * imported and pushed on success, or null on failure (the error is surfaced via the error
+     * banner). Only call from the UI context where openScaleService/openScaleDataService are wired.
      */
-    suspend fun runFullSync() : ReconcileStats? {
-        // Multi-user backends sync all users; single-user backends only their selected user.
+    suspend fun runFullSync() : FullSyncStats? {
+        var imported = InboundStats()
+        if (importEnabled()) {
+            when (val r = runInbound(if (isMultiUser) -1 else viewModel().selectedUserId.value)) {
+                is SyncResult.Success -> imported = r.data
+                is SyncResult.Failure -> {
+                    setErrorMessage(r)
+                    return null
+                }
+            }
+        }
+        if (!exportEnabled()) {
+            viewModel().setLastSync(Instant.now())
+            return FullSyncStats(imported = imported)
+        }
+        // Read after the import, so what it just added goes out to this backend as well. Multi-user
+        // backends sync all users; single-user backends only their selected user.
         val measurements = try {
             val allUsers = openScaleDataService.getUsers()
             val users = if (isMultiUser) allUsers else allUsers.filter { it.id == viewModel().selectedUserId.value }
@@ -215,7 +251,7 @@ abstract class ServiceInterface (
         return when (result) {
             is SyncResult.Success -> {
                 viewModel().setLastSync(Instant.now())
-                result.data
+                FullSyncStats(result.data, imported)
             }
             is SyncResult.Failure -> {
                 setErrorMessage(result)
@@ -317,6 +353,12 @@ abstract class ServiceInterface (
                 skippedNoWeight++
                 continue
             }
+            // Imported from this very backend: nothing of ours to send. Also stays in currentIds,
+            // so an earlier echo of it is neither re-pushed nor deleted.
+            if (isImported(m)) {
+                unchanged++
+                continue
+            }
             val prev = ledger[m.id]
             when {
                 prev == null -> inserts += m
@@ -395,7 +437,7 @@ abstract class ServiceInterface (
         // so the periodic worker doesn't rewrite unchanged snapshots every run. Best-effort.
         val snapshotUsers = if (force) current.mapTo(HashSet()) { it.userId } else changedUsers
         if (snapshotUsers.isNotEmpty()) {
-            runCatching { onReconciled(current, snapshotUsers) }
+            runCatching { onReconciled(current.filterNot { isImported(it) }, snapshotUsers) }
                 .onFailure { Timber.w(it, "onReconciled hook failed") }
         }
 
@@ -413,6 +455,31 @@ abstract class ServiceInterface (
      * retained full-history snapshot per user. Best-effort: a thrown error is logged, not propagated.
      */
     protected open suspend fun onReconciled(current: List<OpenScaleMeasurement>, changedUserIds: Set<Int>) {}
+
+    // --- Inbound origin (no write-back to the source, issue #51) -------------------------
+    // Per-backend set of the measurements runInbound took FROM this backend, as "userId:timeMs",
+    // kept only where [exportsImported] is false. Such a measurement is never exported back to that
+    // backend, not even after an edit in openScale: on Health Connect it would sit as a record of
+    // ours next to the original app's (Google's write guidance forbids writing back what was read).
+    // The source keeps its own record; a correction belongs there and comes back with the next
+    // import. Other backends still get everything. Per measurement, not per value: an inbound
+    // reading always carries the weight, which every backend anchors its payload on, so no part of
+    // such a measurement is ours to send.
+    private val originPrefs by lazy {
+        context.getSharedPreferences("inbound_origin_${viewModel().getName()}", Context.MODE_PRIVATE)
+    }
+
+    private fun originKey(userId: Int, timeMs: Long) = "$userId:$timeMs"
+
+    private fun originRecord(keys: Set<String>) {
+        if (keys.isEmpty()) return
+        synchronized(ledgerLock) {
+            originPrefs.edit { putStringSet("origin", originPrefs.getStringSet("origin", emptySet()).orEmpty() + keys) }
+        }
+    }
+
+    private fun isImported(m: OpenScaleMeasurement): Boolean =
+        !exportsImported && originKey(m.userId, m.date.time) in originPrefs.getStringSet("origin", emptySet()).orEmpty()
 
     // --- Inbound (Phase 4: external source → openScale) ---------------------------------
     /**
@@ -459,6 +526,10 @@ abstract class ServiceInterface (
                 openScaleDataService.getMeasurements(OpenScaleUser(target, ""))
                     .mapTo(HashSet()) { it.date.time }
             }
+
+            // Recorded BEFORE writing, so no export running meanwhile (the periodic worker, a manual
+            // sync) can see one of these measurements without knowing it is the source's.
+            if (!exportsImported) originRecord(items.mapTo(HashSet()) { originKey(it.userId ?: userId, it.timeMs) })
 
             var updated = 0
             val attempted = HashMap<Int, MutableList<Long>>()
@@ -585,7 +656,17 @@ abstract class ServiceInterface (
      * the ledger is a MOVE — backends key records by (user, time), so we drop the stale record at the
      * old time and recreate at the new one. No retry-enqueue here; submit()/drainQueue() own that.
      */
-    private suspend fun dispatchOp(op: PendingOp): SyncResult<Unit> = when (op.type) {
+    private suspend fun dispatchOp(op: PendingOp): SyncResult<Unit> {
+        // A measurement imported from this backend is the source's: nothing to send, and no ledger
+        // entry either, since nothing was exported. Deletes still go out unchanged — suppressing one
+        // would only let the next import bring the measurement straight back.
+        if ((op.type == "insert" || op.type == "update") && isImported(op.toMeasurement())) {
+            return SyncResult.Success(Unit)
+        }
+        return dispatchWire(op)
+    }
+
+    private suspend fun dispatchWire(op: PendingOp): SyncResult<Unit> = when (op.type) {
         "insert" -> op.toMeasurement().let { m ->
             insert(m).also { if (it is SyncResult.Success) ledgerRecord(op.id, m) }
         }
@@ -770,6 +851,7 @@ abstract class ServiceInterface (
     fun resetSyncState() {
         ledgerStore(emptyMap())
         dirtyStore(emptyMap())
+        synchronized(ledgerLock) { originPrefs.edit { clear() } }   // keyed by that install's user ids
         viewModel().setSelectedUserId(-1)   // user ids belong to that install too
     }
 

@@ -46,10 +46,7 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 class WgerService(
     private val context: Context,
@@ -94,21 +91,18 @@ class WgerService(
         else SyncResult.Failure(SyncResult.ErrorType.PERMISSION_DENIED)
 
     /**
-     * Inbound source (bidirectional): read weight entries from Wger. Wger has no data origin and
-     * only a date, so we apply openScale-as-master day-level gap-fill: only return entries for days
-     * openScale has no measurement yet (avoids echo/duplicates). The base [runInbound] writes them.
+     * Inbound source (bidirectional): read weight entries from Wger and return those openScale has
+     * no measurement for yet — several per day included ([WgerSync.unknownToOpenScale]). The base
+     * [runInbound] writes them, at wger's own time, which is what lets an export of them patch the
+     * entry they came from.
      */
     override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
         if (!::wgerSync.isInitialized || !viewModel.connectAvailable.value || !viewModel.allPermissionsGranted.value) {
             throw IllegalStateException("Wger not connected")
         }
-        val entries = wgerSync.readInboundWeights()
-        val dayKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getDefault() }
-        val existingDays = openScaleDataService.getMeasurements(OpenScaleUser(userId, ""))
-            .map { dayKey.format(it.date) }.toSet()
-        return entries.mapNotNull { (dateMs, kg) ->
-            if (dayKey.format(Date(dateMs)) in existingDays) null else InboundMeasurement(dateMs, kg)
-        }
+        val openScaleTimes = openScaleDataService.getMeasurements(OpenScaleUser(userId, "")).map { it.date.time }
+        return WgerSync.unknownToOpenScale(wgerSync.readInboundWeights(), openScaleTimes)
+            .map { InboundMeasurement(it.timeMs, it.weightKg) }
     }
 
     private suspend fun connectWger() {

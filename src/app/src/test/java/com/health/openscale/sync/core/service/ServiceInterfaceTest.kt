@@ -58,6 +58,7 @@ class ServiceInterfaceTest {
         // Start every test with an empty ledger + outstanding set for the "Fake" backend.
         ctx.getSharedPreferences("export_ledger_Fake", Context.MODE_PRIVATE).edit().clear().commit()
         ctx.getSharedPreferences("retry_queue_Fake", Context.MODE_PRIVATE).edit().clear().commit()
+        ctx.getSharedPreferences("inbound_origin_Fake", Context.MODE_PRIVATE).edit().clear().commit()
         backend = FakeBackend(ctx, prefs)
         // The drain re-derives outstanding ids from openScale, so the provider is part of the setup.
         openScale = FakeDataProvider(ctx, prefs)
@@ -456,6 +457,96 @@ class ServiceInterfaceTest {
         assertEquals(emptyList<String>(), openScale.inboundWrites)
     }
 
+    // --- No write-back to the source (issue #51) -------------------------------------------
+
+    @Test
+    fun imported_isNotExportedBackToItsSource_byForcedFullSyncOrRealTime() = runTest {
+        val b = inboundBackend()
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f, fatPct = 20f)
+        b.runInbound(1)
+        val imported = openScale.measurements.values.single()
+
+        val r = b.reconcile(openScale.measurements.values.toList(), force = true)
+        // A real-time op for it, e.g. after the user edited it in openScale.
+        assertTrue(b.submit(b.pendingOp("insert", imported)) is SyncResult.Success)
+
+        assertEquals(emptyList<OpenScaleMeasurement>(), b.written)
+        assertEquals(ReconcileStats(unchanged = 1), (r as SyncResult.Success).data)
+        assertEquals(0, b.pendingRetryCount())
+    }
+
+    @Test
+    fun editedImport_isStillNotExportedBackToItsSource() = runTest {
+        val b = inboundBackend()
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f, fatPct = 20f)
+        b.runInbound(1)
+        val imported = openScale.measurements.values.single()
+        // The user corrects the weight in openScale. The source keeps its own record — a copy of
+        // ours would sit next to it (Health Connect) or be rejected for the date (Wger).
+        val edited = OpenScaleMeasurement.fromValues(imported.id, 1, imported.date, "",
+            imported.values.map { if (it.isBuiltin("WEIGHT")) it.copy(value = 79f) else it })
+        openScale.put(edited)
+
+        b.reconcile(listOf(edited), force = true)
+        b.submit(b.pendingOp("update", edited))
+
+        assertEquals(emptyList<OpenScaleMeasurement>(), b.written)
+        assertEquals(0, b.pendingRetryCount())
+    }
+
+    @Test
+    fun ownMeasurement_stillGoesOut_toAnImportingBackend() = runTest {
+        val b = inboundBackend(m(1, 1000))
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f)
+        b.runInbound(1)
+
+        b.reconcile(openScale.measurements.values.toList())
+
+        assertEquals(listOf(1), b.written.map { it.id })
+    }
+
+    @Test
+    fun imported_stillGoesOutToOtherBackends() = runTest {
+        ctx.getSharedPreferences("export_ledger_Other", Context.MODE_PRIVATE).edit().clear().commit()
+        val source = inboundBackend()
+        source.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f, fatPct = 20f)
+        source.runInbound(1)
+        val other = FakeBackend(ctx, prefs, name = "Other")
+        other.openScaleDataService = openScale
+
+        other.reconcile(openScale.measurements.values.toList())
+
+        assertEquals(20f, other.written.single().body_fat)
+    }
+
+    @Test
+    fun separateChannelBackend_stillPublishesImportedValues() = runTest {
+        // MQTT: imports come from inbound/…, but history/last must show openScale's complete state.
+        val b = FakeBackend(ctx, prefs, name = "Fake", inbound = true, keepsImported = true)
+        b.openScaleDataService = openScale
+        b.viewModel().setSyncDirection(SyncDirection.BOTH)
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f, fatPct = 20f)
+        b.runInbound(1)
+
+        b.reconcile(openScale.measurements.values.toList())
+
+        assertEquals(20f, b.written.single().body_fat)
+        assertEquals(listOf(openScale.measurements.keys.single()), b.reconciledCalls.single().second)
+    }
+
+    @Test
+    fun deletingAnImportedMeasurement_stillReachesTheSource() = runTest {
+        val b = inboundBackend()
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f)
+        b.runInbound(1)
+        val imported = openScale.measurements.values.single()
+
+        b.submit(PendingOp("delete", id = imported.id, userId = 1, dateMs = 5000))
+
+        // Suppressing it would only let the next import bring the measurement straight back.
+        assertEquals(listOf("delete@5000/u1"), b.wire)
+    }
+
     // --- onReconciled snapshot hook -------------------------------------------------------
 
     @Test
@@ -742,6 +833,63 @@ class ServiceInterfaceTest {
         assertTrue("a throwing backend must not escape reconcile()", r is SyncResult.Failure)
         assertEquals(SyncResult.ErrorType.UNKNOWN_ERROR, (r as SyncResult.Failure).errorType)
         assertEquals(2, backend.pendingRetryCount())
+    }
+
+    // --- runFullSync follows the sync direction ---------------------------------------------
+
+    /** An inbound backend whose user is selected, holding one reading at 5000 to import. */
+    private fun fullSyncBackend(direction: SyncDirection, keepsImported: Boolean = true): FakeBackend {
+        val b = FakeBackend(ctx, prefs, name = "Fake", inbound = true, keepsImported = keepsImported)
+        b.openScaleDataService = openScale
+        b.viewModel().setSelectedUserId(1)
+        b.viewModel().setSyncDirection(direction)
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f)
+        openScale.put(m(1, 1000))
+        return b
+    }
+
+    @Test
+    fun runFullSync_importOnly_importsAndSendsNothing() = runTest {
+        val b = fullSyncBackend(SyncDirection.IMPORT)
+
+        val stats = b.runFullSync()
+
+        assertEquals(1, stats?.imported?.imported)
+        assertEquals(emptyList<OpenScaleMeasurement>(), b.written)
+    }
+
+    @Test
+    fun runFullSync_exportOnly_sendsAndImportsNothing() = runTest {
+        val b = fullSyncBackend(SyncDirection.EXPORT)
+
+        val stats = b.runFullSync()
+
+        assertEquals(emptyList<String>(), openScale.inboundWrites)
+        assertEquals(listOf(1), b.written.map { it.id })
+        assertEquals(InboundStats(), stats?.imported)
+    }
+
+    @Test
+    fun runFullSync_both_importsFirst_andSendsWhatItImported() = runTest {
+        val b = fullSyncBackend(SyncDirection.BOTH)
+
+        val stats = b.runFullSync()
+
+        // Read after the import, so the new measurement goes out in the same run.
+        assertEquals(listOf(1000L, 5000L), b.written.map { it.date.time }.sorted())
+        assertEquals(2, stats?.exported?.sent)
+    }
+
+    @Test
+    fun runFullSync_both_neverSendsBackAnEarlierImport_evenWithAnEmptyOriginList() = runTest {
+        // After an update, a data wipe or a reset: openScale holds an earlier import, and the list
+        // of what came from the backend starts empty. Importing first refills it before export.
+        val b = fullSyncBackend(SyncDirection.BOTH, keepsImported = false)
+        openScale.put(m(2, 5000, weight = 81f))
+
+        b.runFullSync()
+
+        assertEquals(listOf(1), b.written.map { it.id })
     }
 
     @Test

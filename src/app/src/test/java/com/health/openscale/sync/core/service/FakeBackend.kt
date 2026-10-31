@@ -81,10 +81,20 @@ class FakeDataProvider(
         if (dateMs in insertRejects) return true
         val id = (measurements.keys.maxOrNull() ?: 0) + 1
         measurements[id] = OpenScaleMeasurement.fromValues(
-            id, userId, Date(dateMs), "",
-            listOf(OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, weightKg))
+            id, userId, Date(dateMs), "", stored(weightKg, fat, water, muscle, valuesJson)
         )
         return true
+    }
+
+    /** The value set openScale stores for an inbound write: weight in kg, fat/water/muscle in %. */
+    private fun stored(
+        weightKg: Float, fat: Float?, water: Float?, muscle: Float?, valuesJson: String?
+    ): List<OpenScaleMeasurementValue> = buildList {
+        add(OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, weightKg))
+        fat?.let { add(OpenScaleMeasurementValue("builtin.body_fat", "Body fat", "%", false, it)) }
+        water?.let { add(OpenScaleMeasurementValue("builtin.water", "Water", "%", false, it)) }
+        muscle?.let { add(OpenScaleMeasurementValue("builtin.muscle", "Muscle", "%", false, it)) }
+        addAll(OpenScaleMeasurementValue.parseList(valuesJson))
     }
 
     override fun updateMeasurement(
@@ -92,7 +102,18 @@ class FakeDataProvider(
         fat: Float?, water: Float?, muscle: Float?, valuesJson: String?
     ): Boolean {
         inboundWrites += "update@$dateMs/u$userId"
-        return dateMs !in updateChangesNothing
+        if (dateMs in updateChangesNothing) return false
+        // Like the real provider: the passed values replace their counterparts, the rest stays.
+        val existing = measurements.values.firstOrNull { it.userId == userId && it.date.time == dateMs }
+        if (existing != null) {
+            val incoming = stored(weightKg, fat, water, muscle, valuesJson)
+            val ids = incoming.mapTo(HashSet()) { it.identity }
+            measurements[existing.id] = OpenScaleMeasurement.fromValues(
+                existing.id, userId, existing.date, existing.username,
+                existing.values.filterNot { it.identity in ids } + incoming
+            )
+        }
+        return true
     }
 }
 
@@ -107,12 +128,14 @@ class FakeBackend(
     name: String = "Fake",
     private val multiUser: Boolean = false,
     private val inbound: Boolean = false,
+    private val keepsImported: Boolean = false,
 ) : ServiceInterface(context) {
 
     private val vm = FakeViewModel(prefs, name)
     override fun viewModel(): ViewModelInterface = vm
     override val isMultiUser: Boolean get() = multiUser
     override val supportsInbound: Boolean get() = inbound
+    override val exportsImported: Boolean get() = keepsImported
 
     /** Every raw wire op in order, e.g. "insert#7@1000", "delete@1000", "clear:1", "connect", "insertAll(3)". */
     val wire = mutableListOf<String>()
@@ -169,11 +192,17 @@ class FakeBackend(
         wire += "update#${measurement.id}@${measurement.date.time}"; return write(measurement)
     }
 
-    private fun write(measurement: OpenScaleMeasurement): SyncResult<Unit> = when {
-        throwsOnWrite -> throw IllegalArgumentException("percentage must not be more than 100.0%")
-        measurement.id in invalidIds ->
-            SyncResult.Failure(SyncResult.ErrorType.INVALID_DATA, "scripted invalid measurement")
-        else -> next()
+    /** The measurements the single-item writes received, in order — to check WHAT went out. */
+    val written = mutableListOf<OpenScaleMeasurement>()
+
+    private fun write(measurement: OpenScaleMeasurement): SyncResult<Unit> {
+        written += measurement
+        return when {
+            throwsOnWrite -> throw IllegalArgumentException("percentage must not be more than 100.0%")
+            measurement.id in invalidIds ->
+                SyncResult.Failure(SyncResult.ErrorType.INVALID_DATA, "scripted invalid measurement")
+            else -> next()
+        }
     }
 
     override suspend fun delete(userId: Int, date: Date): SyncResult<Unit> {

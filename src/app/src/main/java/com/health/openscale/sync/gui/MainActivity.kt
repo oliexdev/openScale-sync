@@ -113,7 +113,7 @@ import com.health.openscale.sync.core.provider.OpenScaleDataProvider
 import com.health.openscale.sync.core.provider.OpenScaleProvider
 import com.health.openscale.sync.core.service.BackendRegistry
 import com.health.openscale.sync.core.work.PeriodicSyncWorker
-import com.health.openscale.sync.core.service.ReconcileStats
+import com.health.openscale.sync.core.service.FullSyncStats
 import com.health.openscale.sync.core.service.ServiceInterface
 import com.health.openscale.sync.core.service.SyncResult
 import com.health.openscale.sync.core.model.OpenScaleViewModel
@@ -638,7 +638,7 @@ class MainActivity : AppCompatActivity() {
                     running = true
                     lifecycleScope.launch {
                         // Multi-user backends sync all users; single-user backends only their selected user.
-                        val allMeasurements = runCatching {
+                        var allMeasurements = runCatching {
                             openScaleDataService.getUsers().flatMap { openScaleDataService.getMeasurements(it) }
                         }.getOrElse { e ->
                             Timber.e(e, "global sync: cannot read openScale -> aborting")
@@ -646,43 +646,57 @@ class MainActivity : AppCompatActivity() {
                             showMessage(getString(R.string.sync_service_openscale_unavailable))
                             return@launch
                         }
-                        var stats = ReconcileStats()
-                        var anyFailure = false
-                        for (service in syncServiceList.filter { it.viewModel().syncEnabled.value }) {
-                            var failure: SyncResult.Failure? = null
-                            // Outbound: reconcile (not just push) — heals missed inserts/updates AND deletes via the ledger.
-                            if (service.exportEnabled()) {
-                                val measurements = if (service.isMultiUser) allMeasurements
-                                    else allMeasurements.filter { it.userId == service.viewModel().selectedUserId.value }
-                                // Manual full sync → force, so a receiver that lost data gets everything back.
-                                // Guarded like runFullSync(): a throwing backend must not take the
-                                // click handler (and with it the app) down (issues #34/#35).
-                                val r = try {
-                                    service.reconcile(measurements, force = true)
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
-                                }
-                                when (r) {
-                                    is SyncResult.Success -> stats += r.data
-                                    is SyncResult.Failure -> failure = r
-                                }
-                            }
-                            // Inbound: pull from the source into openScale (bidirectional backends, import/both direction).
-                            if (failure == null && service.importEnabled()) {
-                                val userId = if (service.isMultiUser) -1 else service.viewModel().selectedUserId.value
-                                when (val r = service.runInbound(userId)) {
-                                    is SyncResult.Failure -> failure = r
-                                    is SyncResult.Success -> Timber.d(
+                        var stats = FullSyncStats()
+                        val enabled = syncServiceList.filter { it.viewModel().syncEnabled.value }
+                        val failures = HashMap<ServiceInterface, SyncResult.Failure>()
+                        // Phase 1, inbound for every backend before any export: each backend then
+                        // gets what any other one imported in this same run, whatever their order,
+                        // and whatever came from a backend is known as the source's before anything
+                        // is exported to it.
+                        for (service in enabled.filter { it.importEnabled() }) {
+                            val userId = if (service.isMultiUser) -1 else service.viewModel().selectedUserId.value
+                            when (val r = service.runInbound(userId)) {
+                                is SyncResult.Failure -> failures[service] = r
+                                is SyncResult.Success -> {
+                                    stats += FullSyncStats(imported = r.data)
+                                    Timber.d(
                                         "%s: imported %d new and enriched %d existing measurement(s)",
                                         service.viewModel().getName(), r.data.imported, r.data.updated
                                     )
                                 }
                             }
-                            failure?.let { service.setErrorMessage(it); anyFailure = true }
+                        }
+                        // A failed re-read keeps the older list: it only lacks the new measurements,
+                        // none of which a ledger knows yet, so reconcile cannot take them as deleted.
+                        if (stats.imported.total > 0) allMeasurements = runCatching {
+                            openScaleDataService.getUsers().flatMap { openScaleDataService.getMeasurements(it) }
+                        }.getOrDefault(allMeasurements)
+                        // Phase 2, outbound: reconcile (not just push) — heals missed inserts/updates
+                        // AND deletes via the ledger. A backend whose import failed is left for the
+                        // next run rather than exported to half-synced.
+                        for (service in enabled.filter { it.exportEnabled() && it !in failures }) {
+                            val measurements = if (service.isMultiUser) allMeasurements
+                                else allMeasurements.filter { it.userId == service.viewModel().selectedUserId.value }
+                            // Manual full sync → force, so a receiver that lost data gets everything back.
+                            // Guarded like runFullSync(): a throwing backend must not take the
+                            // click handler (and with it the app) down (issues #34/#35).
+                            val r = try {
+                                service.reconcile(measurements, force = true)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
+                            }
+                            when (r) {
+                                is SyncResult.Success -> stats += FullSyncStats(exported = r.data)
+                                is SyncResult.Failure -> failures[service] = r
+                            }
+                        }
+                        for (service in enabled) {
+                            failures[service]?.let { service.setErrorMessage(it) }
                                 ?: service.viewModel().setLastSync(Instant.now())
                         }
+                        val anyFailure = failures.isNotEmpty()
                         running = false
                         // Report what the backends acknowledged, not how many measurements openScale
                         // holds — and never claim success when a backend failed.

@@ -56,6 +56,10 @@
         <item quantity="one">%1$d Messung gesendet</item>
         <item quantity="other">%1$d Messungen gesendet</item>
     </plurals>
+    <plurals name="sync_service_full_imported_info">
+        <item quantity="one">%1$d Messung importiert</item>
+        <item quantity="other">%1$d Messungen importiert</item>
+    </plurals>
     <plurals name="sync_service_full_skipped_info">
         <item quantity="one">%1$d Messung übersprungen (ungültige Werte)</item>
         <item quantity="other">%1$d Messungen übersprungen (ungültige Werte)</item>

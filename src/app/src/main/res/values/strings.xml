@@ -55,6 +55,10 @@
         <item quantity="one">%1$d measurement sent</item>
         <item quantity="other">%1$d measurements sent</item>
     </plurals>
+    <plurals name="sync_service_full_imported_info">
+        <item quantity="one">%1$d measurement imported</item>
+        <item quantity="other">%1$d measurements imported</item>
+    </plurals>
     <plurals name="sync_service_full_skipped_info">
         <item quantity="one">%1$d measurement skipped (invalid values)</item>
         <item quantity="other">%1$d measurements skipped (invalid values)</item>

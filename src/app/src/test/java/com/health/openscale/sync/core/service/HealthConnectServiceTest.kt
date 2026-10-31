@@ -147,6 +147,12 @@ class HealthConnectServiceTest {
     }
 
     @Test
+    fun importsAreNeverWrittenBackToHealthConnect() {
+        // Another app's record cannot be changed, only copied next to it (#51).
+        assertFalse(service.exportsImported)
+    }
+
+    @Test
     fun exportOnlyDoesNotRequestReadOrHistoryAccess() = runTest {
         service.viewModel().setSyncDirection(SyncDirection.EXPORT)
         client.grantedPermissions = writePermissions
