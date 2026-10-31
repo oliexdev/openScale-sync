@@ -23,6 +23,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.health.openscale.sync.gui.components.SyncDirectionSelector
 import com.health.openscale.sync.gui.components.UserScopeSection
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.BasalMetabolicRateRecord
@@ -70,11 +72,12 @@ import java.util.Date
 
 class HealthConnectService(
     private val context: Context,
-    sharedPreferences: SharedPreferences
+    sharedPreferences: SharedPreferences,
+    private var healthConnectClient: HealthConnectClient? = null
 ) : ServiceInterface(context) {
     private val viewModel: HealthConnectViewModel = HealthConnectViewModel(sharedPreferences)//ViewModelProvider(context)[HealthConnectViewModel::class.java]
     private lateinit var healthConnectSync : HealthConnectSync
-    private var healthConnectClient: HealthConnectClient? = null
+    private var historyReadAvailable by mutableStateOf(false)
     private lateinit var healthConnectRequestPermissions : ActivityResultLauncher<Set<String>>
 
     /**
@@ -107,6 +110,13 @@ class HealthConnectService(
     /** What the current direction setting actually needs granted. */
     private fun neededPermissions(): Set<String> =
         if (importEnabled()) writePermissions + readPermissions else writePermissions
+
+    /** History can be requested, but it is never required for normal sync. */
+    @VisibleForTesting
+    internal fun permissionsToRequest(): Set<String> =
+        neededPermissions() + if (importEnabled() && historyReadAvailable) {
+            setOf(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
+        } else emptySet()
 
     private val healthConnectPermissionContract =
         PermissionController.createRequestPermissionResultContract()
@@ -235,6 +245,15 @@ class HealthConnectService(
         try {
             val granted = currentClient.permissionController.getGrantedPermissions()
             val needed = neededPermissions()
+            // Own try: history is optional, so a failing feature query must not fail the check.
+            historyReadAvailable = try {
+                currentClient.features.getFeatureStatus(
+                    HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY
+                ) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+            } catch (e: Exception) {
+                Timber.w(e, "Health Connect history feature query failed")
+                false
+            }
 
             if (granted.containsAll(needed)) {
                 viewModel.setAllPermissionsGranted(true)
@@ -274,7 +293,9 @@ class HealthConnectService(
                 return
             }
 
-            healthConnectRequestPermissions.launch(neededPermissions())
+            // History is optional: ask only for an importing setup on a supported device, and
+            // never include it in neededPermissions(), so declining it does not disable sync.
+            healthConnectRequestPermissions.launch(permissionsToRequest())
         } catch (e: Exception) {
             setErrorMessage(SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e))
         }
@@ -392,7 +413,8 @@ class HealthConnectService(
                                 Text(stringResource(id = R.string.disclosure_write))
                                 // Only named when it is actually about to be requested.
                                 if (importEnabled()) {
-                                    Text(stringResource(id = R.string.disclosure_read))
+                                    Text(stringResource(id = R.string.disclosure_read) +
+                                        if (historyReadAvailable) " " + stringResource(id = R.string.disclosure_read_history) else "")
                                 }
                                 Text(stringResource(id = R.string.disclosure_how))
                                 // Same link the rationale screen carries, so the full policy is one

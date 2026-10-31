@@ -35,6 +35,8 @@
         tools:ignore="HealthConnectPolicy"/>
     <uses-permission android:name="android.permission.health.READ_LEAN_BODY_MASS"
         tools:ignore="HealthConnectPolicy"/>
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY"
+        tools:ignore="HealthConnectPolicy"/>
 
     <queries>
         <package android:name="com.health.openscale" />
