@@ -147,9 +147,9 @@ class HealthConnectServiceTest {
     }
 
     @Test
-    fun importsAreNeverWrittenBackToHealthConnect() {
+    fun unchangedImportsAreNotWrittenBackToHealthConnect() {
         // Another app's record cannot be changed, only copied next to it (#51).
-        assertFalse(service.exportsImported)
+        assertFalse(service.exportsUnchangedImports)
     }
 
     @Test

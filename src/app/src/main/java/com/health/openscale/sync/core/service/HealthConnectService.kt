@@ -132,8 +132,8 @@ class HealthConnectService(
     // HealthConnect can read foreign records → bidirectional.
     override val supportsInbound: Boolean get() = true
 
-    // A foreign record cannot be changed, only copied next to it: never write an import back (#51).
-    override val exportsImported: Boolean get() = false
+    // A foreign record cannot be changed, only copied next to it: an unchanged import stays home (#51).
+    override val exportsUnchangedImports: Boolean get() = false
 
     // HealthConnect writes the whole batch in one insertRecords call. Updates take the same path:
     // the write is a clientRecordId upsert, so a batch of updates is a batch of writes — no reason

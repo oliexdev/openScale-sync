@@ -476,22 +476,36 @@ class ServiceInterfaceTest {
     }
 
     @Test
-    fun editedImport_isStillNotExportedBackToItsSource() = runTest {
+    fun editedImport_goesOutAsOurs() = runTest {
         val b = inboundBackend()
         b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f, fatPct = 20f)
         b.runInbound(1)
         val imported = openScale.measurements.values.single()
-        // The user corrects the weight in openScale. The source keeps its own record — a copy of
-        // ours would sit next to it (Health Connect) or be rejected for the date (Wger).
+        // The user corrects the weight in openScale: new data of theirs, not a copy of the
+        // source's — on Health Connect its source priority then decides which record wins.
         val edited = OpenScaleMeasurement.fromValues(imported.id, 1, imported.date, "",
             imported.values.map { if (it.isBuiltin("WEIGHT")) it.copy(value = 79f) else it })
         openScale.put(edited)
 
-        b.reconcile(listOf(edited), force = true)
-        b.submit(b.pendingOp("update", edited))
+        b.reconcile(listOf(edited))
+
+        assertEquals(79f, b.written.single().weight)
+    }
+
+    @Test
+    fun aRecalculatedDerivedValue_isNoEdit() = runTest {
+        val b = inboundBackend()
+        b.inboundReadings += InboundMeasurement(timeMs = 5000, weightKg = 81f)
+        b.runInbound(1)
+        val imported = openScale.measurements.values.single()
+        // openScale derives BMI for imported measurements too, and recalculates it on its own.
+        val recalculated = OpenScaleMeasurement.fromValues(imported.id, 1, imported.date, "",
+            imported.values + OpenScaleMeasurementValue("builtin.bmi", "BMI", "", true, 24.9f))
+        openScale.put(recalculated)
+
+        b.reconcile(listOf(recalculated), force = true)
 
         assertEquals(emptyList<OpenScaleMeasurement>(), b.written)
-        assertEquals(0, b.pendingRetryCount())
     }
 
     @Test

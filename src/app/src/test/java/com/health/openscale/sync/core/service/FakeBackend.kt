@@ -135,7 +135,7 @@ class FakeBackend(
     override fun viewModel(): ViewModelInterface = vm
     override val isMultiUser: Boolean get() = multiUser
     override val supportsInbound: Boolean get() = inbound
-    override val exportsImported: Boolean get() = keepsImported
+    override val exportsUnchangedImports: Boolean get() = keepsImported
 
     /** Every raw wire op in order, e.g. "insert#7@1000", "delete@1000", "clear:1", "connect", "insertAll(3)". */
     val wire = mutableListOf<String>()

@@ -194,14 +194,14 @@ abstract class ServiceInterface (
     open val supportsInbound: Boolean get() = false
 
     /**
-     * Whether measurements imported from this backend are still exported back to it. True wherever
-     * writing back is harmless: Wger patches the entry the measurement came from, and MQTT reads
+     * Whether a measurement imported from this backend goes back to it unchanged. True wherever that
+     * is harmless: Wger patches the entry the measurement came from, and MQTT reads
      * `<base>/inbound/…` but publishes openScale's complete state, which consumers expect to include
-     * imported values — so an edit made in openScale reaches the source too. False where it is not:
-     * Health Connect lets no app change another app's record, so writing back only adds a copy of
-     * ours next to the original.
+     * imported values. False for Health Connect: no app can change another app's record, so an
+     * unchanged import would only come back as a copy of ours next to the original. An import the
+     * user has since edited in openScale is new data and goes out either way (see [isImported]).
      */
-    open val exportsImported: Boolean get() = true
+    open val exportsUnchangedImports: Boolean get() = true
 
     // --- Android 17 local network permission ---------------------------------------------
     // Targeting SDK 37, traffic to the local network needs ACCESS_LOCAL_NETWORK, and without it a
@@ -520,30 +520,36 @@ abstract class ServiceInterface (
      */
     protected open suspend fun onReconciled(current: List<OpenScaleMeasurement>, changedUserIds: Set<Int>) {}
 
-    // --- Inbound origin (no write-back to the source, issue #51) -------------------------
-    // Per-backend set of the measurements runInbound took FROM this backend, as "userId:timeMs",
-    // kept only where [exportsImported] is false. Such a measurement is never exported back to that
-    // backend, not even after an edit in openScale: on Health Connect it would sit as a record of
-    // ours next to the original app's (Google's write guidance forbids writing back what was read).
-    // The source keeps its own record; a correction belongs there and comes back with the next
-    // import. Other backends still get everything. Per measurement, not per value: an inbound
-    // reading always carries the weight, which every backend anchors its payload on, so no part of
-    // such a measurement is ours to send.
+    // --- Inbound origin (no unchanged write-back to the source, issue #51) -----------------
+    // Per-backend fingerprint of each measurement runInbound took FROM this backend, keyed
+    // "userId:timeMs", kept only where [exportsUnchangedImports] is false. While a measurement still
+    // matches its fingerprint it is the source's and is not exported back — on Health Connect it
+    // would only sit as a record of ours next to the original app's, which Google's write guidance
+    // forbids. Once the user edits it in openScale it no longer matches: that is new data of the
+    // user's, and it goes out as ours (Health Connect's source priority then decides which record
+    // wins). One preference entry per measurement rather than one JSON blob: reconcile asks for
+    // every measurement, and every instance in the process sees the same preferences at once.
     private val originPrefs by lazy {
         context.getSharedPreferences("inbound_origin_${viewModel().getName()}", Context.MODE_PRIVATE)
     }
 
     private fun originKey(userId: Int, timeMs: Long) = "$userId:$timeMs"
 
-    private fun originRecord(keys: Set<String>) {
-        if (keys.isEmpty()) return
-        synchronized(ledgerLock) {
-            originPrefs.edit { putStringSet("origin", originPrefs.getStringSet("origin", emptySet()).orEmpty() + keys) }
-        }
-    }
+    /**
+     * The measured values of [m] — not the derived ones: openScale recalculates BMI and the like on
+     * its own (also for imported measurements), and such a recalculation is not an edit.
+     */
+    private fun fingerprint(m: OpenScaleMeasurement): Long =
+        m.values.filterNot { it.isDerived }
+            .map { "${it.identity}=${it.value}=${it.text}" }
+            .sorted().hashCode().toLong()
 
-    private fun isImported(m: OpenScaleMeasurement): Boolean =
-        !exportsImported && originKey(m.userId, m.date.time) in originPrefs.getStringSet("origin", emptySet()).orEmpty()
+    /** Imported from this backend and still unchanged since — the source's, not ours to send. */
+    private fun isImported(m: OpenScaleMeasurement): Boolean {
+        if (exportsUnchangedImports) return false
+        val key = originKey(m.userId, m.date.time)
+        return originPrefs.contains(key) && originPrefs.getLong(key, 0L) == fingerprint(m)
+    }
 
     // --- Inbound (Phase 4: external source → openScale) ---------------------------------
     /**
@@ -591,10 +597,6 @@ abstract class ServiceInterface (
                     .mapTo(HashSet()) { it.date.time }
             }
 
-            // Recorded BEFORE writing, so no export running meanwhile (the periodic worker, a manual
-            // sync) can see one of these measurements without knowing it is the source's.
-            if (!exportsImported) originRecord(items.mapTo(HashSet()) { originKey(it.userId ?: userId, it.timeMs) })
-
             var updated = 0
             val attempted = HashMap<Int, MutableList<Long>>()
             for (m in items) {
@@ -610,12 +612,18 @@ abstract class ServiceInterface (
                 }
             }
 
-            // Confirm the inserts against openScale instead of trusting "the call did not throw".
+            // Confirm the inserts against openScale instead of trusting "the call did not throw" —
+            // and, where unchanged imports stay home, fingerprint what openScale now holds for them.
             var imported = 0
-            attempted.forEach { (target, times) ->
-                val now = openScaleDataService.getMeasurements(OpenScaleUser(target, ""))
-                    .mapTo(HashSet()) { it.date.time }
-                imported += times.count { it in now }
+            val readBack = if (exportsUnchangedImports) attempted.keys else items.mapTo(HashSet()) { it.userId ?: userId }
+            for (target in readBack) {
+                val now = openScaleDataService.getMeasurements(OpenScaleUser(target, "")).associateBy { it.date.time }
+                imported += attempted[target].orEmpty().count { it in now }
+                if (!exportsUnchangedImports) originPrefs.edit {
+                    items.filter { (it.userId ?: userId) == target }.forEach { r ->
+                        now[r.timeMs]?.let { putLong(originKey(target, r.timeMs), fingerprint(it)) }
+                    }
+                }
             }
 
             SyncResult.Success(InboundStats(imported, updated))
