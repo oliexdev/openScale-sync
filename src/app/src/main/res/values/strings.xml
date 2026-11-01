@@ -201,7 +201,7 @@
          and to take an affirmative action before the system prompt appears. -->
     <string name="local_network_permission_error">Access to the local network is not allowed. Open openScale sync and allow it, or grant it in the app settings under Nearby devices.</string>
     <string name="disclosure_title">Before you continue</string>
-    <string name="disclosure_write">openScale sync will write the measurements recorded in openScale to Health Connect — weight, body fat, body water mass, bone mass, lean body mass and basal metabolic rate — so that other health apps on this device can use them.</string>
+    <string name="disclosure_write">openScale sync will write the measurements recorded in openScale to Health Connect — weight, body fat, body water mass, bone mass, lean body mass, basal metabolic rate and heart rate — so that other health apps on this device can use them.</string>
     <string name="disclosure_read">Because the sync direction includes import, openScale sync will also read weight, body fat, body water mass, bone mass and lean body mass that other apps have written to Health Connect, and add those weigh-ins to your openScale history so your body-composition log stays complete.</string>
     <string name="disclosure_read_history">If you also allow access to past data, older measurements are imported too.</string>
     <string name="disclosure_how">This data is used only for that synchronization. It stays on your device except for the services you enable yourself, and is never used for advertising, sold or shared with third parties.</string>

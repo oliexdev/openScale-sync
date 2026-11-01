@@ -8,10 +8,13 @@ import androidx.health.connect.client.records.BasalMetabolicRateRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.BodyWaterMassRecord
 import androidx.health.connect.client.records.BoneMassRecord
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.units.Mass
 import com.health.openscale.sync.core.model.SyncDirection
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
+import com.health.openscale.sync.core.datatypes.OpenScaleMeasurementValue
 import com.health.openscale.sync.core.sync.HealthConnectSyncTest.FakeHealthConnectClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -26,6 +29,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.time.Instant
+import java.util.Date
 
 /** History access is an optional addition to importing, never a prerequisite for normal sync. */
 @RunWith(RobolectricTestRunner::class)
@@ -48,7 +52,8 @@ class HealthConnectServiceTest {
         HealthPermission.getWritePermission(BodyWaterMassRecord::class),
         HealthPermission.getWritePermission(BoneMassRecord::class),
         HealthPermission.getWritePermission(LeanBodyMassRecord::class),
-        HealthPermission.getWritePermission(BasalMetabolicRateRecord::class)
+        HealthPermission.getWritePermission(BasalMetabolicRateRecord::class),
+        HealthPermission.getWritePermission(HeartRateRecord::class)
     )
 
     @Before
@@ -159,6 +164,36 @@ class HealthConnectServiceTest {
 
         assertTrue(service.checkAllPermissionsGranted() is SyncResult.Success)
         assertEquals(writePermissions, service.permissionsToRequest())
+    }
+
+    @Test
+    fun exportRequestsHeartRateWritePermissionWithoutRequestingHeartRateReads() = runTest {
+        service.viewModel().setSyncDirection(SyncDirection.EXPORT)
+        client.grantedPermissions = writePermissions
+
+        assertTrue(service.checkAllPermissionsGranted() is SyncResult.Success)
+        assertTrue(HealthPermission.getWritePermission(HeartRateRecord::class) in service.permissionsToRequest())
+        assertFalse(HealthPermission.getReadPermission(HeartRateRecord::class) in service.permissionsToRequest())
+    }
+
+    @Test
+    fun exportedPointSampleIsAcceptedByTheAndroidPlatformRecord() = runTest {
+        service.viewModel().setSyncDirection(SyncDirection.EXPORT)
+        client.grantedPermissions = writePermissions
+        val measurement = OpenScaleMeasurement.fromValues(7, 1, Date(1_000_000L), "alice", listOf(
+            OpenScaleMeasurementValue("builtin.weight", "Weight", "kg", false, 80f),
+            OpenScaleMeasurementValue("builtin.heart_rate", "Heart rate", "/min", false, 72f)
+        ))
+
+        assertTrue(service.reconcile(listOf(measurement)) is SyncResult.Success)
+
+        val record = client.written.single().filterIsInstance<HeartRateRecord>().single()
+        val platformRecord = android.health.connect.datatypes.HeartRateRecord.Builder(
+            android.health.connect.datatypes.Metadata.Builder().build(), record.startTime, record.endTime,
+            record.samples.map { android.health.connect.datatypes.HeartRateRecord.HeartRateSample(it.beatsPerMinute, it.time) }
+        ).build()
+        assertEquals(measurement.date.toInstant(), platformRecord.startTime)
+        assertEquals(72L, platformRecord.samples.single().beatsPerMinute)
     }
 
     @Test

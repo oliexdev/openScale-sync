@@ -26,6 +26,8 @@
         tools:ignore="HealthConnectPolicy" />
     <uses-permission android:name="android.permission.health.WRITE_BONE_MASS"
         tools:ignore="HealthConnectPolicy" />
+    <uses-permission android:name="android.permission.health.WRITE_HEART_RATE"
+        tools:ignore="HealthConnectPolicy" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT"
         tools:ignore="HealthConnectPolicy"/>
     <uses-permission android:name="android.permission.health.READ_BODY_FAT"

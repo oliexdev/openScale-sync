@@ -23,6 +23,7 @@ import androidx.health.connect.client.records.BasalMetabolicRateRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.BodyWaterMassRecord
 import androidx.health.connect.client.records.BoneMassRecord
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.WeightRecord
@@ -90,13 +91,19 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     private fun lbm(m: OpenScaleMeasurement) = m.lbm?.takeIf { it > 0f }
     private fun bone(m: OpenScaleMeasurement) = m.bone?.takeIf { it > 0f }
 
+    // A weighing supplies one whole-BPM sample. Ignore invalid optional pulse values without
+    // preventing its weight and body-composition records from being exported.
+    private fun heartRate(m: OpenScaleMeasurement): Long? =
+        m.values.firstOrNull { it.isBuiltin("HEART_RATE") }?.value
+            ?.takeIf { it.isFinite() && it in 1f..300f && it % 1f == 0f }?.toLong()
+
     /** Health Connect's requireNonNegative is `value >= 0`, which NaN fails too — mirror that here. */
     private fun outOfRange(name: String, value: Float, max: Float): String? =
         if (!value.isFinite() || value < 0f || value > max) "$name is $value" else null
 
     /**
      * The record set one measurement maps to. Weight is always written; water, fat, lean body mass,
-     * bone mass and BMR only when openScale actually has that value — a scale without body
+     * bone mass, BMR and heart rate only when openScale actually has a usable value — a scale without body
      * composition must not put a 0 % body fat / 0 kg water weigh-in into Health Connect. Every
      * record carries a stable [buildMetadata] clientRecordId, which is what makes a re-insert an
      * upsert (see [insert]).
@@ -116,6 +123,7 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         if (bmrValue > 0f) {
             records.add(buildBMRRecord(measurement))
         }
+        heartRate(measurement)?.let { records.add(buildHeartRateRecord(measurement, it)) }
 
         return records
     }
@@ -187,7 +195,8 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
                 BodyWaterMassRecord::class,
                 LeanBodyMassRecord::class,
                 BasalMetabolicRateRecord::class,
-                BoneMassRecord::class
+                BoneMassRecord::class,
+                HeartRateRecord::class
             ).forEach { healthConnectClient.deleteRecords(it, timeRange) }
 
             SyncResult.Success(Unit)
@@ -328,6 +337,19 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         return Metadata.manualEntry(
             clientRecordId = measurement.id.toString() + "_" + type,
             clientRecordVersion = Instant.now().toEpochMilli()
+        )
+    }
+
+    private fun buildHeartRateRecord(measurement: OpenScaleMeasurement, bpm: Long): HeartRateRecord {
+        val instant = measurement.date.toInstant()
+        val zoneOffset = ZoneId.systemDefault().rules.getOffset(instant)
+        return HeartRateRecord(
+            startTime = instant,
+            startZoneOffset = zoneOffset,
+            endTime = instant,
+            endZoneOffset = zoneOffset,
+            samples = listOf(HeartRateRecord.Sample(instant, bpm)),
+            metadata = buildMetadata(measurement, "heart_rate")
         )
     }
 
