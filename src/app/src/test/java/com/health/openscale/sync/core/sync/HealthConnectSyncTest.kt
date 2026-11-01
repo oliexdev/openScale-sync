@@ -79,6 +79,12 @@ class HealthConnectSyncTest {
         /** What a read returns, per record type. Only the inbound tests fill this. */
         val stored = mutableListOf<Record>()
         val reads = mutableListOf<ReadRecordsRequest<*>>()
+        val tokenRequests = mutableListOf<ChangesTokenRequest>()
+        val changeRequests = mutableListOf<String>()
+        val changes = mutableMapOf<String, ChangesResponse>()
+        val events = mutableListOf<String>()
+        var failingChangeToken: String? = null
+        var beforeChanges: (suspend (String) -> Unit)? = null
         var pageSize = 1000
         var finalPageToken: String? = null
         var failingPageToken: String? = null
@@ -131,6 +137,7 @@ class HealthConnectSyncTest {
                     "(recordType: ${request.recordType}) from other applications."
             )
             reads += request
+            events += "read"
             if (failingPageToken != null && request.pageToken == failingPageToken) {
                 throw IllegalStateException("scripted page failure")
             }
@@ -168,8 +175,17 @@ class HealthConnectSyncTest {
         override suspend fun aggregateGroupByPeriod(
             request: AggregateGroupByPeriodRequest
         ): List<AggregationResultGroupedByPeriod> = error("not used by these tests")
-        override suspend fun getChangesToken(request: ChangesTokenRequest): String = error("not used by these tests")
-        override suspend fun getChanges(changesToken: String): ChangesResponse = error("not used by these tests")
+        override suspend fun getChangesToken(request: ChangesTokenRequest): String {
+            events += "token"
+            tokenRequests += request
+            return "changes:${tokenRequests.size}"
+        }
+        override suspend fun getChanges(changesToken: String): ChangesResponse {
+            changeRequests += changesToken
+            beforeChanges?.invoke(changesToken)
+            if (changesToken == failingChangeToken) throw IllegalStateException("scripted changes failure")
+            return changes[changesToken] ?: ChangesResponse(emptyList(), changesToken, false, false)
+        }
     }
 
     private val client = FakeHealthConnectClient()

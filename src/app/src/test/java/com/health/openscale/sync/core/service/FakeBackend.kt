@@ -49,6 +49,7 @@ class FakeDataProvider(
 
     /** When set, reading openScale fails — the outstanding set must survive that untouched. */
     var readFails = false
+    var writeFails = false
 
     /** Inbound writes, in order: "insert@<time>/u<user>" / "update@<time>/u<user>". */
     val inboundWrites = mutableListOf<String>()
@@ -75,9 +76,13 @@ class FakeDataProvider(
     // null Uri either way), which is exactly why runInbound verifies its inserts by re-reading.
     override fun insertMeasurement(
         userId: Int, dateMs: Long, weightKg: Float,
-        fat: Float?, water: Float?, muscle: Float?, valuesJson: String?
+        fat: Float?, water: Float?, muscle: Float?, valuesJson: String?, throwOnFailure: Boolean
     ): Boolean {
         inboundWrites += "insert@$dateMs/u$userId"
+        if (writeFails) {
+            if (throwOnFailure) throw IllegalStateException("openScale write failed")
+            return false
+        }
         if (dateMs in insertRejects) return true
         val id = (measurements.keys.maxOrNull() ?: 0) + 1
         measurements[id] = OpenScaleMeasurement.fromValues(
@@ -99,9 +104,13 @@ class FakeDataProvider(
 
     override fun updateMeasurement(
         userId: Int, dateMs: Long, weightKg: Float,
-        fat: Float?, water: Float?, muscle: Float?, valuesJson: String?
+        fat: Float?, water: Float?, muscle: Float?, valuesJson: String?, throwOnFailure: Boolean
     ): Boolean {
         inboundWrites += "update@$dateMs/u$userId"
+        if (writeFails) {
+            if (throwOnFailure) throw IllegalStateException("openScale write failed")
+            return false
+        }
         if (dateMs in updateChangesNothing) return false
         // Like the real provider: the passed values replace their counterparts, the rest stays.
         val existing = measurements.values.firstOrNull { it.userId == userId && it.date.time == dateMs }

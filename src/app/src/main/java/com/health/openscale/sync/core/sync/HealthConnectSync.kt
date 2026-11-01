@@ -19,6 +19,7 @@ package com.health.openscale.sync.core.sync
 
 import androidx.annotation.VisibleForTesting
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.records.BasalMetabolicRateRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.BodyWaterMassRecord
@@ -28,6 +29,7 @@ import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Mass
 import androidx.health.connect.client.units.Percentage
@@ -240,9 +242,66 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
      * Basal metabolic rate is deliberately not imported: openScale derives it itself, so a foreign
      * value would be overwritten by its own calculation anyway.
      */
-    suspend fun readInboundReadings(ownPackage: String, sinceMillis: Long): List<InboundReading> {
+    data class InboundChanges(val readings: List<InboundReading>, val nextToken: String)
+
+    /** Obtain the initial token before scanning, so writes made during the scan are replayed. */
+    suspend fun readInboundChanges(ownPackage: String, token: String?): InboundChanges {
+        suspend fun initial(): InboundChanges {
+            val next = healthConnectClient.getChangesToken(ChangesTokenRequest(setOf(
+                WeightRecord::class, BodyFatRecord::class, BodyWaterMassRecord::class,
+                BoneMassRecord::class, LeanBodyMassRecord::class
+            )))
+            return InboundChanges(readInboundReadings(ownPackage, 0L), next)
+        }
+        val changedTimes = sortedSetOf<Long>()
+        var next: String = token ?: return initial()
+        do {
+            val response = healthConnectClient.getChanges(next)
+            if (response.changesTokenExpired) return initial()
+            for (change in response.changes) {
+                val record = (change as? UpsertionChange)?.record ?: continue
+                if (record.metadata.dataOrigin.packageName == ownPackage) continue
+                val time = when (record) {
+                    is WeightRecord -> record.time
+                    is BodyFatRecord -> record.time
+                    is BodyWaterMassRecord -> record.time
+                    is BoneMassRecord -> record.time
+                    is LeanBodyMassRecord -> record.time
+                    else -> continue
+                }
+                changedTimes += time.toEpochMilli()
+            }
+            // Source deletions do not delete openScale's history, matching the existing importer.
+            next = response.nextChangesToken
+        } while (response.hasMore)
+
+        // Re-read the neighbours too: a changed fat record needs its unchanged weight and water.
+        // Three tolerances include competing weight anchors at the edge of a grouping window.
+        val context = 3 * INBOUND_GROUPING_TOLERANCE_MS
+        val windows = mutableListOf<LongRange>()
+        for (time in changedTimes) {
+            val start = maxOf(0L, time - context)
+            val end = time + context + 1L
+            val previous = windows.lastOrNull()
+            if (previous != null && start <= previous.last) {
+                windows[windows.lastIndex] = previous.first..maxOf(previous.last, end)
+            } else windows += start..end
+        }
+        val readings = windows.flatMap { window ->
+            readInboundReadings(ownPackage, window.first, window.last).filter { reading ->
+                changedTimes.any { abs(it - reading.timeMs) <= INBOUND_GROUPING_TOLERANCE_MS }
+            }
+        }
+        return InboundChanges(readings, next)
+    }
+
+    suspend fun readInboundReadings(
+        ownPackage: String, sinceMillis: Long, untilMillis: Long? = null
+    ): List<InboundReading> {
         // Health Connect applies the user's history-access permission to the requested range.
-        val range = TimeRangeFilter.after(Instant.ofEpochMilli(sinceMillis))
+        val start = Instant.ofEpochMilli(sinceMillis)
+        val range = untilMillis?.let { TimeRangeFilter.between(start, Instant.ofEpochMilli(it)) }
+            ?: TimeRangeFilter.after(start)
         fun foreign(record: Record) = record.metadata.dataOrigin.packageName != ownPackage
 
         // The record types carry their instant on their own class (the shared interface is internal
