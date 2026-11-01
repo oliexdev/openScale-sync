@@ -251,10 +251,12 @@ open class OpenScaleDataProvider(
      * this can never overwrite an existing measurement — and it reports back nothing either way (the
      * provider returns a null Uri on success and on conflict alike), which is why the caller decides
      * insert vs. [updateMeasurement] by comparing timestamps itself.
+     * [throwOnFailure] lets a checkpointed importer retry errors before acknowledging its cursor.
      */
     open fun insertMeasurement(
         userId: Int, dateMs: Long, weightKg: Float,
-        fat: Float? = null, water: Float? = null, muscle: Float? = null, valuesJson: String? = null
+        fat: Float? = null, water: Float? = null, muscle: Float? = null, valuesJson: String? = null,
+        throwOnFailure: Boolean = false
     ): Boolean =
         runCatching {
             context.contentResolver.insert(
@@ -262,7 +264,11 @@ open class OpenScaleDataProvider(
                 measurementValues(dateMs, weightKg, fat, water, muscle, valuesJson)
             )
             true
-        }.getOrElse { Timber.e(it, "inbound insert failed"); false }
+        }.getOrElse {
+            if (throwOnFailure) throw it
+            Timber.e(it, "inbound insert failed")
+            false
+        }
 
     /**
      * Inbound: enrich the measurement openScale already holds at [dateMs] for [userId]. Only the
@@ -271,10 +277,12 @@ open class OpenScaleDataProvider(
      * Returns whether openScale actually changed something — it reports 0 rows both when no
      * measurement matches the timestamp and when every value already had that exact value, so this
      * is a real "was anything imported" signal, not just "the call went through".
+     * With [throwOnFailure], provider exceptions are distinct from an unchanged row.
      */
     open fun updateMeasurement(
         userId: Int, dateMs: Long, weightKg: Float,
-        fat: Float? = null, water: Float? = null, muscle: Float? = null, valuesJson: String? = null
+        fat: Float? = null, water: Float? = null, muscle: Float? = null, valuesJson: String? = null,
+        throwOnFailure: Boolean = false
     ): Boolean =
         runCatching {
             context.contentResolver.update(
@@ -282,6 +290,10 @@ open class OpenScaleDataProvider(
                 measurementValues(dateMs, weightKg, fat, water, muscle, valuesJson),
                 null, null
             ) > 0
-        }.getOrElse { Timber.e(it, "inbound update failed"); false }
+        }.getOrElse {
+            if (throwOnFailure) throw it
+            Timber.e(it, "inbound update failed")
+            false
+        }
 
 }

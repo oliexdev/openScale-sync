@@ -397,6 +397,18 @@ class ServiceInterfaceTest {
     }
 
     @Test
+    fun ordinaryInboundBackendsKeepSkippingFailedWrites() = runTest {
+        val b = inboundBackend()
+        b.inboundReadings += InboundMeasurement(1000L, 80f)
+        openScale.writeFails = true
+
+        val result = b.runInbound(1)
+
+        assertTrue(result is SyncResult.Success)
+        assertEquals(0, (result as SyncResult.Success).data.total)
+    }
+
+    @Test
     fun inbound_addsUnknownTimestamps_andEnrichesTheOnesOpenScaleAlreadyHas() = runTest {
         val b = inboundBackend(m(1, 1000))
         b.inboundReadings += InboundMeasurement(timeMs = 1000, weightKg = 80f, fatPct = 21f)  // known

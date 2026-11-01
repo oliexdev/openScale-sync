@@ -62,17 +62,23 @@ import androidx.lifecycle.lifecycleScope
 import com.health.openscale.sync.R
 import com.health.openscale.sync.core.datatypes.OpenScaleMeasurement
 import com.health.openscale.sync.core.model.HealthConnectViewModel
+import com.health.openscale.sync.core.model.OpenScaleViewModel
 import com.health.openscale.sync.core.model.ViewModelInterface
 import com.health.openscale.sync.core.sync.HealthConnectSync
 import com.health.openscale.sync.gui.components.LocalSnackbar
 import com.health.openscale.sync.gui.components.SyncConnectButton
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import java.util.Date
 
+// Manual and periodic imports can use different service instances in the same process.
+private val healthConnectImportMutex = Mutex()
+
 class HealthConnectService(
     private val context: Context,
-    sharedPreferences: SharedPreferences,
+    private val sharedPreferences: SharedPreferences,
     private var healthConnectClient: HealthConnectClient? = null
 ) : ServiceInterface(context) {
     private val viewModel: HealthConnectViewModel = HealthConnectViewModel(sharedPreferences)//ViewModelProvider(context)[HealthConnectViewModel::class.java]
@@ -135,6 +141,37 @@ class HealthConnectService(
     // A foreign record cannot be changed, only copied next to it: an unchanged import stays home (#51).
     override val exportsUnchangedImports: Boolean get() = false
 
+    override suspend fun runInbound(userId: Int, force: Boolean): SyncResult<InboundStats> =
+        healthConnectImportMutex.withLock { super.runInbound(userId, force) }
+
+    override fun resetInboundState() {
+        sharedPreferences.edit().remove("hc_import_token").remove("hc_import_scope").apply()
+    }
+
+    override suspend fun readInboundBatch(userId: Int, sinceMs: Long, force: Boolean): InboundBatch {
+        val perm = checkAllPermissionsGranted()
+        check(perm is SyncResult.Success) { "Health Connect permissions not granted" }
+        val granted = healthConnectClient!!.permissionController.getGrantedPermissions()
+        val target = sharedPreferences.getString(OpenScaleViewModel.PACKAGE_NAME, "com.health.openscale")
+        val scope = "$target:$userId:${HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted}"
+        val token = if (!force && sharedPreferences.getString("hc_import_scope", null) == scope)
+            sharedPreferences.getString("hc_import_token", null) else null
+        val changes = healthConnectSync.readInboundChanges(context.packageName, token)
+        // The provider has one row per timestamp. Choose once, before applying or verifying it.
+        val items = changes.readings.distinctBy { it.timeMs }.map(::inboundMeasurement)
+        return InboundBatch(items, throwOnWriteFailure = true) { stored ->
+            // Insert returns no receipt. Confirm the rows exist; openScale owns value validation
+            // and normalization. Provider exceptions abort the pipeline before this callback.
+            val actual = stored.mapTo(HashSet()) { it.date.time }
+            check(items.filter { it.weightKg.isFinite() && it.weightKg > 0f }
+                .all { it.timeMs in actual }) { "openScale did not retain all Health Connect imports; will retry" }
+            check(sharedPreferences.edit()
+                .putString("hc_import_scope", scope)
+                .putString("hc_import_token", changes.nextToken)
+                .commit()) { "Could not save Health Connect import cursor" }
+        }
+    }
+
     // HealthConnect writes the whole batch in one insertRecords call. Updates take the same path:
     // the write is a clientRecordId upsert, so a batch of updates is a batch of writes — no reason
     // to fall back to the per-item default loop (a forced full sync would otherwise be one round
@@ -192,19 +229,20 @@ class HealthConnectService(
     override suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> {
         val perm = checkAllPermissionsGranted()
         if (perm is SyncResult.Failure) throw IllegalStateException("Health Connect permissions not granted")
-        return healthConnectSync.readInboundReadings(context.packageName, sinceMs).map { reading ->
-            InboundMeasurement(
-                timeMs = reading.timeMs,
-                weightKg = reading.weightKg,
-                fatPct = reading.fatPct,
-                waterPct = reading.waterPct,
-                valuesJson = genericValues(
-                    "BONE" to reading.boneKg,
-                    "LBM" to reading.leanKg
-                )
-            )
-        }
+        return healthConnectSync.readInboundReadings(context.packageName, sinceMs).map(::inboundMeasurement)
     }
+
+    private fun inboundMeasurement(reading: HealthConnectSync.InboundReading) =
+        InboundMeasurement(
+            timeMs = reading.timeMs,
+            weightKg = reading.weightKg,
+            fatPct = reading.fatPct,
+            waterPct = reading.waterPct,
+            valuesJson = genericValues(
+                "BONE" to reading.boneKg,
+                "LBM" to reading.leanKg
+            )
+        )
 
     /** openScale's generic value format, or null when there is nothing to put in it. */
     private fun genericValues(vararg values: Pair<String, Float?>): String? {
@@ -271,6 +309,8 @@ class HealthConnectService(
                 setDebugMessage("All Health Connect permissions are granted")
                 return SyncResult.Success(Unit)
             } else {
+                // Re-granting read access needs an initial scan, including any newly visible history.
+                if (importEnabled()) sharedPreferences.edit().remove("hc_import_token").apply()
                 viewModel.setAllPermissionsGranted(false)
                 return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Not all required Health Connect permissions are granted. Granted: $granted, Required: $needed")
             }

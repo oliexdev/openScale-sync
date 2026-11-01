@@ -114,6 +114,13 @@ data class InboundStats(
     operator fun plus(o: InboundStats) = InboundStats(imported + o.imported, updated + o.updated)
 }
 
+/** A source may acknowledge its cursor after the provider's stored values have been read back. */
+data class InboundBatch(
+    val measurements: List<InboundMeasurement>,
+    val throwOnWriteFailure: Boolean = false,
+    val onApplied: ((List<OpenScaleMeasurement>) -> Unit)? = null
+)
+
 /** What a manual sync did in both directions: [exported] to the backend, [imported] from it. */
 data class FullSyncStats(
     val exported: ReconcileStats = ReconcileStats(),
@@ -278,7 +285,7 @@ abstract class ServiceInterface (
     suspend fun runFullSync() : FullSyncStats? {
         var imported = InboundStats()
         if (importEnabled()) {
-            when (val r = runInbound(if (isMultiUser) -1 else viewModel().selectedUserId.value)) {
+            when (val r = runInbound(if (isMultiUser) -1 else viewModel().selectedUserId.value, force = true)) {
                 is SyncResult.Success -> imported = r.data
                 is SyncResult.Failure -> {
                     setErrorMessage(r)
@@ -559,6 +566,9 @@ abstract class ServiceInterface (
      */
     open suspend fun readInbound(userId: Int, sinceMs: Long): List<InboundMeasurement> = emptyList()
 
+    protected open suspend fun readInboundBatch(userId: Int, sinceMs: Long, force: Boolean): InboundBatch =
+        InboundBatch(readInbound(userId, sinceMs))
+
     /**
      * Generic inbound pipeline: read from the source and reconcile it into openScale.
      *
@@ -573,7 +583,7 @@ abstract class ServiceInterface (
      * affected users afterwards, and [InboundStats.updated] comes from openScale's own row count,
      * which is 0 when nothing actually changed.
      */
-    suspend fun runInbound(userId: Int): SyncResult<InboundStats> {
+    open suspend fun runInbound(userId: Int, force: Boolean = false): SyncResult<InboundStats> {
         if (!importEnabled()) {
             return SyncResult.Failure(SyncResult.ErrorType.API_ERROR, "Import is not enabled for this backend")
         }
@@ -582,13 +592,17 @@ abstract class ServiceInterface (
             val since = Instant.EPOCH.toEpochMilli()
             // updateMeasurement() always writes weight, unlike the null-guarded fat/water/muscle —
             // so a 0 here would overwrite openScale's own good value instead of just a mirror's.
-            val (items, rejected) = readInbound(userId, since)
+            val batch = readInboundBatch(userId, since, force)
+            val (items, rejected) = batch.measurements
                 .partition { it.weightKg.isFinite() && it.weightKg > 0f }
             if (rejected.isNotEmpty()) {
                 Timber.w("%s: dropping %d inbound reading(s) without a usable weight (first: %s)",
                     viewModel().getName(), rejected.size, rejected.first().weightKg)
             }
-            if (items.isEmpty()) return SyncResult.Success(InboundStats())
+            if (items.isEmpty()) {
+                batch.onApplied?.invoke(emptyList())
+                return SyncResult.Success(InboundStats())
+            }
 
             // One read per affected user, reused for every reading of that user.
             val known = HashMap<Int, Set<Long>>()
@@ -603,11 +617,13 @@ abstract class ServiceInterface (
                 val target = m.userId ?: userId
                 if (m.timeMs in timestampsOf(target)) {
                     if (openScaleDataService.updateMeasurement(
-                            target, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct, m.valuesJson)
+                            target, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct, m.valuesJson,
+                            throwOnFailure = batch.throwOnWriteFailure)
                     ) updated++
                 } else {
                     if (openScaleDataService.insertMeasurement(
-                            target, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct, m.valuesJson)
+                            target, m.timeMs, m.weightKg, m.fatPct, m.waterPct, m.musclePct, m.valuesJson,
+                            throwOnFailure = batch.throwOnWriteFailure)
                     ) attempted.getOrPut(target) { mutableListOf() } += m.timeMs
                 }
             }
@@ -615,10 +631,13 @@ abstract class ServiceInterface (
             // Confirm the inserts against openScale instead of trusting "the call did not throw" —
             // and, where unchanged imports stay home, fingerprint what openScale now holds for them.
             var imported = 0
-            val readBack = if (exportsUnchangedImports) attempted.keys else items.mapTo(HashSet()) { it.userId ?: userId }
+            val confirmed = mutableListOf<OpenScaleMeasurement>()
+            val readBack = if (exportsUnchangedImports && batch.onApplied == null) attempted.keys
+                else items.mapTo(HashSet()) { it.userId ?: userId }
             for (target in readBack) {
                 val now = openScaleDataService.getMeasurements(OpenScaleUser(target, "")).associateBy { it.date.time }
                 imported += attempted[target].orEmpty().count { it in now }
+                if (batch.onApplied != null) confirmed += now.values
                 if (!exportsUnchangedImports) originPrefs.edit {
                     items.filter { (it.userId ?: userId) == target }.forEach { r ->
                         now[r.timeMs]?.let { putLong(originKey(target, r.timeMs), fingerprint(it)) }
@@ -626,7 +645,11 @@ abstract class ServiceInterface (
                 }
             }
 
+            batch.onApplied?.invoke(confirmed)
+
             SyncResult.Success(InboundStats(imported, updated))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             SyncResult.Failure(SyncResult.ErrorType.UNKNOWN_ERROR, null, e)
         }
@@ -925,8 +948,11 @@ abstract class ServiceInterface (
         ledgerStore(emptyMap())
         dirtyStore(emptyMap())
         synchronized(ledgerLock) { originPrefs.edit { clear() } }   // keyed by that install's user ids
+        resetInboundState()
         viewModel().setSelectedUserId(-1)   // user ids belong to that install too
     }
+
+    protected open fun resetInboundState() {}
 
     fun setErrorMessage(message : String) {
         viewModel().setErrorMessage(message)
