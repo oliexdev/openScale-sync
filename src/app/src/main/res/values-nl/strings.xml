@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="title_overview">Overzicht</string>
+    <string name="title_about">Over</string>
+    <string name="field_show">Tonen</string>
+    <string name="field_hide">Verbergen</string>
+
+    <string name="about_title_maintainer">Beheerder</string>
+    <string name="about_title_website">Website</string>
+    <string name="about_title_license">Licentie</string>
+
+    <string name="logging_title">Logregistratie</string>
+    <string name="logging_enabled_label">Ingeschakeld</string>
+    <string name="logging_export_button">Logbestand exporteren</string>
+    <string name="log_new_file_created">Nieuw logbestand aangemaakt</string>
+    <string name="log_saved_success">Logbestand opgeslagen</string>
+    <string name="log_saved_canceled">Export van logbestand geannuleerd</string>
+    <string name="logging_export_failed">Het logbestand kon niet worden opgeslagen</string>
+
+    <string name="sync_service_syncing_text">Synchroniseren …</string>
+    <string name="sync_service_full_sync_button">Synchroniseren met %1$s</string>
+    <string name="service_test_connection">Verbinding testen</string>
+    <string name="service_connecting">Verbinding maken …</string>
+    <string name="service_connection_successful">✓ Verbinding geslaagd</string>
+    <string name="sync_retry_notification_title">openScale sync</string>
+    <plurals name="sync_retry_notification_text">
+        <item quantity="one">%1$d meting in de wachtrij — wordt opnieuw geprobeerd</item>
+        <item quantity="other">%1$d metingen in de wachtrij — worden opnieuw geprobeerd</item>
+    </plurals>
+
+    <string name="dashboard_services_header">Diensten</string>
+    <string name="dashboard_sync_all_button">Alle diensten synchroniseren</string>
+    <string name="dashboard_status_all_synced">Alles gesynchroniseerd</string>
+    <plurals name="dashboard_status_pending">
+        <item quantity="one">%1$d meting in de wachtrij</item>
+        <item quantity="other">%1$d metingen in de wachtrij</item>
+    </plurals>
+    <string name="dashboard_status_no_service">Geen synchronisatiedienst ingeschakeld</string>
+    <string name="dashboard_status_no_service_hint">Tik hieronder op een dienst om deze in te stellen.</string>
+    <string name="service_status_off">uit</string>
+    <string name="sync_status_on">gesynchroniseerd op %1$s</string>
+    <string name="sync_status_never">nog nooit gesynchroniseerd</string>
+    <plurals name="service_status_pending">
+        <item quantity="one">%1$d in de wachtrij</item>
+        <item quantity="other">%1$d in de wachtrij</item>
+    </plurals>
+    <string name="service_status_error">fout</string>
+    <plurals name="retry_pending_title">
+        <item quantity="one">%1$d meting wacht op synchronisatie</item>
+        <item quantity="other">%1$d metingen wachten op synchronisatie</item>
+    </plurals>
+    <string name="retry_now_button">Nu opnieuw proberen</string>
+    <string name="retry_discard_button">Verwerpen</string>
+    <plurals name="sync_service_full_sent_info">
+        <item quantity="one">%1$d meting verzonden</item>
+        <item quantity="other">%1$d metingen verzonden</item>
+    </plurals>
+    <plurals name="sync_service_full_imported_info">
+        <item quantity="one">%1$d meting geïmporteerd</item>
+        <item quantity="other">%1$d metingen geïmporteerd</item>
+    </plurals>
+    <plurals name="sync_service_full_skipped_info">
+        <item quantity="one">%1$d meting overgeslagen (ongeldige waarden)</item>
+        <item quantity="other">%1$d metingen overgeslagen (ongeldige waarden)</item>
+    </plurals>
+    <string name="sync_service_full_nothing_sent_info">Niets om te verzenden</string>
+    <string name="sync_service_full_failed_info">Synchroniseren mislukt — zie de foutmelding</string>
+    <string name="sync_service_openscale_unavailable">openScale kon niet worden uitgelezen — synchronisatie afgebroken</string>
+    <string name="sync_service_measurement_inserted_info">Meting van %1$f kg (datum: %2$s) toegevoegd</string>
+    <string name="sync_service_measurement_deleted_info">Meting van %1$s verwijderd</string>
+    <string name="sync_service_measurement_cleared_info">alle metingen verwijderd</string>
+    <string name="sync_service_measurement_updated_info">Meting van %1$f kg (datum: %2$s) bijgewerkt</string>
+    <string name="sync_service_unknown_error">Onbekende fout</string>
+    <string name="sync_service_api_error">API-fout</string>
+    <string name="sync_service_invalid_data_error">De meting bevat ongeldige waarden</string>
+    <string name="sync_service_permission_error">Machtiging geweigerd</string>
+
+    <string name="open_scale_user_text">openScale-gebruiker</string>
+    <string name="open_scale_not_available_error">openScale is niet beschikbaar op dit apparaat</string>
+    <string name="open_scale_get_open_scale_button">openScale downloaden</string>
+    <string name="open_scale_no_user_found_error">openScale-gebruiker niet gevonden</string>
+    <string name="open_scale_user_select_placeholder">openScale-gebruiker selecteren</string>
+    <string name="open_scale_permission_not_granted">Geen machtiging voor openScale verleend</string>
+    <string name="open_scale_permission_denied_permanently">Machtiging geweigerd. Android toont het verzoek niet meer — sta toegang tot openScale toe in de app-instellingen.</string>
+    <string name="open_scale_open_app_settings_button">App-instellingen</string>
+
+    <!-- openScale variant picker (only shown when several flavors are installed side by side) -->
+    <string name="open_scale_variant_section_title">Gegevensbron</string>
+    <string name="open_scale_variant_default">openScale</string>
+    <string name="open_scale_variant_pro">openScale Pro</string>
+    <string name="open_scale_variant_oss">openScale (F-Droid)</string>
+    <string name="open_scale_variant_beta">openScale (Beta)</string>
+    <string name="open_scale_variant_light">openScale Light</string>
+    <string name="open_scale_variant_debug">openScale (Debug)</string>
+    <string name="open_scale_variant_change_button">Wijzigen</string>
+    <string name="open_scale_variant_choose_title">Welke openScale?</string>
+    <string name="open_scale_variant_no_access">Geen toegang verleend</string>
+    <string name="open_scale_variant_summary">%1$d gebruikers, %2$d metingen</string>
+    <string name="open_scale_variant_switch_title">Overschakelen naar %1$s?</string>
+    <string name="open_scale_variant_switch_message">De synchronisatiestatus wordt gereset, omdat metingen in de andere installatie eigen ID\'s hebben. Bij de volgende synchronisatie verzenden alle diensten de gegevens opnieuw. Reeds overgedragen gegevens blijven op hun bestemming staan.</string>
+    <string name="open_scale_variant_switch_confirm">Overschakelen</string>
+    <string name="open_scale_variant_switched">Synchroniseert nu met %1$s</string>
+    <string name="cancel">Annuleren</string>
+    <string name="open_scale_request_permissions_button">openScale-machtigingen aanvragen</string>
+
+    <string name="health_connect_get_health_connect_button">Health Connect downloaden</string>
+    <string name="health_connect_not_available_text">Health Connect niet beschikbaar</string>
+    <string name="health_connect_request_permissions_button">Health Connect-machtigingen aanvragen</string>
+    <string name="health_connect_permission_not_granted">Geen machtiging voor Health Connect verleend</string>
+    <string name="health_connect_connected_text">Verbinding met Health Connect geslaagd</string>
+
+    <string name="mqtt_broker_successful_connected_text">Verbonden met de MQTT-broker</string>
+    <string name="mqtt_server_name_title">Servernaam</string>
+    <string name="mqtt_server_name_hint">bijv. broker.example.com</string>
+    <string name="mqtt_server_port_number_title">Serverpoort</string>
+    <string name="mqtt_server_port_number_hint">bijv. 8883 (TLS) of 1883</string>
+    <string name="mqtt_username_title">Gebruikersnaam</string>
+    <string name="mqtt_password_title">Wachtwoord</string>
+    <string name="mqtt_use_ssl_tls_title">SSL/TLS-versleuteling gebruiken</string>
+    <string name="mqtt_ssl_disabled_warning">Let op: zonder SSL/TLS worden gegevens onversleuteld verzonden. Alleen aanbevolen voor vertrouwde lokale netwerken.</string>
+    <string name="mqtt_use_topic_prefix_title">Eigen MQTT-prefix</string>
+    <string name="mqtt_topic_prefix_hint">bijv. alice</string>
+    <string name="mqtt_use_discovery_tite">Home Assistant-discovery gebruiken</string>
+
+    <string name="wger_successful_connected_text">Verbonden met Wger</string>
+    <string name="wger_not_successful_connected_error">Kan geen verbinding maken met Wger</string>
+    <string name="wger_server_name_title">Servernaam</string>
+    <string name="wger_server_name_hint">bijv. https://wger.de/api/v2/</string>
+    <string name="wger_api_token_title">Wger-API-token</string>
+
+    <string name="endurain_successful_connected_text">Verbonden met Endurain</string>
+    <string name="endurain_not_successful_connected_error">Kan geen verbinding maken met Endurain</string>
+    <string name="endurain_server_name_title">Server-URL</string>
+    <string name="endurain_server_name_hint">bijv. https://endurain.example.com</string>
+    <string name="endurain_username_title">Gebruikersnaam</string>
+    <string name="endurain_password_title">Wachtwoord</string>
+    <string name="endurain_mfa_code_title">Tweefactorcode</string>
+    <string name="endurain_login_button">Inloggen</string>
+    <string name="endurain_verify_button">Code verifiëren</string>
+    <string name="endurain_logout_button">Uitloggen</string>
+    <string name="endurain_login_success">Ingelogd bij Endurain</string>
+    <string name="endurain_login_failed">Inloggen bij Endurain mislukt</string>
+    <string name="endurain_logged_in_status">Ingelogd als %1$s</string>
+    <string name="endurain_refresh_expires">Sessie verloopt: %1$s</string>
+    <string name="endurain_not_logged_in">Niet ingelogd — log in</string>
+    <string name="endurain_session_expired">Sessie verlopen — log opnieuw in</string>
+
+    <string name="sparkyfitness_successful_connected_text">Verbonden met SparkyFitness</string>
+    <string name="sparkyfitness_not_configured">Voer de server-URL en een API-sleutel in</string>
+    <string name="sparkyfitness_server_name_title">Server-URL</string>
+    <string name="sparkyfitness_server_name_hint">bijv. https://sparky.example.com</string>
+    <string name="sparkyfitness_api_key_title">API-sleutel (met schrijfrechten)</string>
+    <string name="sparkyfitness_include_derived_title">Ook berekende waarden verzenden</string>
+    <string name="sparkyfitness_include_derived_hint">BMI, taille-heupverhouding en andere waarden die openScale zelf berekent, worden als eigen meetwaarden opgeslagen. Geschatte BMR en TDEE worden nooit verzonden.</string>
+
+    <string name="open_scale_version_unsupported_banner">Deze versie van openScale-sync vereist openScale %1$s of nieuwer. Werk openScale bij om te blijven synchroniseren.</string>
+    <string name="sync_users_title">Gesynchroniseerde gebruikers</string>
+    <string name="sync_users_all">Alle openScale-gebruikers</string>
+    <string name="sync_users_all_desc">De gegevens van elke gebruiker blijven gescheiden.</string>
+    <string name="sync_users_single_desc">Alleen deze gebruiker wordt gesynchroniseerd.</string>
+    <string name="sync_scope_all_users">Alle gebruikers</string>
+    <string name="sync_direction_title">Synchronisatierichting</string>
+    <string name="sync_direction_export">Exporteren</string>
+    <string name="sync_direction_import">Importeren</string>
+    <string name="sync_direction_both">Beide</string>
+    <string name="sync_direction_export_desc">openScale → %1$s</string>
+    <string name="sync_direction_import_desc">%1$s → openScale</string>
+    <string name="sync_direction_both_desc">openScale ⇄ %1$s</string>
+    <string name="background_sync_title">Achtergrondsynchronisatie</string>
+    <string name="background_sync_label">Periodiek synchroniseren op de achtergrond</string>
+    <string name="background_sync_hint">Werkt exports bij en haalt imports op, ongeveer elke 6 uur, zonder dat je de app hoeft te openen. Het direct verzenden bij elke meting blijft daarnaast gewoon werken.</string>
+
+    <string name="influxdb_url_title">URL (bijv. http://192.168.1.100:8086)</string>
+    <string name="influxdb_org_title">Organisatie</string>
+    <string name="influxdb_bucket_title">Bucket</string>
+    <string name="influxdb_token_title">Token</string>
+    <string name="influxdb_database_title">Database</string>
+    <string name="influxdb_username_title">Gebruikersnaam</string>
+    <string name="influxdb_password_title">Wachtwoord</string>
+    <string name="influxdb_measurement_title">Naam van measurement</string>
+    <string name="influxdb_connected_text">Verbinding met InfluxDB geslaagd</string>
+    <string name="influxdb_url_empty_error">De InfluxDB-URL mag niet leeg zijn</string>
+    <string name="webhook_url_title">Webhook-URL</string>
+    <string name="webhook_url_hint">bijv. https://example.com/webhook</string>
+    <string name="webhook_auth_header_title">Autorisatieheader (optioneel)</string>
+    <string name="webhook_connected_text">Verbinding met de webhook geslaagd</string>
+    <string name="webhook_url_empty_error">De webhook-URL mag niet leeg zijn</string>
+
+    <string name="rationale_title">Hoe openScale sync je Health Connect-gegevens gebruikt</string>
+    <string name="rationale_intro">openScale sync verbindt de openScale-app, waarin je lichaamsmetingen worden vastgelegd, met Health Connect. De app slaat zelf geen metingen op.</string>
+    <string name="rationale_write_title">Gegevens die naar Health Connect worden geschreven</string>
+    <string name="rationale_write_text">Gewicht, lichaamsvet, lichaamswatermassa, botmassa, vetvrije massa en basaal metabolisme uit je openScale-metingen worden naar Health Connect geschreven, zodat andere gezondheidsapps ze kunnen gebruiken. Dat is het doel van deze app.</string>
+    <string name="rationale_read_title">Gegevens die uit Health Connect worden gelezen</string>
+    <string name="rationale_read_text">Gewicht, lichaamsvet, lichaamswatermassa, botmassa en vetvrije massa die andere apps hebben opgeslagen, worden gelezen en toegevoegd aan je openScale-meetgeschiedenis, zodat een weging die je elders hebt gedaan niet verloren gaat. Dit gebeurt als de Health Connect-synchronisatierichting op Beide of Importeren staat. Bij Exporteren worden er geen gegevens gelezen. Als je ook toegang tot eerdere gegevens toestaat, worden ook metingen van meer dan 30 dagen vóór de eerste machtiging geïmporteerd. Als je dit weigert, blijft de synchronisatie werken.</string>
+    <string name="rationale_privacy_title">Je gegevens</string>
+    <string name="rationale_privacy_text">Je gezondheidsgegevens blijven op je apparaat en worden alleen verzonden naar diensten die je zelf inschakelt en instelt. De app bevat geen advertenties, verzamelt geen gebruiksstatistieken en heeft geen gebruikersaccounts.</string>
+    <string name="rationale_privacy_link">Volledig privacybeleid lezen</string>
+
+    <!-- Prominent disclosure, shown in-app immediately before the Health Connect permission
+         prompt. Health Connect policy requires it to name each data type, the feature it serves,
+         and to take an affirmative action before the system prompt appears. -->
+    <string name="local_network_permission_error">Toegang tot het lokale netwerk is niet toegestaan. Open openScale sync om toestemming te geven, of doe dit in de app-instellingen onder Apparaten in de buurt.</string>
+    <string name="disclosure_title">Voordat je doorgaat</string>
+    <string name="disclosure_write">openScale sync schrijft de metingen uit openScale naar Health Connect — gewicht, lichaamsvet, lichaamswatermassa, botmassa, vetvrije massa en basaal metabolisme — zodat andere gezondheidsapps op dit apparaat ze kunnen gebruiken.</string>
+    <string name="disclosure_read">Omdat de synchronisatierichting ook importeren omvat, leest openScale sync ook gewicht, lichaamsvet, lichaamswatermassa, botmassa en vetvrije massa die andere apps in Health Connect hebben opgeslagen. Deze wegingen worden aan je openScale-meetgeschiedenis toegevoegd, zodat je logboek van lichaamssamenstelling volledig blijft.</string>
+    <string name="disclosure_read_history">Als je ook toegang tot eerdere gegevens toestaat, worden oudere metingen geïmporteerd.</string>
+    <string name="disclosure_how">Deze gegevens worden alleen voor die synchronisatie gebruikt. Ze blijven op je apparaat, behalve bij diensten die je zelf inschakelt, en worden nooit gebruikt voor advertenties, verkocht of gedeeld met derden.</string>
+    <string name="disclosure_accept">Accepteren</string>
+    <string name="disclosure_decline">Niet nu</string>
+
+</resources>
