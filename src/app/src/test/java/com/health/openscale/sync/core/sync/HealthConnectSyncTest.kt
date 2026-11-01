@@ -344,7 +344,7 @@ class HealthConnectSyncTest {
         assertTrue(result is SyncResult.Success)
         // Every type we write is cleared, but only in a window around this one measurement — the day
         // range this used to use took a second weigh-in on the same day with it.
-        assertEquals(6, client.deleted.size)
+        assertEquals(7, client.deleted.size)
         client.deleted.forEach { (_, range) ->
             assertEquals(time.toInstant().minusSeconds(1), range.startTime)
             assertEquals(time.toInstant().plusSeconds(1), range.endTime)
