@@ -395,12 +395,11 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
         val measurementInstant = measurement.date.toInstant()
         val zoneOffset = ZoneId.systemDefault().rules.getOffset(measurementInstant)
         val bmrKcalPerDay = (measurement.values.firstOrNull { it.isBuiltin("BMR") }?.value ?: 0f).toDouble()
-        val bmrWatts = bmrKcalPerDay * (4184.0 / 86400.0) // kcal/day → Watts
 
         return BasalMetabolicRateRecord(
             time = measurementInstant,
             zoneOffset = zoneOffset,
-            basalMetabolicRate = Power.watts(bmrWatts),
+            basalMetabolicRate = Power.kilocaloriesPerDay(bmrKcalPerDay),
             metadata = buildMetadata(measurement, "bmr")
         )
     }
