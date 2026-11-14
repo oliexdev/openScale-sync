@@ -323,6 +323,31 @@ class HealthConnectSyncTest {
     }
 
     @Test
+    fun update_deletesTheRecordOfAClearedValue_inTheMeasurementWindowOnly() = runTest {
+        // #55: fat was cleared in openScale, so the upsert no longer writes it — it must be deleted.
+        val m = OpenScaleMeasurement.fromValues(7, 1, Date(1_000_000L), "alice",
+            listOf(mv("WEIGHT", "kg", 80f), mv("WATER", "%", 55f)))
+
+        assertTrue(sync.update(m) is SyncResult.Success)
+
+        val types = client.deleted.map { it.first }
+        assertTrue(BodyFatRecord::class in types)
+        assertFalse(WeightRecord::class in types)
+        assertFalse(BodyWaterMassRecord::class in types)
+        client.deleted.forEach { (_, range) ->
+            assertEquals(m.date.toInstant().minusSeconds(1), range.startTime)
+            assertEquals(m.date.toInstant().plusSeconds(1), range.endTime)
+        }
+    }
+
+    @Test
+    fun update_deletesNothing_whenEveryValueIsPresent() = runTest {
+        sync.update(measurement(extra = listOf(mv("LBM", "kg", 60f), mv("BONE", "kg", 3f), mv("BMR", "kcal", 1600f))))
+
+        assertTrue(client.deleted.isEmpty())
+    }
+
+    @Test
     fun write_omitsOptionalRecords_whenValuesAreAbsent() = runTest {
         sync.insert(measurement())
 

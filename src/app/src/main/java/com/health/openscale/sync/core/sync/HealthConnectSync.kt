@@ -160,11 +160,11 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
      * non-existing identifier, and the optional records (lean mass, bone mass, BMR) are only written
      * when openScale has that value — a missing one would turn into a failed delete.
      */
-    suspend fun delete(date: Date) : SyncResult<Unit> {
-        val instant = date.toInstant()
-        val timeRange = TimeRangeFilter.between(instant.minusSeconds(1), instant.plusSeconds(1))
+    suspend fun delete(date: Date) : SyncResult<Unit> = deleteRange(measurementWindow(date))
 
-        return deleteRange(timeRange)
+    private fun measurementWindow(date: Date): TimeRangeFilter {
+        val instant = date.toInstant()
+        return TimeRangeFilter.between(instant.minusSeconds(1), instant.plusSeconds(1))
     }
 
     suspend fun clear() : SyncResult<Unit> {
@@ -176,19 +176,15 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     }
 
     /**
-     * Drop every record type we write in [timeRange]. Health Connect scopes deletes to the calling
-     * app, so this never reaches another app's data.
+     * Drop our records of [types] (default: every type we write) in [timeRange]. Health Connect
+     * scopes deletes to the calling app, so this never reaches another app's data.
      */
-    private suspend fun deleteRange(timeRange: TimeRangeFilter) : SyncResult<Unit> {
+    private suspend fun deleteRange(
+        timeRange: TimeRangeFilter,
+        types: Collection<KClass<out Record>> = RECORD_TYPES
+    ) : SyncResult<Unit> {
         return try {
-            listOf(
-                WeightRecord::class,
-                BodyFatRecord::class,
-                BodyWaterMassRecord::class,
-                LeanBodyMassRecord::class,
-                BasalMetabolicRateRecord::class,
-                BoneMassRecord::class
-            ).forEach { healthConnectClient.deleteRecords(it, timeRange) }
+            types.forEach { healthConnectClient.deleteRecords(it, timeRange) }
 
             SyncResult.Success(Unit)
         } catch (e: Exception) {
@@ -210,8 +206,17 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
      *
      * It also fixes a second asymmetry: a value added in openScale after the first sync (say a fat
      * percentage) could never reach Health Connect, because the read found no record to update.
+     *
+     * The upsert cannot remove a value cleared in openScale, though (#55): its record is simply no
+     * longer written. So every type this measurement no longer maps to is deleted in its window —
+     * after the write, so a failed delete leaves a stale extra for the retry, never a gap.
      */
-    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> = insert(measurement)
+    suspend fun update(measurement: OpenScaleMeasurement) : SyncResult<Unit> {
+        val written = insert(measurement)
+        if (written is SyncResult.Failure) return written
+        val cleared = RECORD_TYPES - buildRecords(measurement).map { it::class }.toSet()
+        return deleteRange(measurementWindow(measurement.date), cleared)
+    }
 
     /**
      * One inbound reading from Health Connect (foreign app): a weight plus whatever other metrics
@@ -405,6 +410,16 @@ class HealthConnectSync(private var healthConnectClient: HealthConnectClient) : 
     }
 
     companion object {
+        /** Every record type [buildRecords] can produce. */
+        private val RECORD_TYPES: Set<KClass<out Record>> = setOf(
+            WeightRecord::class,
+            BodyFatRecord::class,
+            BodyWaterMassRecord::class,
+            LeanBodyMassRecord::class,
+            BasalMetabolicRateRecord::class,
+            BoneMassRecord::class
+        )
+
         /**
          * How far from the weight record a body-composition record may sit and still count as the
          * same weigh-in. Wide enough for apps that write their records sequentially or round to
