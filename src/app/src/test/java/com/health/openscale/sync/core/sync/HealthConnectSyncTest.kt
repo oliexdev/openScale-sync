@@ -23,6 +23,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByDuration
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByPeriod
+import androidx.health.connect.client.records.BasalMetabolicRateRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.BodyWaterMassRecord
 import androidx.health.connect.client.records.BoneMassRecord
@@ -317,6 +318,8 @@ class HealthConnectSyncTest {
         sync.update(m)
 
         assertEquals(listOf("7_weight", "7_water", "7_fat", "7_lbm", "7_bone", "7_bmr"), lastWrittenIds())
+        val bmrRecord = client.written.flatten().filterIsInstance<BasalMetabolicRateRecord>().single()
+        assertEquals(1600.0, bmrRecord.basalMetabolicRate.inKilocaloriesPerDay, 0.01)
     }
 
     @Test
